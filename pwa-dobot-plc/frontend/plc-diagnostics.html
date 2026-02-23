@@ -107,9 +107,29 @@
               <div class="card">
                 <div class="card-header card-header-purple">
                   <h4 class="card-title">PLC Tag Diagnostics - S7-1200</h4>
-                  <p class="card-category">Real-time monitoring of Siemens PLC data blocks - DB123.DBX36.0 Start Bit</p>
+                  <p class="card-category">Real-time monitoring of Siemens PLC data blocks - Start Bit <span id="headerStartAddress">DB123.DBX26.0</span></p>
                 </div>
                 <div class="card-body">
+                  <!-- PLC Start Bit Configuration -->
+                  <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                    <h5 style="margin: 0 0 12px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">PLC Start Bit Address</h5>
+                    <p style="color: var(--text-muted, #888); font-size: 11px; margin-bottom: 12px;">Configure which DB123 byte and bit the app uses as the vision start command. Changes take effect on the next poll.</p>
+                    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Byte</label>
+                        <input type="number" id="startBitByte" min="0" max="255" value="26" style="width: 70px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                      </div>
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Bit (0–7)</label>
+                        <input type="number" id="startBitBit" min="0" max="7" value="0" style="width: 60px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                      </div>
+                      <div style="align-self: flex-end;">
+                        <button type="button" class="btn btn-sm btn-primary" id="saveStartBitBtn" style="padding: 8px 16px;">Save Start Bit</button>
+                      </div>
+                    </div>
+                    <div id="startBitSaveMessage" style="font-size: 11px; margin-top: 10px; min-height: 18px;"></div>
+                  </div>
+
                   <!-- Status Panel -->
                   <div class="status-panel">
                     <div class="status-row">
@@ -117,7 +137,7 @@
                       <div class="status-value" id="plcConnected">-</div>
                     </div>
                     <div class="status-row">
-                      <div class="status-label">DB123.DBX36.0:</div>
+                      <div class="status-label" id="startBitAddressLabel">DB123.DBX26.0:</div>
                       <div class="status-value" id="startBitValue">-</div>
                     </div>
                     <div class="status-row">
@@ -203,6 +223,84 @@
       errors: 0
     };
 
+    // Update displayed start bit address (header and status row)
+    function setStartBitAddressDisplay(byte, bit) {
+      const addr = 'DB123.DBX' + byte + '.' + bit;
+      const headerEl = document.getElementById('headerStartAddress');
+      const labelEl = document.getElementById('startBitAddressLabel');
+      if (headerEl) headerEl.textContent = addr;
+      if (labelEl) labelEl.textContent = addr + ':';
+    }
+
+    // Load config and fill Start Bit form
+    async function loadStartBitConfig() {
+      try {
+        const response = await fetch(API_BASE + '/api/config', { signal: AbortSignal.timeout(5000) });
+        const config = await response.json();
+        const start = (config.plc || {}).db123 && (config.plc.db123.tags || {}).start
+          ? config.plc.db123.tags.start
+          : { byte: 26, bit: 0 };
+        const byte = parseInt(start.byte, 10) || 26;
+        const bit = parseInt(start.bit, 10) || 0;
+        document.getElementById('startBitByte').value = byte;
+        document.getElementById('startBitBit').value = bit;
+        setStartBitAddressDisplay(byte, bit);
+      } catch (e) {
+        console.error('Load start bit config failed:', e);
+        setStartBitAddressDisplay(26, 0);
+      }
+    }
+
+    // Save Start Bit config to backend
+    async function saveStartBitConfig() {
+      const byteInput = document.getElementById('startBitByte');
+      const bitInput = document.getElementById('startBitBit');
+      const msgEl = document.getElementById('startBitSaveMessage');
+      const btn = document.getElementById('saveStartBitBtn');
+      const byte = Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || 26));
+      const bit = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || 0));
+      byteInput.value = byte;
+      bitInput.value = bit;
+      btn.disabled = true;
+      msgEl.textContent = 'Saving...';
+      msgEl.style.color = '';
+      try {
+        const response = await fetch(API_BASE + '/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            plc: {
+              db123: {
+                tags: {
+                  start: { byte: byte, bit: bit }
+                }
+              }
+            }
+          }),
+          signal: AbortSignal.timeout(5000)
+        });
+        const data = await response.json();
+        if (data.success) {
+          msgEl.textContent = 'Saved. Start bit is now DB123.DBX' + byte + '.' + bit;
+          msgEl.style.color = 'var(--accent-green, #4caf50)';
+          setStartBitAddressDisplay(byte, bit);
+        } else {
+          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
+          msgEl.style.color = 'var(--accent-red, #f44336)';
+        }
+      } catch (e) {
+        msgEl.textContent = 'Error: ' + e.message;
+        msgEl.style.color = 'var(--accent-red, #f44336)';
+      }
+      btn.disabled = false;
+    }
+
+    // Run on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      loadStartBitConfig();
+      document.getElementById('saveStartBitBtn').addEventListener('click', saveStartBitConfig);
+    });
+
     function addLog(message, isTrue = null) {
       const logPanel = document.getElementById('logPanel');
       const timestamp = new Date().toLocaleTimeString() + '.' + new Date().getMilliseconds().toString().padStart(3, '0');
@@ -254,6 +352,11 @@
 
         if (data.success) {
           const startValue = data.start;
+
+          // Keep address display in sync with server (configurable start bit)
+          if (data.start_byte !== undefined && data.start_bit !== undefined) {
+            setStartBitAddressDisplay(data.start_byte, data.start_bit);
+          }
 
           if (startValue) {
             stats.trueCount++;

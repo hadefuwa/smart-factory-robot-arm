@@ -183,9 +183,9 @@ VISION_SERVICE_TIMEOUT = 5.0  # 5 second timeout
 
 plc_cache = {
     'last_update': 0.0,
-    # DB123 Vision tags (byte 36-56)
+    # DB123 Vision tags (byte 26 + 40-56)
     'db123': {
-        'start': False,           # DB123.DBX36.0
+        'start': False,           # DB123.DBX26.0
         'busy': False,            # DB123.DBX40.1
         'complete': False,        # DB123.DBX40.2
         'fault': False,           # DB123.DBX40.3
@@ -231,16 +231,23 @@ plc_write_lock = threading.Lock()
 # - If bit_offset is specified (0-7), only that specific bit is read-only
 #
 # Examples:
-#   (123, 36, 0)     - DB123.DBX36.0 (bit 0 of byte 36) is read-only
+#   (123, 26, 0)     - DB123.DBX26.0 (bit 0 of byte 26) is read-only
 #   (123, 40, None)   - Entire byte 40 in DB123 is read-only
 #   (4, 4, 1)        - DB4.DBX4.1 (bit 1 of byte 4) is read-only
 #
+# Start bit is configurable via config.json plc.db123.tags.start (byte, bit)
 READ_ONLY_TAGS = [
-    (123, 36, 0),  # DB123.DBX36.0 - Start bit (PLC controlled, read-only)
-    # Add more read-only tags here as needed:
-    # (123, 40, 1),  # Example: Another read-only bit
-    # (4, 4, None),  # Example: Entire byte 4 in DB4 is read-only
+    # Add more fixed read-only tags here; start bit is added from config in get_read_only_tags / is_tag_read_only
 ]
+
+def get_start_bit_config():
+    """Get PLC start bit byte and bit from config (used for vision start command)."""
+    config = load_config()
+    tags = config.get('plc', {}).get('db123', {}).get('tags', {})
+    start = tags.get('start', {})
+    byte_val = start.get('byte', 26)
+    bit_val = start.get('bit', 0)
+    return (byte_val, bit_val)
 
 def get_read_only_tags() -> List[Dict[str, Any]]:
     """Get a list of all read-only tags in a readable format
@@ -249,6 +256,15 @@ def get_read_only_tags() -> List[Dict[str, Any]]:
         List of dictionaries with 'db', 'offset', 'bit', and 'description' keys
     """
     result = []
+    # Add configurable PLC start bit (DB123)
+    start_byte, start_bit = get_start_bit_config()
+    result.append({
+        'db': 123,
+        'offset': start_byte,
+        'bit': start_bit,
+        'tag': f"DB123.DBX{start_byte}.{start_bit}",
+        'description': 'Read-only (PLC start bit, configurable)'
+    })
     for db_number, offset, bit_offset in READ_ONLY_TAGS:
         if bit_offset is None:
             tag_name = f"DB{db_number}.DBB{offset} (entire byte)"
@@ -275,6 +291,11 @@ def is_tag_read_only(db_number: int, offset: int, bit_offset: Optional[int] = No
     Returns:
         True if the tag is read-only, False otherwise
     """
+    # Configurable PLC start bit (DB123)
+    start_byte, start_bit = get_start_bit_config()
+    if db_number == 123 and offset == start_byte and (bit_offset is None or bit_offset == start_bit):
+        return True
+
     for read_only_db, read_only_offset, read_only_bit in READ_ONLY_TAGS:
         # Check if DB and offset match
         if db_number == read_only_db and offset == read_only_offset:
@@ -305,12 +326,10 @@ def check_write_permission(db_number: int, offset: int, data_length: int = 1) ->
         if is_tag_read_only(db_number, byte_offset, None):
             return False, f"DB{db_number}.{byte_offset} is read-only (entire byte)"
         
-        # Check individual bits (for byte 36 and 40, we check bit 0 specifically)
-        if db_number == 123 and (byte_offset == 36 or byte_offset == 40):
-            if is_tag_read_only(db_number, byte_offset, 0):
-                # Bit 0 is read-only, but we allow the write if we preserve it
-                # (This is handled in write execution)
-                pass
+        # Check configurable start bit byte: do not allow writing to that byte
+        start_byte, start_bit = get_start_bit_config()
+        if db_number == 123 and byte_offset == start_byte:
+            return False, f"DB{db_number}.DBX{start_byte}.{start_bit} is read-only (PLC start bit)"
     
     return True, "Write allowed"
 
@@ -852,7 +871,7 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
         db_number = db123_config.get('db_number', 123)
 
         # Prepare byte 40 with all bool flags
-        # Note: Start bit is now at DB123.DBX36.0 (read-only, PLC controlled)
+        # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
         byte40_data = bytearray(1)
         snap7.util.set_bool(byte40_data, 0, 0, False)              # Bit 0 unused in byte 40 now
         snap7.util.set_bool(byte40_data, 0, 1, True)              # Connected = True
@@ -1510,11 +1529,18 @@ def update_config():
             current_config.setdefault('vision', {})
             current_config['vision'].update(new_config['vision'])
         
-        # Update DB123 config if provided
+        # Update DB123 config if provided (deep-merge tags so we don't wipe other tag definitions)
         if 'plc' in new_config and 'db123' in new_config['plc']:
             current_config.setdefault('plc', {})
             current_config['plc'].setdefault('db123', {})
-            current_config['plc']['db123'].update(new_config['plc']['db123'])
+            new_db123 = new_config['plc']['db123']
+            if 'tags' in new_db123:
+                current_config['plc']['db123'].setdefault('tags', {})
+                for tag_name, tag_val in new_db123['tags'].items():
+                    current_config['plc']['db123']['tags'][tag_name] = tag_val
+            # Merge the rest of db123 (enabled, db_number, etc.)
+            rest = {k: v for k, v in new_db123.items() if k != 'tags'}
+            current_config['plc']['db123'].update(rest)
         
         save_config(current_config)
         return jsonify({'success': True, 'message': 'Configuration saved'})
@@ -1770,8 +1796,9 @@ def poll_loop():
                 # This includes: System, Robot, Conveyors, Gantry, Camera, Objects
                 all_data = plc_client.client.db_read(123, 0, 47)
 
-                # Camera tags (byte 36-46)
-                plc_cache['db123']['start'] = snap7.util.get_bool(all_data, 36, 0)         # DB123.DBX36.0
+                # Camera tags: start bit address is configurable (default DB123.DBX26.0)
+                start_byte, start_bit = get_start_bit_config()
+                plc_cache['db123']['start'] = snap7.util.get_bool(all_data, start_byte, start_bit)
                 plc_cache['db123']['busy'] = snap7.util.get_bool(all_data, 40, 2)          # DB123.DBX40.2
                 plc_cache['db123']['complete'] = snap7.util.get_bool(all_data, 40, 3)      # DB123.DBX40.3
                 plc_cache['db123']['fault'] = snap7.util.get_bool(all_data, 40, 6)         # DB123.DBX40.6 (Defect_Detected)
@@ -1813,7 +1840,7 @@ def poll_loop():
                         logger.error(f"❌ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
                         continue  # Skip this write
                     
-                    # Note: Start bit is now at DB123.DBX36.0 (read-only, PLC controlled)
+                    # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
                     # Byte 40 no longer contains the start bit, so no special preservation needed
                     
                     # Execute the write
@@ -1841,7 +1868,7 @@ def poll_loop():
                     # Start is FALSE - reset (queue write instead of direct write)
                     logger.info("📸 Start bit FALSE - resetting vision")
                     # Queue the reset writes for next cycle
-                    # Note: Start bit is now at DB123.DBX36.0 (read-only, PLC controlled)
+                    # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
                     reset_byte40 = bytearray(1)
                     snap7.util.set_bool(reset_byte40, 0, 0, False)      # Bit 0 unused in byte 40 now
                     snap7.util.set_bool(reset_byte40, 0, 1, True)       # Connected = True
@@ -2707,7 +2734,8 @@ def read_db123_tags():
         db_number = db123_config.get('db_number', 123)
 
         # Try to read tags (returns immediately with cached values if lock busy)
-        tags = plc_client.read_vision_tags(db_number)
+        start_byte, start_bit = get_start_bit_config()
+        tags = plc_client.read_vision_tags(db_number, start_byte=start_byte, start_bit=start_bit)
 
         # Always return success - even if we got cached values
         return jsonify({
@@ -2729,7 +2757,7 @@ def read_db123_tags():
 
 @app.route('/api/plc/db40/start', methods=['GET'])
 def read_db40_start_bit():
-    """Read vision start bit from PLC DB123.DBX36.0 (Camera_UDT in DB123)
+    """Read vision start bit from PLC (address configurable in config).
 
     LOCK-FREE: Returns cached value from unified poll_loop()
     Zero lock contention - instant response
@@ -2737,6 +2765,8 @@ def read_db40_start_bit():
     global plc_cache
 
     try:
+        start_byte, start_bit = get_start_bit_config()
+        address = f"DB123.DBX{start_byte}.{start_bit}"
         cache_age = time.time() - plc_cache['last_update'] if plc_cache['last_update'] > 0 else 999
 
         return jsonify({
@@ -2744,12 +2774,14 @@ def read_db40_start_bit():
             'start': bool(plc_cache['db123']['start']),
             'plc_connected': plc_cache['plc_connected'],
             'db_number': 123,
-            'address': 'DB123.DBX36.0',
+            'address': address,
+            'start_byte': start_byte,
+            'start_bit': start_bit,
             'cache_age_ms': int(cache_age * 1000),
             'cached': True
         })
     except Exception as e:
-        logger.error(f"Error reading DB123.36.0 start bit: {e}")
+        logger.error(f"Error reading PLC start bit: {e}")
         return jsonify({
             'success': False,
             'error': str(e),
