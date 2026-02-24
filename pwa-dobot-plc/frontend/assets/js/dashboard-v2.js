@@ -1,11 +1,14 @@
 (() => {
   const API_BASE = window.location.origin;
   const POLL_INTERVAL_MS = 2000;
+  const SEGMENT_ANIMATION_MS = 220;
+  const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const stateStore = {
     snapshot: null,
     timer: null,
     bindMap: {},
+    activeSegmentId: 'segment-robot',
   };
 
   const domRefs = {
@@ -22,6 +25,7 @@
     alertsTimeline: document.getElementById('alertsTimeline'),
     faultList: document.getElementById('faultList'),
     backendChip: document.getElementById('sfBackendChip'),
+    kpiTiles: Array.from(document.querySelectorAll('.sf-kpi-tile')),
     progress: {
       uptime: document.getElementById('uptimeFill'),
       efficiency: document.getElementById('efficiencyFill'),
@@ -213,6 +217,12 @@
       setBoundState('robot.connectedState', snapshot.robot.connected ? 'online' : 'offline');
       setBoundState('vision.activeState', snapshot.vision.active ? 'online' : 'warning');
       setBoundState('plc.connectedState', snapshot.plc.connected ? 'online' : 'offline');
+
+      setTileState(0, snapshot.robot.connected ? 'online' : 'offline');
+      setTileState(1, snapshot.vision.active ? 'online' : 'warning');
+      setTileState(2, snapshot.plc.connected ? 'online' : 'offline');
+      setTileState(5, snapshot.line.conveyorStatus === 'RUNNING' ? 'online' : 'warning');
+      setTileState(6, snapshot.line.gantryStatus === 'RUNNING' ? 'online' : 'warning');
     },
 
     renderProgress(snapshot) {
@@ -402,6 +412,9 @@
   function setBound(path, value) {
     const nodes = stateStore.bindMap[path] || [];
     nodes.forEach((node) => {
+      if (node.textContent !== String(value)) {
+        pulseNode(node);
+      }
       node.textContent = value;
     });
   }
@@ -446,6 +459,7 @@
         requestAnimationFrame(step);
       } else {
         node.dataset.prevValue = String(target);
+        pulseNode(node);
       }
     };
 
@@ -515,14 +529,29 @@
     domRefs.segmentedButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const target = button.getAttribute('data-segment-target');
+        if (!target || target === stateStore.activeSegmentId) return;
+
+        const previous = document.getElementById(stateStore.activeSegmentId);
+        const next = document.getElementById(target);
+
+        if (previous) {
+          previous.classList.remove('active');
+          previous.classList.add('leaving');
+        }
+
         domRefs.segmentedButtons.forEach((item) => {
           const active = item === button;
           item.classList.toggle('active', active);
           item.setAttribute('aria-selected', String(active));
         });
-        domRefs.actionGroups.forEach((group) => {
-          group.classList.toggle('active', group.id === target);
-        });
+
+        window.setTimeout(() => {
+          domRefs.actionGroups.forEach((group) => {
+            group.classList.remove('active', 'leaving');
+          });
+          if (next) next.classList.add('active');
+          stateStore.activeSegmentId = target;
+        }, REDUCED_MOTION ? 0 : SEGMENT_ANIMATION_MS);
       });
     });
   }
@@ -564,8 +593,31 @@
 
   function startEntranceSequence() {
     domRefs.body.classList.add('sf-stage-1-ready');
-    setTimeout(() => domRefs.body.classList.add('sf-stage-2-ready'), 180);
-    setTimeout(() => domRefs.body.classList.add('sf-stage-3-ready'), 360);
+    setTimeout(() => domRefs.body.classList.add('sf-stage-2-ready'), REDUCED_MOTION ? 0 : 140);
+    setTimeout(() => domRefs.body.classList.add('sf-stage-3-ready'), REDUCED_MOTION ? 0 : 320);
+  }
+
+  function initTileStagger() {
+    domRefs.kpiTiles.forEach((tile, index) => {
+      tile.style.setProperty('--sf-stagger-index', String(index));
+    });
+  }
+
+  function setTileState(index, state) {
+    const tile = domRefs.kpiTiles[index];
+    if (!tile) return;
+    if (tile.dataset.state !== state) {
+      tile.dataset.state = state;
+      pulseNode(tile);
+    }
+  }
+
+  function pulseNode(node) {
+    if (!node || REDUCED_MOTION) return;
+    node.classList.remove('sf-live-update');
+    void node.offsetWidth;
+    node.classList.add('sf-live-update');
+    setTimeout(() => node.classList.remove('sf-live-update'), 520);
   }
 
   async function init() {
@@ -573,6 +625,7 @@
     initNavigation();
     initSegmentedControls();
     initActions();
+    initTileStagger();
     startEntranceSequence();
 
     scheduler.start();
