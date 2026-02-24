@@ -69,12 +69,18 @@ class CameraService:
         self.yolo_disabled_until = 0  # Timestamp when YOLO can be re-enabled after crashes
         self.max_crashes = 2  # Disable YOLO after 2 consecutive crashes (more aggressive)
         self.disable_duration = 60  # Disable for 60 seconds after crashes (longer cooldown)
-        # Crop/zoom settings
+        # Crop/zoom settings (applied to camera frames)
         self.crop_enabled = False
         self.crop_x = 0  # Top-left X (as percentage 0-100)
         self.crop_y = 0  # Top-left Y (as percentage 0-100)
         self.crop_width = 100  # Width (as percentage 0-100)
         self.crop_height = 100  # Height (as percentage 0-100)
+        # Detection ROI (applied inside detection to ignore other regions)
+        self.detection_roi_enabled = False
+        self.detection_roi_x = 0     # Top-left X (percentage)
+        self.detection_roi_y = 0     # Top-left Y (percentage)
+        self.detection_roi_width = 100   # Width (percentage)
+        self.detection_roi_height = 100  # Height (percentage)
         
     def initialize_camera(self) -> bool:
         """Initialize and open camera"""
@@ -225,6 +231,41 @@ class CameraService:
                 'y': self.crop_y,
                 'width': self.crop_width,
                 'height': self.crop_height
+            }
+
+    def set_detection_roi(self, enabled: bool, x: float = 0, y: float = 0,
+                          width: float = 100, height: float = 100):
+        """
+        Set detection region of interest (ROI).
+
+        This ROI is applied inside the detection step so that only objects
+        inside this rectangle are considered. It does NOT crop the camera
+        image itself.
+        """
+        with self.lock:
+            self.detection_roi_enabled = enabled
+            self.detection_roi_x = max(0, min(100, x))
+            self.detection_roi_y = max(0, min(100, y))
+            self.detection_roi_width = max(1, min(100, width))
+            self.detection_roi_height = max(1, min(100, height))
+            logger.info(
+                "Detection ROI updated: enabled=%s, x=%.1f%%, y=%.1f%%, width=%.1f%%, height=%.1f%%",
+                self.detection_roi_enabled,
+                self.detection_roi_x,
+                self.detection_roi_y,
+                self.detection_roi_width,
+                self.detection_roi_height,
+            )
+
+    def get_detection_roi(self) -> Dict:
+        """Get current detection ROI settings."""
+        with self.lock:
+            return {
+                'enabled': self.detection_roi_enabled,
+                'x': self.detection_roi_x,
+                'y': self.detection_roi_y,
+                'width': self.detection_roi_width,
+                'height': self.detection_roi_height,
             }
     
     def set_analyzed_frame(self, frame: np.ndarray):
@@ -904,11 +945,33 @@ class CameraService:
             # Define HSV color ranges - IMPROVED to avoid conveyor structure false positives
             # Tuned for green side lighting and to ignore metal/white conveyor parts
 
+            # Optional detection ROI: limit detection to a user-defined rectangle
+            roi_mask = None
+            if self.detection_roi_enabled:
+                x1 = int(frame_width * self.detection_roi_x / 100)
+                y1 = int(frame_height * self.detection_roi_y / 100)
+                x2 = int(frame_width * (self.detection_roi_x + self.detection_roi_width) / 100)
+                y2 = int(frame_height * (self.detection_roi_y + self.detection_roi_height) / 100)
+
+                x1 = max(0, min(x1, frame_width - 1))
+                y1 = max(0, min(y1, frame_height - 1))
+                x2 = max(x1 + 1, min(x2, frame_width))
+                y2 = max(y1 + 1, min(y2, frame_height))
+
+                roi_mask = np.zeros((frame_height, frame_width), dtype=np.uint8)
+                roi_mask[y1:y2, x1:x2] = 255
+                logger.info(
+                    "🔍 Detection ROI active: x1=%d, y1=%d, x2=%d, y2=%d (w=%d, h=%d)",
+                    x1, y1, x2, y2, x2 - x1, y2 - y1
+                )
+
             # Yellow cubes - wider hue range to handle lighting variations
             if detect_yellow:
                 lower_yellow = np.array([18, 100, 120])  # Higher S and V to ensure vivid yellow
                 upper_yellow = np.array([35, 255, 255])  # Captures yellow tones
                 mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+                if roi_mask is not None:
+                    mask_yellow = cv2.bitwise_and(mask_yellow, roi_mask)
                 yellow_pixels = np.sum(mask_yellow > 0)
                 logger.info(f"🔍 Yellow mask: {yellow_pixels} pixels matched (range: H[18-35], S[100-255], V[120-255])")
                 # Use higher min_area for yellow to avoid small reflections
@@ -921,6 +984,8 @@ class CameraService:
                 lower_white = np.array([0, 0, 230])  # VERY high brightness required (almost pure white)
                 upper_white = np.array([180, 15, 255])  # Very low saturation (no color tint)
                 mask_white = cv2.inRange(hsv, lower_white, upper_white)
+                if roi_mask is not None:
+                    mask_white = cv2.bitwise_and(mask_white, roi_mask)
                 white_pixels = np.sum(mask_white > 0)
                 logger.info(f"🔍 White mask: {white_pixels} pixels matched (range: H[0-180], S[0-15], V[230-255])")
                 # Much higher min_area for white to filter out conveyor highlights
@@ -933,6 +998,8 @@ class CameraService:
                 lower_metal = np.array([0, 0, 80])  # Higher V minimum
                 upper_metal = np.array([180, 40, 140])  # Narrower saturation and brightness range
                 mask_metal = cv2.inRange(hsv, lower_metal, upper_metal)
+                if roi_mask is not None:
+                    mask_metal = cv2.bitwise_and(mask_metal, roi_mask)
                 metal_pixels = np.sum(mask_metal > 0)
                 logger.info(f"🔍 Metal mask: {metal_pixels} pixels matched (range: H[0-180], S[0-40], V[80-140])")
                 # Much higher min_area for metal to filter out conveyor frame

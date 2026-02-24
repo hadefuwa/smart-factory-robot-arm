@@ -88,6 +88,7 @@
                   <div class="camera-viewer" style="position: relative;">
                     <img id="cameraFrame" class="camera-frame" src="" alt="Camera Feed" style="display: none; width: 100%; border-radius: 8px;">
                     <canvas id="cropOverlay" style="position: absolute; top: 0; left: 0; display: none; pointer-events: none; border-radius: 8px;"></canvas>
+                    <canvas id="roiOverlay" style="position: absolute; top: 0; left: 0; display: none; pointer-events: none; border-radius: 8px;"></canvas>
                     <canvas id="sizeOverlay" style="position: absolute; top: 0; left: 0; display: none; border-radius: 8px; cursor: crosshair;"></canvas>
                     <div id="cameraPlaceholder" style="min-height: 300px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-direction: column; gap: 10px; background: rgba(10, 22, 40, 0.8); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;">
                       <div style="font-size: 48px;">CAM</div>
@@ -196,6 +197,38 @@
                     </div>
                   </div>
 
+                  <!-- Expected Cube Position (Detection Area) -->
+                  <div style="margin-bottom: 24px; padding: 16px; background: rgba(0, 188, 212, 0.1); border: 1px solid rgba(0, 188, 212, 0.3); border-radius: 8px;">
+                    <h5 style="color: #4dd0e1; font-size: 14px; margin-bottom: 12px; font-weight: 600;">
+                      🎯 Expected Cube Position (Detection Area)
+                    </h5>
+                    <div style="color: #b0bec5; font-size: 11px; margin-bottom: 12px;">
+                      Draw a rectangle where you expect the cube to appear. Detection will ignore everything outside this area.
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                      <button class="btn btn-info" onclick="startDrawingDetectionRoi()" id="drawRoiBtn" style="flex: 1; font-size: 12px; padding: 8px 16px;">
+                        <i class="material-icons" style="font-size: 16px; vertical-align: middle;">crop_free</i> Draw Detection Area
+                      </button>
+                      <button class="btn btn-danger" onclick="resetDetectionRoi()" id="resetRoiBtn" style="flex: 1; font-size: 12px; padding: 8px 16px;">
+                        <i class="material-icons" style="font-size: 16px; vertical-align: middle;">refresh</i> Reset Area
+                      </button>
+                    </div>
+                    <div id="roiInfo" style="display: none; padding: 12px; background: rgba(0, 188, 212, 0.2); border: 1px solid #4dd0e1; border-radius: 4px; margin-bottom: 12px;">
+                      <div style="color: #4dd0e1; font-size: 12px; font-weight: 600; margin-bottom: 6px;">📐 Current Detection Area:</div>
+                      <div style="color: #e0e0e0; font-size: 11px;">
+                        <div>Position: X=<span id="roiInfoX">0</span>%, Y=<span id="roiInfoY">0</span>%</div>
+                        <div>Size: <span id="roiInfoWidth">100</span>% × <span id="roiInfoHeight">100</span>%</div>
+                      </div>
+                    </div>
+                    <div id="roiDrawInstructions" style="display: none; padding: 12px; background: rgba(33, 150, 243, 0.2); border: 1px solid #64b5f6; border-radius: 4px; color: #64b5f6; font-size: 11px;">
+                      <div style="font-weight: 600; margin-bottom: 4px;">📝 Instructions:</div>
+                      <div>1. Click and hold on the camera image</div>
+                      <div>2. Drag to draw the expected cube area</div>
+                      <div>3. Release to apply</div>
+                      <div style="margin-top: 6px; color: #ff9800;">Press ESC to cancel</div>
+                    </div>
+                  </div>
+
                   <!-- Detection Parameters (Manual) -->
                   <div style="margin-bottom: 24px; padding: 16px; background: rgba(158, 158, 158, 0.1); border: 1px solid rgba(158, 158, 158, 0.3); border-radius: 8px;">
                     <h5 style="color: #bdbdbd; font-size: 14px; margin-bottom: 12px; font-weight: 600;">
@@ -206,7 +239,7 @@
                         <label style="display: block; color: #e0e0e0; font-size: 12px; margin-bottom: 8px;">
                           Min Area: <span id="minAreaValue">500</span> pixels
                         </label>
-                        <input type="range" id="minAreaSlider" min="100" max="5000" step="100" value="500" oninput="updateParams()" style="width: 100%;">
+                        <input type="range" id="minAreaSlider" min="100" max="50000" step="100" value="500" oninput="updateParams()" style="width: 100%;">
                       </div>
                       <div>
                         <label style="display: block; color: #e0e0e0; font-size: 12px; margin-bottom: 8px;">
@@ -385,6 +418,7 @@
     // START ANALYSIS - Run voting-based detection (10 snapshots)
     async function startAnalysis() {
       console.log('🎯 Starting Analysis with Majority Voting (10 snapshots)');
+      console.log('🎯 Using area limits for voting:', objectParams.min_area, 'to', objectParams.max_area, 'pixels');
 
       const resultsDiv = document.getElementById('results');
       const resultsContent = document.getElementById('resultsContent');
@@ -925,6 +959,248 @@
       ctx.fillText('CROP AREA', cropX + 10, cropY + 25);
     }
 
+    // Detection ROI (expected cube position) drawing
+    let isDrawingRoi = false;
+    let roiStartX = 0;
+    let roiStartY = 0;
+    let roiCurrentX = 0;
+    let roiCurrentY = 0;
+    let currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
+
+    async function loadDetectionRoi() {
+      try {
+        const response = await fetch(`${API_BASE}/api/vision/roi`);
+        if (response.ok) {
+          const roi = await response.json();
+          currentRoiSettings = roi;
+          if (roi.enabled) {
+            showRoiInfo();
+            drawRoiOverlay(roi.x, roi.y, roi.width, roi.height);
+          }
+          console.log('Detection ROI loaded:', roi);
+        }
+      } catch (error) {
+        console.error('Error loading detection ROI:', error);
+      }
+    }
+
+    function startDrawingDetectionRoi() {
+      const cameraFrame = document.getElementById('cameraFrame');
+      const roiOverlay = document.getElementById('roiOverlay');
+      const drawBtn = document.getElementById('drawRoiBtn');
+      const instructions = document.getElementById('roiDrawInstructions');
+
+      if (cameraFrame.style.display === 'none') {
+        alert('Please wait for the camera feed to load before drawing the detection area.');
+        return;
+      }
+
+      roiOverlay.width = cameraFrame.width;
+      roiOverlay.height = cameraFrame.height;
+      roiOverlay.style.width = cameraFrame.offsetWidth + 'px';
+      roiOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      roiOverlay.style.display = 'block';
+      roiOverlay.style.pointerEvents = 'auto';
+
+      instructions.style.display = 'block';
+      drawBtn.disabled = true;
+      drawBtn.style.opacity = '0.5';
+
+      isDrawingRoi = true;
+
+      roiOverlay.addEventListener('mousedown', onRoiDrawStart);
+      roiOverlay.addEventListener('mousemove', onRoiDrawMove);
+      roiOverlay.addEventListener('mouseup', onRoiDrawEnd);
+      document.addEventListener('keydown', onRoiDrawEscape);
+    }
+
+    function onRoiDrawStart(event) {
+      const rect = event.target.getBoundingClientRect();
+      roiStartX = event.clientX - rect.left;
+      roiStartY = event.clientY - rect.top;
+      roiCurrentX = roiStartX;
+      roiCurrentY = roiStartY;
+    }
+
+    function onRoiDrawMove(event) {
+      if (roiStartX === 0 && roiStartY === 0) return;
+
+      const rect = event.target.getBoundingClientRect();
+      roiCurrentX = event.clientX - rect.left;
+      roiCurrentY = event.clientY - rect.top;
+
+      drawRoiRectangle();
+    }
+
+    function onRoiDrawEnd(event) {
+      if (roiStartX === 0 && roiStartY === 0) return;
+
+      const rect = event.target.getBoundingClientRect();
+      roiCurrentX = event.clientX - rect.left;
+      roiCurrentY = event.clientY - rect.top;
+
+      const cameraFrame = document.getElementById('cameraFrame');
+      const canvasWidth = cameraFrame.width;
+      const canvasHeight = cameraFrame.height;
+
+      const x1 = Math.min(roiStartX, roiCurrentX);
+      const y1 = Math.min(roiStartY, roiCurrentY);
+      const x2 = Math.max(roiStartX, roiCurrentX);
+      const y2 = Math.max(roiStartY, roiCurrentY);
+
+      const xPercent = (x1 / canvasWidth) * 100;
+      const yPercent = (y1 / canvasHeight) * 100;
+      const widthPercent = ((x2 - x1) / canvasWidth) * 100;
+      const heightPercent = ((y2 - y1) / canvasHeight) * 100;
+
+      if (widthPercent < 5 || heightPercent < 5) {
+        alert('Detection area is too small. Please draw a larger rectangle.');
+        cancelDetectionRoiDrawing();
+        return;
+      }
+
+      currentRoiSettings = {
+        enabled: true,
+        x: Math.round(xPercent * 10) / 10,
+        y: Math.round(yPercent * 10) / 10,
+        width: Math.round(widthPercent * 10) / 10,
+        height: Math.round(heightPercent * 10) / 10,
+      };
+
+      applyDetectionRoi();
+      cancelDetectionRoiDrawing();
+    }
+
+    function onRoiDrawEscape(event) {
+      if (event.key === 'Escape' && isDrawingRoi) {
+        cancelDetectionRoiDrawing();
+      }
+    }
+
+    function drawRoiRectangle() {
+      const roiOverlay = document.getElementById('roiOverlay');
+      const ctx = roiOverlay.getContext('2d');
+
+      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
+
+      const x = Math.min(roiStartX, roiCurrentX);
+      const y = Math.min(roiStartY, roiCurrentY);
+      const width = Math.abs(roiCurrentX - roiStartX);
+      const height = Math.abs(roiCurrentY - roiStartY);
+
+      ctx.fillStyle = 'rgba(0, 188, 212, 0.2)';
+      ctx.fillRect(x, y, width, height);
+
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+
+      ctx.fillStyle = '#00e5ff';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('DETECTION AREA', x + 10, y + 25);
+    }
+
+    function cancelDetectionRoiDrawing() {
+      const roiOverlay = document.getElementById('roiOverlay');
+      const drawBtn = document.getElementById('drawRoiBtn');
+      const instructions = document.getElementById('roiDrawInstructions');
+
+      isDrawingRoi = false;
+      roiStartX = 0;
+      roiStartY = 0;
+      roiCurrentX = 0;
+      roiCurrentY = 0;
+
+      roiOverlay.style.pointerEvents = 'none';
+      instructions.style.display = 'none';
+      drawBtn.disabled = false;
+      drawBtn.style.opacity = '1';
+
+      roiOverlay.removeEventListener('mousedown', onRoiDrawStart);
+      roiOverlay.removeEventListener('mousemove', onRoiDrawMove);
+      roiOverlay.removeEventListener('mouseup', onRoiDrawEnd);
+      document.removeEventListener('keydown', onRoiDrawEscape);
+
+      if (currentRoiSettings.enabled) {
+        drawRoiOverlay(currentRoiSettings.x, currentRoiSettings.y, currentRoiSettings.width, currentRoiSettings.height);
+      } else {
+        const ctx = roiOverlay.getContext('2d');
+        ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
+        roiOverlay.style.display = 'none';
+      }
+    }
+
+    function drawRoiOverlay(x, y, width, height) {
+      const cameraFrame = document.getElementById('cameraFrame');
+      const roiOverlay = document.getElementById('roiOverlay');
+
+      if (cameraFrame.style.display === 'none') return;
+
+      roiOverlay.width = cameraFrame.width;
+      roiOverlay.height = cameraFrame.height;
+      roiOverlay.style.width = cameraFrame.offsetWidth + 'px';
+      roiOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      roiOverlay.style.display = 'block';
+
+      const ctx = roiOverlay.getContext('2d');
+      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
+
+      const roiX = (x / 100) * roiOverlay.width;
+      const roiY = (y / 100) * roiOverlay.height;
+      const roiWidth = (width / 100) * roiOverlay.width;
+      const roiHeight = (height / 100) * roiOverlay.height;
+
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(roiX, roiY, roiWidth, roiHeight);
+
+      ctx.fillStyle = '#00e5ff';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('DETECTION AREA', roiX + 10, roiY + 25);
+    }
+
+    async function applyDetectionRoi() {
+      try {
+        const response = await fetch(`${API_BASE}/api/vision/roi`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentRoiSettings),
+        });
+
+        if (response.ok) {
+          console.log('Detection ROI saved:', currentRoiSettings);
+          showRoiInfo();
+          drawRoiOverlay(currentRoiSettings.x, currentRoiSettings.y, currentRoiSettings.width, currentRoiSettings.height);
+        } else {
+          const error = await response.json();
+          console.error('Error saving detection ROI:', error);
+          alert('Error saving detection area: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error saving detection ROI:', error);
+        alert('Error saving detection area: ' + error.message);
+      }
+    }
+
+    async function resetDetectionRoi() {
+      currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
+      await applyDetectionRoi();
+      document.getElementById('roiInfo').style.display = 'none';
+      const roiOverlay = document.getElementById('roiOverlay');
+      const ctx = roiOverlay.getContext('2d');
+      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
+      roiOverlay.style.display = 'none';
+    }
+
+    function showRoiInfo() {
+      const roiInfo = document.getElementById('roiInfo');
+      document.getElementById('roiInfoX').textContent = currentRoiSettings.x.toFixed(1);
+      document.getElementById('roiInfoY').textContent = currentRoiSettings.y.toFixed(1);
+      document.getElementById('roiInfoWidth').textContent = currentRoiSettings.width.toFixed(1);
+      document.getElementById('roiInfoHeight').textContent = currentRoiSettings.height.toFixed(1);
+      roiInfo.style.display = 'block';
+    }
+
     async function applyCropSettings() {
       try {
         const response = await fetch(`${API_BASE}/api/camera/crop`, {
@@ -1195,6 +1471,7 @@
       console.log('Color Detection Test Page Loaded');
       updateParams();
       loadCropSettings(); // Load crop settings on page load
+      loadDetectionRoi(); // Load detection ROI on page load
       startStream(); // Start fetching camera frames automatically
     });
   </script>

@@ -2194,6 +2194,55 @@ def set_camera_crop():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/vision/roi', methods=['GET'])
+def get_detection_roi():
+    """Get current detection ROI (expected cube position) settings."""
+    if camera_service is None:
+        return jsonify({'error': 'Camera service not initialized'}), 503
+
+    try:
+        roi_settings = camera_service.get_detection_roi()
+        return jsonify(roi_settings)
+    except Exception as e:
+        logger.error(f"Error getting detection ROI settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/vision/roi', methods=['POST'])
+def set_detection_roi():
+    """Set detection ROI (expected cube position)."""
+    if camera_service is None:
+        return jsonify({'error': 'Camera service not initialized'}), 503
+
+    try:
+        data = request.json or {}
+        enabled = data.get('enabled', False)
+        x = data.get('x', 0)
+        y = data.get('y', 0)
+        width = data.get('width', 100)
+        height = data.get('height', 100)
+
+        camera_service.set_detection_roi(enabled, x, y, width, height)
+
+        # Persist to config file
+        config = load_config()
+        if 'camera' not in config:
+            config['camera'] = {}
+        config['camera']['detection_roi'] = {
+            'enabled': enabled,
+            'x': x,
+            'y': y,
+            'width': width,
+            'height': height,
+        }
+        save_config(config)
+
+        return jsonify({'success': True, 'detection_roi': camera_service.get_detection_roi()})
+    except Exception as e:
+        logger.error(f"Error setting detection ROI: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/hotspot/status', methods=['GET'])
 def hotspot_status():
     """Check basic Raspberry Pi WiFi hotspot status (hostapd/dnsmasq/wlan0).
