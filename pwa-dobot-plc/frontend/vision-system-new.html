@@ -25,7 +25,7 @@
  <meta name="mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body class="dark-edition">
+<body class="dark-edition dashboard-v2 sf-subpage-v2">
   <div class="wrapper ">
     <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
       <div class="logo">
@@ -64,6 +64,18 @@
 
       <div class="content">
         <div class="container-fluid">
+          <section class="sf-page-hero sf-page-hero--vision">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Machine Vision</p>
+              <h2>Color Detection and Inspection Bench</h2>
+              <p>Tune crop, thresholds, and expected size overlays to validate detection quality before production rollout.</p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div><span>Mode</span><strong>Color Filter Test</strong></div>
+              <div><span>Pipeline</span><strong>Camera - Detect - Verify</strong></div>
+              <div><span>Output</span><strong>Live Overlay + Counts</strong></div>
+            </div>
+          </section>
           
           <!-- Camera View -->
           <div class="row">
@@ -124,41 +136,30 @@
                     <h5 style="color: #64b5f6; font-size: 14px; margin-bottom: 12px; font-weight: 600;">
                       📐 Camera Crop/Zoom
                     </h5>
-                    <div style="margin-bottom: 12px;">
-                      <label style="display: flex; align-items: center; gap: 8px; color: #e0e0e0; font-size: 12px; cursor: pointer;">
-                        <input type="checkbox" id="cropEnabled" onchange="toggleCrop()" style="cursor: pointer;">
-                        <span>Enable Crop/Zoom</span>
-                      </label>
+                    <div style="color: #b0bec5; font-size: 11px; margin-bottom: 12px;">
+                      Draw a rectangle on the camera image to define the crop area. Only this area will be used for detection.
                     </div>
-                    <div id="cropControls" style="display: none; grid-template-columns: 1fr 1fr; gap: 12px;">
-                      <div>
-                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 6px;">X Position (%)</label>
-                        <input type="range" id="cropX" min="0" max="100" value="0" step="1" oninput="updateCropPreview()" style="width: 100%;">
-                        <div style="text-align: center; font-size: 10px; color: #64b5f6; margin-top: 4px;" id="cropXValue">0%</div>
-                      </div>
-                      <div>
-                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 6px;">Y Position (%)</label>
-                        <input type="range" id="cropY" min="0" max="100" value="0" step="1" oninput="updateCropPreview()" style="width: 100%;">
-                        <div style="text-align: center; font-size: 10px; color: #64b5f6; margin-top: 4px;" id="cropYValue">0%</div>
-                      </div>
-                      <div>
-                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 6px;">Width (%)</label>
-                        <input type="range" id="cropWidth" min="1" max="100" value="100" step="1" oninput="updateCropPreview()" style="width: 100%;">
-                        <div style="text-align: center; font-size: 10px; color: #64b5f6; margin-top: 4px;" id="cropWidthValue">100%</div>
-                      </div>
-                      <div>
-                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 6px;">Height (%)</label>
-                        <input type="range" id="cropHeight" min="1" max="100" value="100" step="1" oninput="updateCropPreview()" style="width: 100%;">
-                        <div style="text-align: center; font-size: 10px; color: #64b5f6; margin-top: 4px;" id="cropHeightValue">100%</div>
-                      </div>
-                    </div>
-                    <div id="cropValidationWarning" style="display: none; margin-top: 12px; padding: 8px; background: rgba(244, 67, 54, 0.2); border: 1px solid #f44336; border-radius: 4px; color: #f44336; font-size: 11px;">
-                      ⚠️ <span id="cropValidationMessage"></span>
-                    </div>
-                    <div style="margin-top: 12px;">
-                      <button class="btn btn-primary" onclick="saveCropSettings()" id="saveCropBtn" style="font-size: 12px; padding: 8px 16px; width: 100%;">
-                        Save Crop Settings
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                      <button class="btn btn-primary" onclick="startDrawingCrop()" id="drawCropBtn" style="flex: 1; font-size: 12px; padding: 8px 16px;">
+                        <i class="material-icons" style="font-size: 16px; vertical-align: middle;">crop</i> Draw Crop Area
                       </button>
+                      <button class="btn btn-danger" onclick="resetCrop()" id="resetCropBtn" style="flex: 1; font-size: 12px; padding: 8px 16px;">
+                        <i class="material-icons" style="font-size: 16px; vertical-align: middle;">refresh</i> Reset Crop
+                      </button>
+                    </div>
+                    <div id="cropInfo" style="display: none; padding: 12px; background: rgba(33, 150, 243, 0.2); border: 1px solid #64b5f6; border-radius: 4px; margin-bottom: 12px;">
+                      <div style="color: #64b5f6; font-size: 12px; font-weight: 600; margin-bottom: 6px;">✂️ Current Crop:</div>
+                      <div style="color: #e0e0e0; font-size: 11px;">
+                        <div>Position: X=<span id="cropInfoX">0</span>%, Y=<span id="cropInfoY">0</span>%</div>
+                        <div>Size: <span id="cropInfoWidth">100</span>% × <span id="cropInfoHeight">100</span>%</div>
+                      </div>
+                    </div>
+                    <div id="cropDrawInstructions" style="display: none; padding: 12px; background: rgba(255, 152, 0, 0.2); border: 1px solid #ffb74d; border-radius: 4px; color: #ffb74d; font-size: 11px;">
+                      <div style="font-weight: 600; margin-bottom: 4px;">📝 Instructions:</div>
+                      <div>1. Click and hold on the camera image</div>
+                      <div>2. Drag to draw a rectangle for the crop area</div>
+                      <div>3. Release to apply the crop</div>
+                      <div style="margin-top: 6px; color: #ff9800;">Press ESC to cancel</div>
                     </div>
                   </div>
 
@@ -699,19 +700,25 @@
       document.getElementById('stopBtn').style.display = 'none';
     }
 
-    // Crop Settings Functions
+    // Crop Drawing Variables
+    let isDrawingCropArea = false;
+    let cropDrawStartX = 0;
+    let cropDrawStartY = 0;
+    let cropDrawCurrentX = 0;
+    let cropDrawCurrentY = 0;
+    let currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
+
+    // Load existing crop settings
     async function loadCropSettings() {
       try {
         const response = await fetch(`${API_BASE}/api/camera/crop`);
         if (response.ok) {
           const crop = await response.json();
-          document.getElementById('cropEnabled').checked = crop.enabled;
-          document.getElementById('cropX').value = crop.x;
-          document.getElementById('cropY').value = crop.y;
-          document.getElementById('cropWidth').value = crop.width;
-          document.getElementById('cropHeight').value = crop.height;
-          toggleCrop();
-          updateCropPreview();
+          currentCropSettings = crop;
+          if (crop.enabled) {
+            showCropInfo();
+            drawCropOverlay(crop.x, crop.y, crop.width, crop.height);
+          }
           console.log('Crop settings loaded:', crop);
         }
       } catch (error) {
@@ -719,262 +726,246 @@
       }
     }
 
-    function toggleCrop() {
-      const enabled = document.getElementById('cropEnabled').checked;
-      const controls = document.getElementById('cropControls');
-      const overlay = document.getElementById('cropOverlay');
-      
-      controls.style.display = enabled ? 'grid' : 'none';
-      
-      if (!enabled) {
-        document.getElementById('cropX').value = 0;
-        document.getElementById('cropY').value = 0;
-        document.getElementById('cropWidth').value = 100;
-        document.getElementById('cropHeight').value = 100;
-        overlay.style.display = 'none';
-        updateCropPreview();
-      } else {
-        updateCropPreview();
-      }
-    }
-
-    function updateCropPreview() {
-      const x = parseFloat(document.getElementById('cropX').value);
-      const y = parseFloat(document.getElementById('cropY').value);
-      const width = parseFloat(document.getElementById('cropWidth').value);
-      const height = parseFloat(document.getElementById('cropHeight').value);
-      
-      document.getElementById('cropXValue').textContent = x + '%';
-      document.getElementById('cropYValue').textContent = y + '%';
-      document.getElementById('cropWidthValue').textContent = width + '%';
-      document.getElementById('cropHeightValue').textContent = height + '%';
-      
-      // Validate crop boundaries
-      const isValid = validateCropSettings(x, y, width, height);
-      
-      // Draw crop rectangle overlay
-      drawCropOverlay(x, y, width, height);
-    }
-    
-    function validateCropSettings(x, y, width, height) {
-      const warningDiv = document.getElementById('cropValidationWarning');
-      const warningMsg = document.getElementById('cropValidationMessage');
-      const saveBtn = document.getElementById('saveCropBtn');
-      
-      // Check if crop area goes beyond image boundaries
-      if (x + width > 100) {
-        warningDiv.style.display = 'block';
-        warningMsg.textContent = 'Crop area extends beyond right edge! X + Width must be ≤ 100%';
-        saveBtn.disabled = true;
-        saveBtn.style.opacity = '0.5';
-        saveBtn.style.cursor = 'not-allowed';
-        return false;
-      }
-      
-      if (y + height > 100) {
-        warningDiv.style.display = 'block';
-        warningMsg.textContent = 'Crop area extends beyond bottom edge! Y + Height must be ≤ 100%';
-        saveBtn.disabled = true;
-        saveBtn.style.opacity = '0.5';
-        saveBtn.style.cursor = 'not-allowed';
-        return false;
-      }
-      
-      // Check if crop area is too small
-      if (width < 10 || height < 10) {
-        warningDiv.style.display = 'block';
-        warningMsg.textContent = 'Crop area is very small. Width and Height should be at least 10% for good detection.';
-        saveBtn.disabled = false;
-        saveBtn.style.opacity = '1';
-        saveBtn.style.cursor = 'pointer';
-        return true;
-      }
-      
-      // All good
-      warningDiv.style.display = 'none';
-      saveBtn.disabled = false;
-      saveBtn.style.opacity = '1';
-      saveBtn.style.cursor = 'pointer';
-      return true;
-    }
-    
-    function drawCropOverlay(x, y, width, height) {
+    function startDrawingCrop() {
       const cameraFrame = document.getElementById('cameraFrame');
-      const overlay = document.getElementById('cropOverlay');
-      const enabled = document.getElementById('cropEnabled').checked;
-      const sizeOverlay = document.getElementById('sizeOverlay');
+      const cropOverlay = document.getElementById('cropOverlay');
+      const drawBtn = document.getElementById('drawCropBtn');
+      const instructions = document.getElementById('cropDrawInstructions');
       
-      // Only draw if crop is enabled and camera frame is visible and not drawing cube size
-      if (!enabled || cameraFrame.style.display === 'none' || sizeOverlay.style.display === 'block') {
-        overlay.style.display = 'none';
+      if (cameraFrame.style.display === 'none') {
+        alert('Please wait for the camera feed to load before drawing the crop area.');
         return;
       }
       
-      // Get actual image rendering info
-      const renderInfo = getImageRenderInfo(cameraFrame);
+      // Setup overlay canvas to match image
+      cropOverlay.width = cameraFrame.width;
+      cropOverlay.height = cameraFrame.height;
+      cropOverlay.style.width = cameraFrame.offsetWidth + 'px';
+      cropOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      cropOverlay.style.display = 'block';
+      cropOverlay.style.pointerEvents = 'auto';
       
-      // Set canvas to match actual rendered image size
-      overlay.width = renderInfo.renderWidth;
-      overlay.height = renderInfo.renderHeight;
-      overlay.style.width = renderInfo.renderWidth + 'px';
-      overlay.style.height = renderInfo.renderHeight + 'px';
-      overlay.style.display = 'block';
+      instructions.style.display = 'block';
+      drawBtn.disabled = true;
+      drawBtn.style.opacity = '0.5';
       
-      const ctx = overlay.getContext('2d');
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      isDrawingCropArea = true;
       
-      // Calculate crop rectangle in pixels (no offset needed)
-      const cropX = (x / 100) * renderInfo.renderWidth;
-      const cropY = (y / 100) * renderInfo.renderHeight;
-      const cropWidth = (width / 100) * renderInfo.renderWidth;
-      const cropHeight = (height / 100) * renderInfo.renderHeight;
+      // Add event listeners
+      cropOverlay.addEventListener('mousedown', onCropDrawStart);
+      cropOverlay.addEventListener('mousemove', onCropDrawMove);
+      cropOverlay.addEventListener('mouseup', onCropDrawEnd);
+      document.addEventListener('keydown', onCropDrawEscape);
+    }
+
+    function onCropDrawStart(event) {
+      const rect = event.target.getBoundingClientRect();
+      cropDrawStartX = event.clientX - rect.left;
+      cropDrawStartY = event.clientY - rect.top;
+      cropDrawCurrentX = cropDrawStartX;
+      cropDrawCurrentY = cropDrawStartY;
+    }
+
+    function onCropDrawMove(event) {
+      if (cropDrawStartX === 0 && cropDrawStartY === 0) return;
       
-      // Draw semi-transparent dark overlay over entire image
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(0, 0, overlay.width, overlay.height);
+      const rect = event.target.getBoundingClientRect();
+      cropDrawCurrentX = event.clientX - rect.left;
+      cropDrawCurrentY = event.clientY - rect.top;
       
-      // Clear the crop area (make it transparent)
+      drawCropRectangle();
+    }
+
+    function onCropDrawEnd(event) {
+      if (cropDrawStartX === 0 && cropDrawStartY === 0) return;
+      
+      const rect = event.target.getBoundingClientRect();
+      cropDrawCurrentX = event.clientX - rect.left;
+      cropDrawCurrentY = event.clientY - rect.top;
+      
+      const cameraFrame = document.getElementById('cameraFrame');
+      const canvasWidth = cameraFrame.width;
+      const canvasHeight = cameraFrame.height;
+      
+      // Calculate rectangle bounds
+      const x1 = Math.min(cropDrawStartX, cropDrawCurrentX);
+      const y1 = Math.min(cropDrawStartY, cropDrawCurrentY);
+      const x2 = Math.max(cropDrawStartX, cropDrawCurrentX);
+      const y2 = Math.max(cropDrawStartY, cropDrawCurrentY);
+      
+      // Convert to percentages
+      const xPercent = (x1 / canvasWidth) * 100;
+      const yPercent = (y1 / canvasHeight) * 100;
+      const widthPercent = ((x2 - x1) / canvasWidth) * 100;
+      const heightPercent = ((y2 - y1) / canvasHeight) * 100;
+      
+      // Validate minimum size
+      if (widthPercent < 5 || heightPercent < 5) {
+        alert('Crop area is too small. Please draw a larger rectangle.');
+        cancelCropDrawing();
+        return;
+      }
+      
+      // Save the crop settings
+      currentCropSettings = {
+        enabled: true,
+        x: Math.round(xPercent * 10) / 10,
+        y: Math.round(yPercent * 10) / 10,
+        width: Math.round(widthPercent * 10) / 10,
+        height: Math.round(heightPercent * 10) / 10
+      };
+      
+      applyCropSettings();
+      cancelCropDrawing();
+    }
+
+    function onCropDrawEscape(event) {
+      if (event.key === 'Escape' && isDrawingCropArea) {
+        cancelCropDrawing();
+      }
+    }
+
+    function drawCropRectangle() {
+      const cropOverlay = document.getElementById('cropOverlay');
+      const ctx = cropOverlay.getContext('2d');
+      
+      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+      
+      const x = Math.min(cropDrawStartX, cropDrawCurrentX);
+      const y = Math.min(cropDrawStartY, cropDrawCurrentY);
+      const width = Math.abs(cropDrawCurrentX - cropDrawStartX);
+      const height = Math.abs(cropDrawCurrentY - cropDrawStartY);
+      
+      // Draw semi-transparent overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(0, 0, cropOverlay.width, cropOverlay.height);
+      
+      // Clear crop area
+      ctx.clearRect(x, y, width, height);
+      
+      // Draw border
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+      
+      // Draw label
+      ctx.fillStyle = '#00ff00';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('CROP AREA', x + 10, y + 25);
+      ctx.font = '12px Arial';
+      ctx.fillText(Math.round(width) + 'x' + Math.round(height) + 'px', x + 10, y + 45);
+    }
+
+    function cancelCropDrawing() {
+      const cropOverlay = document.getElementById('cropOverlay');
+      const drawBtn = document.getElementById('drawCropBtn');
+      const instructions = document.getElementById('cropDrawInstructions');
+      
+      isDrawingCropArea = false;
+      cropDrawStartX = 0;
+      cropDrawStartY = 0;
+      cropDrawCurrentX = 0;
+      cropDrawCurrentY = 0;
+      
+      cropOverlay.style.pointerEvents = 'none';
+      instructions.style.display = 'none';
+      drawBtn.disabled = false;
+      drawBtn.style.opacity = '1';
+      
+      cropOverlay.removeEventListener('mousedown', onCropDrawStart);
+      cropOverlay.removeEventListener('mousemove', onCropDrawMove);
+      cropOverlay.removeEventListener('mouseup', onCropDrawEnd);
+      document.removeEventListener('keydown', onCropDrawEscape);
+      
+      // Redraw existing crop if any
+      if (currentCropSettings.enabled) {
+        drawCropOverlay(currentCropSettings.x, currentCropSettings.y, currentCropSettings.width, currentCropSettings.height);
+      } else {
+        const ctx = cropOverlay.getContext('2d');
+        ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+        cropOverlay.style.display = 'none';
+      }
+    }
+
+    function drawCropOverlay(x, y, width, height) {
+      const cameraFrame = document.getElementById('cameraFrame');
+      const cropOverlay = document.getElementById('cropOverlay');
+      
+      if (cameraFrame.style.display === 'none') return;
+      
+      cropOverlay.width = cameraFrame.width;
+      cropOverlay.height = cameraFrame.height;
+      cropOverlay.style.width = cameraFrame.offsetWidth + 'px';
+      cropOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      cropOverlay.style.display = 'block';
+      
+      const ctx = cropOverlay.getContext('2d');
+      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+      
+      const cropX = (x / 100) * cropOverlay.width;
+      const cropY = (y / 100) * cropOverlay.height;
+      const cropWidth = (width / 100) * cropOverlay.width;
+      const cropHeight = (height / 100) * cropOverlay.height;
+      
+      // Draw dark overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(0, 0, cropOverlay.width, cropOverlay.height);
+      
+      // Clear crop area
       ctx.clearRect(cropX, cropY, cropWidth, cropHeight);
       
-      // Draw bright border around crop area
+      // Draw border
       ctx.strokeStyle = '#00ff00';
       ctx.lineWidth = 3;
       ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
-      
-      // Draw corner markers
-      const cornerSize = 15;
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 4;
-      
-      // Top-left corner
-      ctx.beginPath();
-      ctx.moveTo(cropX, cropY + cornerSize);
-      ctx.lineTo(cropX, cropY);
-      ctx.lineTo(cropX + cornerSize, cropY);
-      ctx.stroke();
-      
-      // Top-right corner
-      ctx.beginPath();
-      ctx.moveTo(cropX + cropWidth - cornerSize, cropY);
-      ctx.lineTo(cropX + cropWidth, cropY);
-      ctx.lineTo(cropX + cropWidth, cropY + cornerSize);
-      ctx.stroke();
-      
-      // Bottom-left corner
-      ctx.beginPath();
-      ctx.moveTo(cropX, cropY + cropHeight - cornerSize);
-      ctx.lineTo(cropX, cropY + cropHeight);
-      ctx.lineTo(cropX + cornerSize, cropY + cropHeight);
-      ctx.stroke();
-      
-      // Bottom-right corner
-      ctx.beginPath();
-      ctx.moveTo(cropX + cropWidth - cornerSize, cropY + cropHeight);
-      ctx.lineTo(cropX + cropWidth, cropY + cropHeight);
-      ctx.lineTo(cropX + cropWidth, cropY + cropHeight - cornerSize);
-      ctx.stroke();
       
       // Draw label
       ctx.fillStyle = '#00ff00';
       ctx.font = 'bold 14px Arial';
       ctx.fillText('CROP AREA', cropX + 10, cropY + 25);
-      
-      // Draw dimensions
-      const dimensionText = Math.round(cropWidth) + 'x' + Math.round(cropHeight) + 'px';
-      ctx.fillStyle = '#00ff00';
-      ctx.font = '12px Arial';
-      ctx.fillText(dimensionText, cropX + 10, cropY + 45);
     }
 
-    async function saveCropSettings() {
+    async function applyCropSettings() {
       try {
-        const enabled = document.getElementById('cropEnabled').checked;
-        const x = parseFloat(document.getElementById('cropX').value);
-        const y = parseFloat(document.getElementById('cropY').value);
-        const width = parseFloat(document.getElementById('cropWidth').value);
-        const height = parseFloat(document.getElementById('cropHeight').value);
-        
-        // Validate before saving
-        if (enabled && !validateCropSettings(x, y, width, height)) {
-          alert('Cannot save: Crop area extends beyond image boundaries. Please adjust the settings.');
-          return;
-        }
-        
-        // Show saving indicator
-        const saveBtn = document.getElementById('saveCropBtn');
-        const originalText = saveBtn.innerHTML;
-        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-        saveBtn.disabled = true;
-
         const response = await fetch(`${API_BASE}/api/camera/crop`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled, x, y, width, height })
+          body: JSON.stringify(currentCropSettings)
         });
 
         if (response.ok) {
-          console.log('Crop settings saved successfully');
-          saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved!';
-          saveBtn.style.background = '#4caf50';
-          
-          setTimeout(() => {
-            saveBtn.innerHTML = originalText;
-            saveBtn.style.background = '';
-            saveBtn.disabled = false;
-          }, 2000);
-          
-          // Refresh camera frame to show crop
+          console.log('Crop settings saved:', currentCropSettings);
+          showCropInfo();
+          drawCropOverlay(currentCropSettings.x, currentCropSettings.y, currentCropSettings.width, currentCropSettings.height);
           updateCameraFrame();
         } else {
           const error = await response.json();
           console.error('Error saving crop:', error);
           alert('Error saving crop settings: ' + (error.error || 'Unknown error'));
-          saveBtn.innerHTML = originalText;
-          saveBtn.disabled = false;
         }
       } catch (error) {
         console.error('Error saving crop settings:', error);
         alert('Error saving crop settings: ' + error.message);
-        const saveBtn = document.getElementById('saveCropBtn');
-        saveBtn.innerHTML = 'Save Crop Settings';
-        saveBtn.disabled = false;
       }
     }
 
-    // Helper function to get actual image rendering dimensions
-    function getImageRenderInfo(imgElement) {
-      const imgWidth = imgElement.naturalWidth;
-      const imgHeight = imgElement.naturalHeight;
-      const displayWidth = imgElement.width || imgElement.offsetWidth;
-      const displayHeight = imgElement.height || imgElement.offsetHeight;
-      
-      // Since image has width: 100%, it fills the container width
-      // and height is calculated automatically to maintain aspect ratio
-      const imgAspect = imgWidth / imgHeight;
-      
-      // The actual rendered size when width: 100% is set
-      const renderWidth = displayWidth;
-      const renderHeight = displayWidth / imgAspect;
-      
-      // No offset needed since image fills width and height is auto
-      const offsetX = 0;
-      const offsetY = 0;
-      
-      console.log('Image render info:', {
-        natural: imgWidth + 'x' + imgHeight,
-        display: displayWidth + 'x' + displayHeight,
-        render: renderWidth + 'x' + renderHeight,
-        offset: offsetX + ',' + offsetY
-      });
-      
-      return {
-        renderWidth: renderWidth,
-        renderHeight: renderHeight,
-        offsetX: offsetX,
-        offsetY: offsetY,
-        displayWidth: displayWidth,
-        displayHeight: renderHeight
-      };
+    async function resetCrop() {
+      currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
+      await applyCropSettings();
+      document.getElementById('cropInfo').style.display = 'none';
+      const cropOverlay = document.getElementById('cropOverlay');
+      const ctx = cropOverlay.getContext('2d');
+      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
+      cropOverlay.style.display = 'none';
+    }
+
+    function showCropInfo() {
+      const cropInfo = document.getElementById('cropInfo');
+      document.getElementById('cropInfoX').textContent = currentCropSettings.x.toFixed(1);
+      document.getElementById('cropInfoY').textContent = currentCropSettings.y.toFixed(1);
+      document.getElementById('cropInfoWidth').textContent = currentCropSettings.width.toFixed(1);
+      document.getElementById('cropInfoHeight').textContent = currentCropSettings.height.toFixed(1);
+      cropInfo.style.display = 'block';
     }
 
     // Cube Size Drawing Variables
@@ -997,14 +988,11 @@
         return;
       }
       
-      // Get actual image rendering info
-      const renderInfo = getImageRenderInfo(cameraFrame);
-      
-      // Setup overlay canvas to match actual image size
-      sizeOverlay.width = renderInfo.renderWidth;
-      sizeOverlay.height = renderInfo.renderHeight;
-      sizeOverlay.style.width = renderInfo.renderWidth + 'px';
-      sizeOverlay.style.height = renderInfo.renderHeight + 'px';
+      // Setup overlay canvas to match image
+      sizeOverlay.width = cameraFrame.width;
+      sizeOverlay.height = cameraFrame.height;
+      sizeOverlay.style.width = cameraFrame.offsetWidth + 'px';
+      sizeOverlay.style.height = cameraFrame.offsetHeight + 'px';
       sizeOverlay.style.display = 'block';
       
       // Show instructions and buttons
