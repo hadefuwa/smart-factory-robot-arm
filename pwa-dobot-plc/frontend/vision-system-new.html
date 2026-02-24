@@ -28,6 +28,7 @@
 <body class="dark-edition dashboard-v2 sf-subpage-v2">
   <div class="wrapper ">
     <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
+      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
       <div class="logo">
         <a href="/" class="simple-text logo-normal">
           <i class="material-icons">factory</i>
@@ -43,9 +44,39 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link" href="/robot-arm.html">
+              <i class="material-icons">precision_manufacturing</i>
+              <p>Robot Arm</p>
+            </a>
+          </li>
+          <li class="nav-item active">
             <a class="nav-link" href="/vision-system-new.html">
               <i class="material-icons">visibility</i>
               <p>Vision System</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/rfid.html">
+              <i class="material-icons">nfc</i>
+              <p>RFID Tracking</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/digital-twin.html">
+              <i class="material-icons">view_in_ar</i>
+              <p>Digital Twin</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/plc-diagnostics.html">
+              <i class="material-icons">analytics</i>
+              <p>PLC Diagnostics</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/io-link.html">
+              <i class="material-icons">settings_input_component</i>
+              <p>IO-Link Master</p>
             </a>
           </li>
         </ul>
@@ -114,6 +145,26 @@
                       <div id="statusBackendValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
                       <div id="statusBackendMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
                     </div>
+                    <div id="statusYellowCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Yellow Bit (32.0)</div>
+                      <div id="statusYellowValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusYellowMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div id="statusWhiteCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">White Bit (32.1)</div>
+                      <div id="statusWhiteValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusWhiteMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div id="statusSteelCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Steel Bit (32.2)</div>
+                      <div id="statusSteelValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusSteelMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div id="statusAlluminiumCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Alluminium Bit (32.3)</div>
+                      <div id="statusAlluminiumValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusAlluminiumMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -140,7 +191,7 @@
           
           <!-- Camera View -->
           <div class="row">
-            <div class="col-md-6">
+            <div class="col-12">
               <div class="card">
                 <div class="card-header card-header-purple">
                   <h4 class="card-title">Camera Feed</h4>
@@ -155,22 +206,6 @@
                       <div style="font-size: 48px;">CAM</div>
                       <div>Loading camera feed...</div>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Analyzed Image -->
-            <div class="col-md-6">
-              <div class="card">
-                <div class="card-header card-header-success">
-                  <h4 class="card-title">Detected Cubes</h4>
-                </div>
-                <div class="card-body">
-                  <img id="analyzedImage" class="camera-frame" src="" alt="Analyzed Image" style="display: none; width: 100%; border-radius: 8px;">
-                  <div id="analyzedPlaceholder" style="min-height: 300px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-direction: column; gap: 10px; background: rgba(10, 22, 40, 0.8); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;">
-                    <div style="font-size: 48px;">SCAN</div>
-                    <div>Detection results will appear here</div>
                   </div>
                 </div>
               </div>
@@ -259,6 +294,20 @@
                   </button>
                 </div>
                 <div class="card-body" id="settingsBody" style="display: none; border-top: 1px solid rgba(255,255,255,0.12);">
+                  <details style="margin-bottom: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 10px 12px;">
+                    <summary style="cursor: pointer; font-weight: 700; color: #b2ebf2; outline: none;">
+                      More Info: PLC Cube Color Bits
+                    </summary>
+                    <div style="margin-top: 10px; color: #cfd8dc; font-size: 12px; line-height: 1.45;">
+                      <div>When a cube is detected, the system clears DB123.DBX32.0 to DB123.DBX32.3, then sets one bit for the detected cube:</div>
+                      <div style="margin-top: 8px;">`yellow_cube_detected` -> DB123.DBX32.0</div>
+                      <div>`white_cube_detected` -> DB123.DBX32.1</div>
+                      <div>`steel_cube_detected` -> DB123.DBX32.2</div>
+                      <div>`alluminium_cube_detected` -> DB123.DBX32.3</div>
+                      <div style="margin-top: 8px;">When the PLC Completed Command is received, DB123.DBX32.0 to DB123.DBX32.3 are cleared again, ready for the next cube.</div>
+                    </div>
+                  </details>
+
                   <!-- Detection Method Info -->
                   <div style="margin-bottom: 24px; padding: 16px; background: rgba(255, 235, 59, 0.1); border: 2px solid #ffeb3b; border-radius: 8px;">
                     <div style="color: #ffeb3b; font-size: 18px; font-weight: 700; margin-bottom: 8px;">🎨 Color Filter Detection (OpenCV HSV)</div>
@@ -640,18 +689,22 @@
           color = objectDetected ? '#4caf50' : '#f44336';
         }
 
-        let meta = `Detected count: ${objectNumber}`;
-        if (startBit && !busy) meta += ' | Start TRUE keeps 10-vote cycles running';
+        const setBitStatus = (cardId, valueId, metaId, on, activeLabel) => {
+          setLiveStatus(
+            cardId,
+            valueId,
+            metaId,
+            on ? 'ON' : 'OFF',
+            on ? '#4caf50' : '#f44336',
+            on ? activeLabel : 'No detection latched',
+            on ? 'good' : 'bad'
+          );
+        };
 
-        setLiveStatus(
-          'statusVisionCard',
-          'statusVisionValue',
-          'statusVisionMeta',
-          visionLabel,
-          color,
-          meta,
-          tone
-        );
+        setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', Boolean(tags.yellow_cube_detected), 'Yellow cube detected');
+        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', Boolean(tags.white_cube_detected), 'White cube detected');
+        setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', Boolean(tags.steel_cube_detected), 'Steel cube detected');
+        setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', Boolean(tags.alluminium_cube_detected), 'Alluminium cube detected');
 
         const annotatedImg = document.getElementById('annotatedImage');
         if (completed && (!annotatedImg || annotatedImg.style.display === 'none')) {
@@ -660,10 +713,39 @@
         }
       } else {
         setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read DB123 vision tags', 'bad');
+        setLiveStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
+        setLiveStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
+        setLiveStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
+        setLiveStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
       }
 
       if (cycleResult.status === 'fulfilled' && cycleResult.value.success) {
         const cycle = cycleResult.value.cycle || {};
+        const running = Boolean(cycle.running);
+        const detectedColor = cycle.detected_color || 'none';
+        const confidence = Number(cycle.confidence || 0);
+        const objectCount = Number(cycle.object_count || 0);
+        const cycleMsg = cycle.message || 'No cycle message';
+
+        if (running) {
+          setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'RUNNING', '#4caf50', cycleMsg, 'good');
+        } else {
+          const label = detectedColor && detectedColor !== 'none'
+            ? `LAST: ${String(detectedColor).toUpperCase()}`
+            : 'IDLE';
+          const tone = objectCount > 0 ? 'good' : 'warn';
+          const color = objectCount > 0 ? '#4caf50' : '#ffb300';
+          setLiveStatus(
+            'statusVisionCard',
+            'statusVisionValue',
+            'statusVisionMeta',
+            label,
+            color,
+            `${confidence.toFixed(1)}% confidence | count ${objectCount}`,
+            tone
+          );
+        }
+
         renderCycleSummary(cycle);
 
         const cycleTs = Number(cycle.timestamp || 0);
@@ -671,14 +753,6 @@
           lastCycleTimestampSeen = cycleTs;
           addDebugLog('new PLC cycle result', cycle);
           refreshAnnotatedResultImage('plc-cycle');
-          const analyzedImg = document.getElementById('analyzedImage');
-          const analyzedPlaceholder = document.getElementById('analyzedPlaceholder');
-          const annotatedImg = document.getElementById('annotatedImage');
-          if (analyzedImg && annotatedImg && annotatedImg.src) {
-            analyzedImg.src = annotatedImg.src;
-            analyzedImg.style.display = 'block';
-            if (analyzedPlaceholder) analyzedPlaceholder.style.display = 'none';
-          }
         }
       } else {
         addDebugLog('latest-cycle unavailable', cycleResult.reason?.message || 'request failed', 'warn');
@@ -1094,15 +1168,15 @@
           const blob = await analyzeResponse.blob();
           addDebugLog('analyzed image received', `${blob.size} bytes`);
           const url = URL.createObjectURL(blob);
-          const analyzedImg = document.getElementById('analyzedImage');
-          const analyzedPlaceholder = document.getElementById('analyzedPlaceholder');
+          const annotatedImg = document.getElementById('annotatedImage');
+          const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
           
-          if (analyzedImg.src && analyzedImg.src.startsWith('blob:')) {
-            URL.revokeObjectURL(analyzedImg.src);
+          if (annotatedImg.src && annotatedImg.src.startsWith('blob:')) {
+            URL.revokeObjectURL(annotatedImg.src);
           }
-          analyzedImg.src = url;
-          analyzedImg.style.display = 'block';
-          if (analyzedPlaceholder) analyzedPlaceholder.style.display = 'none';
+          annotatedImg.src = url;
+          annotatedImg.style.display = 'block';
+          if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
 
           const analyzeResults = {
             object_count: Number.parseInt(objectCountHeader || '0', 10) || 0,

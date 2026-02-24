@@ -347,6 +347,53 @@ def check_write_permission(db_number: int, offset: int, data_length: int = 1) ->
 # Vision handshaking state
 vision_handshake_processing = False
 vision_handshake_last_start_state = False
+vision_last_completed_command_state = False
+cube_color_hold_seconds = 3.0
+cube_color_latched_until = 0.0
+cube_color_pending_clear = False
+
+def queue_cube_color_bits(color_code: int, force_clear: bool = False) -> bool:
+    """Write one-hot cube color bits to DB123 byte 32.
+
+    Mapping:
+      32.0 yellow_cube_detected
+      32.1 white_cube_detected
+      32.2 steel_cube_detected
+      32.3 alluminium_cube_detected
+    """
+    global cube_color_latched_until, cube_color_pending_clear
+
+    now = time.time()
+    # Keep color bits latched briefly so PLC/HMI can reliably read them.
+    if color_code == 0 and not force_clear and now < cube_color_latched_until:
+        cube_color_pending_clear = True
+        return True
+
+    # Step 1: clear all color bits
+    clear_bits = bytearray(1)
+    snap7.util.set_bool(clear_bits, 0, 0, False)
+    snap7.util.set_bool(clear_bits, 0, 1, False)
+    snap7.util.set_bool(clear_bits, 0, 2, False)
+    snap7.util.set_bool(clear_bits, 0, 3, False)
+    ok = queue_plc_write(123, 32, clear_bits)
+    cube_color_pending_clear = False
+
+    # Step 2: set selected color bit (if any)
+    if color_code in (1, 2, 3, 4):
+        set_bits = bytearray(1)
+        bit_map = {
+            1: 0,  # yellow
+            2: 1,  # white
+            3: 2,  # steel (mapped from metal detection)
+            4: 3   # alluminium
+        }
+        snap7.util.set_bool(set_bits, 0, bit_map[color_code], True)
+        ok = queue_plc_write(123, 32, set_bits) and ok
+        cube_color_latched_until = now + cube_color_hold_seconds
+    else:
+        cube_color_latched_until = 0.0
+
+    return ok
 
 def queue_plc_write(db_number: int, offset: int, data: bytearray):
     """Queue a PLC write operation to be executed in the next polling cycle
@@ -900,22 +947,13 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
         defect_number_data = bytearray(2)
         snap7.util.set_int(defect_number_data, 0, defect_count)
 
-        # Prepare color_code INT (2 bytes at offset 46)
-        # DISABLED FOR NOW - PLC datablock needs adjusting first
-        # 0 = No cube detected
-        # 1 = Yellow cube
-        # 2 = White cube
-        # 3 = Metal/Grey cube
-        # color_code_data = bytearray(2)
-        # snap7.util.set_int(color_code_data, 0, color_code)
-
         # Queue all writes - they will execute AFTER the next read in polling loop
         queue_plc_write(db_number, 40, byte40_data)           # Bool flags
         queue_plc_write(db_number, 42, object_number_data)    # Object_Number
         queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number
-        # queue_plc_write(db_number, 46, color_code_data)       # Color_Code (DISABLED - PLC DB needs adjustment)
+        queue_cube_color_bits(color_code)                     # DB123.DBX32.0-32.3 one-hot color bits
 
-        logger.debug(f"Queued vision writes: busy={busy}, completed={completed}, objects={object_count}, defects={defect_count}, color={color_code} (color NOT written to PLC yet)")
+        logger.debug(f"Queued vision writes: busy={busy}, completed={completed}, objects={object_count}, defects={defect_count}, color={color_code} (DBX32 bits)")
         return True
 
     except Exception as e:
@@ -1833,7 +1871,8 @@ def poll_loop():
     Reads ALL PLC tags once per second and updates plc_cache
     All API endpoints read from cache (zero lock contention)
     """
-    global vision_handshake_last_start_state, vision_handshake_processing, plc_cache
+    global vision_handshake_last_start_state, vision_handshake_processing, vision_last_completed_command_state
+    global cube_color_latched_until, cube_color_pending_clear, plc_cache
 
     logger.info("ðŸ”„ Unified PLC polling loop started (1 second intervals)")
 
@@ -1881,7 +1920,9 @@ def poll_loop():
                 plc_cache['db4']['current_y'] = snap7.util.get_real(all_data, 22)          # DB123.DBD22
                 plc_cache['db4']['current_z'] = snap7.util.get_real(all_data, 26)          # DB123.DBD26
                 plc_cache['db4']['status_code'] = snap7.util.get_int(all_data, 30)         # DB123.DBW30
-                plc_cache['db4']['error_code'] = snap7.util.get_int(all_data, 32)          # DB123.DBW32
+                # DB123 byte 32 is reserved for cube color bits (DBX32.0-32.3), so avoid DBW32 here.
+                # Use DBW34 for compatibility status/error cache.
+                plc_cache['db4']['error_code'] = snap7.util.get_int(all_data, 34)          # DB123.DBW34
 
             except Exception as e:
                 logger.error(f"DB123 read error: {e}")
@@ -1916,6 +1957,18 @@ def poll_loop():
             # VISION HANDSHAKING (using cached start bit)
             # ==================================================
             start_bit = plc_cache['db123']['start']
+            completed_command = bool(plc_cache['db4']['cycle_complete'])
+
+            # When PLC sends Completed Command, clear all cube color bits (DB123.DBX32.0-32.3)
+            if completed_command and not vision_last_completed_command_state:
+                logger.info("✅ PLC completed command received - clearing cube color bits DB123.DBX32.0-32.3")
+                queue_cube_color_bits(0)
+            vision_last_completed_command_state = completed_command
+
+            # If a clear was requested while latch hold was active, clear once hold expires.
+            if cube_color_pending_clear and time.time() >= cube_color_latched_until:
+                logger.info("⏱️ Cube color bit hold elapsed - clearing DB123.DBX32.0-32.3")
+                queue_cube_color_bits(0, force_clear=True)
 
             # Log state changes
             if start_bit != vision_handshake_last_start_state:
@@ -2884,6 +2937,10 @@ def read_db123_tags():
         'object_detected': False,
         'object_ok': False,
         'defect_detected': False,
+        'yellow_cube_detected': False,
+        'white_cube_detected': False,
+        'steel_cube_detected': False,
+        'alluminium_cube_detected': False,
         'object_number': 0,
         'defect_number': 0
     }

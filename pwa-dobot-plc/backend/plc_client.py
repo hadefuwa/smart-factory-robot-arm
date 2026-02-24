@@ -611,6 +611,10 @@ class PLCClient:
             'object_detected': False,
             'object_ok': False,
             'defect_detected': False,
+            'yellow_cube_detected': False,
+            'white_cube_detected': False,
+            'steel_cube_detected': False,
+            'alluminium_cube_detected': False,
             'object_number': 0,
             'defect_number': 0
         }
@@ -658,9 +662,23 @@ class PLCClient:
                     'object_detected': get_bool(bool_data, 0, 4),  # 40.4
                     'object_ok': get_bool(bool_data, 0, 5),     # 40.5
                     'defect_detected': get_bool(bool_data, 0, 6),  # 40.6
+                    'yellow_cube_detected': False,
+                    'white_cube_detected': False,
+                    'steel_cube_detected': False,
+                    'alluminium_cube_detected': False,
                     'object_number': object_number,
                     'defect_number': defect_number
                 }
+
+                # Read cube color bits at DBX32.0..32.3
+                try:
+                    color_bits = self.client.db_read(db_number, 32, 1)
+                    result['yellow_cube_detected'] = get_bool(color_bits, 0, 0)
+                    result['white_cube_detected'] = get_bool(color_bits, 0, 1)
+                    result['steel_cube_detected'] = get_bool(color_bits, 0, 2)
+                    result['alluminium_cube_detected'] = get_bool(color_bits, 0, 3)
+                except Exception as color_err:
+                    logger.debug(f"Could not read cube color bits from DB{db_number}.DBX32.0-32.3: {color_err}")
                 
                 # Log what we read for debugging
                 logger.info(f"📡 Read vision tags from DB{db_number}: start={start_command} (DBX{start_byte}.{start_bit}), connected={result['connected']}, busy={result['busy']}, completed={result['completed']}")

@@ -76,7 +76,7 @@
           "byte": 30
         },
         "error_code": {
-          "byte": 32
+          "byte": 34
         }
       }
     },
