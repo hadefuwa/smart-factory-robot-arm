@@ -2505,6 +2505,7 @@ def vision_analyze():
             return jsonify({'error': 'Failed to encode annotated image'}), 500
         
         # Return both JSON results and image
+        detected_objects_header = json.dumps(detected_objects, separators=(',', ':'))
         return Response(
             buffer.tobytes(),
             mimetype='image/jpeg',
@@ -2513,6 +2514,7 @@ def vision_analyze():
                 'X-Defects-Found': str(results['defects_found']).lower(),
                 'X-Confidence': str(results['confidence']),
                 'X-Objects-Detected': str(results.get('objects_detected', 0)),
+                'X-Detected-Objects': detected_objects_header,
                 'Content-Disposition': 'inline; filename=analyzed.jpg'
             }
         )

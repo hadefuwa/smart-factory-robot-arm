@@ -155,13 +155,28 @@
           <div class="row">
             <div class="col-12">
               <div class="card">
-                <div class="card-header card-header-success" style="display: flex; align-items: center; justify-content: space-between;">
-                  <h4 class="card-title" style="margin: 0;">Settings</h4>
-                  <button type="button" class="btn btn-sm btn-outline-light" id="settingsToggleBtn" onclick="toggleSettingsPanel()" style="font-size: 11px; padding: 4px 10px;">
-                    Show
+                <div class="card-header card-header-success" style="padding: 0;">
+                  <button
+                    type="button"
+                    id="settingsToggleBtn"
+                    onclick="toggleSettingsPanel()"
+                    aria-expanded="false"
+                    style="width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; background: transparent; border: 0; color: #fff; cursor: pointer; text-align: left;"
+                  >
+                    <span style="display: flex; align-items: center; gap: 10px;">
+                      <i class="material-icons" style="font-size: 20px;">tune</i>
+                      <span style="display: flex; flex-direction: column; line-height: 1.2;">
+                        <span style="font-size: 15px; font-weight: 700;">Detection Settings</span>
+                        <span style="font-size: 11px; opacity: 0.85;">Crop, expected area, and thresholds</span>
+                      </span>
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;">
+                      <span id="settingsToggleText">Expand</span>
+                      <i class="material-icons" id="settingsToggleIcon" style="font-size: 20px;">expand_more</i>
+                    </span>
                   </button>
                 </div>
-                <div class="card-body" id="settingsBody" style="display: none;">
+                <div class="card-body" id="settingsBody" style="display: none; border-top: 1px solid rgba(255,255,255,0.12);">
                   <!-- Detection Method Info -->
                   <div style="margin-bottom: 24px; padding: 16px; background: rgba(255, 235, 59, 0.1); border: 2px solid #ffeb3b; border-radius: 8px;">
                     <div style="color: #ffeb3b; font-size: 18px; font-weight: 700; margin-bottom: 8px;">🎨 Color Filter Detection (OpenCV HSV)</div>
@@ -334,6 +349,29 @@
       max_area: 50000
     };
 
+    function redrawPersistentOverlays() {
+      const cameraFrame = document.getElementById('cameraFrame');
+      if (!cameraFrame || cameraFrame.style.display === 'none') return;
+
+      if (currentCropSettings?.enabled && !isDrawingCropArea) {
+        drawCropOverlay(
+          currentCropSettings.x,
+          currentCropSettings.y,
+          currentCropSettings.width,
+          currentCropSettings.height
+        );
+      }
+
+      if (currentRoiSettings?.enabled && !isDrawingRoi) {
+        drawRoiOverlay(
+          currentRoiSettings.x,
+          currentRoiSettings.y,
+          currentRoiSettings.width,
+          currentRoiSettings.height
+        );
+      }
+    }
+
     // Update camera frame from existing camera feed
     async function updateCameraFrame() {
       // Skip if previous fetch still in progress
@@ -361,6 +399,7 @@
           if (frame.src && frame.src.startsWith('blob:')) {
             URL.revokeObjectURL(frame.src);
           }
+          frame.onload = () => redrawPersistentOverlays();
           frame.src = url;
           frame.style.display = 'block';
           if (placeholder) placeholder.style.display = 'none';
@@ -577,6 +616,9 @@
         console.log('🔍 Analyze response status:', analyzeResponse.status);
 
         if (analyzeResponse.ok) {
+          const objectCountHeader = analyzeResponse.headers.get('X-Objects-Detected');
+          const detectedObjectsHeader = analyzeResponse.headers.get('X-Detected-Objects');
+
           const blob = await analyzeResponse.blob();
           const url = URL.createObjectURL(blob);
           const analyzedImg = document.getElementById('analyzedImage');
@@ -588,40 +630,56 @@
           analyzedImg.src = url;
           analyzedImg.style.display = 'block';
           if (analyzedPlaceholder) analyzedPlaceholder.style.display = 'none';
-        }
 
-        // Get detection results
-        const detectResponse = await fetch(`${API_BASE}/api/vision/detect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            object_detection_enabled: true,
-            defect_detection_enabled: false,
-            object_method: objectMethod,
-            object_params: objectParams
-          })
-        });
+          const analyzeResults = {
+            object_count: Number.parseInt(objectCountHeader || '0', 10) || 0,
+            objects: [],
+            debug: {}
+          };
 
-        if (detectResponse.ok) {
-          const results = await detectResponse.json();
-          console.log('🔍 Detection Results:', results);
-          if (results.debug) {
-            console.log('🔍 Debug Info:', results.debug);
-            // Log detailed debug info
-            Object.keys(results.debug).forEach(color => {
-              const info = results.debug[color];
-              if (info.pixels !== undefined) {
-                console.log(`🔍 ${color.toUpperCase()}: ${info.pixels} pixels matched, ${info.objects || 0} objects found`);
+          if (detectedObjectsHeader) {
+            try {
+              analyzeResults.objects = JSON.parse(detectedObjectsHeader);
+              if (!objectCountHeader) {
+                analyzeResults.object_count = analyzeResults.objects.length;
               }
-              if (info.contours) {
-                console.log(`🔍 ${color.toUpperCase()} Contours: ${info.contours.total} total, ${info.contours.rejected_small} too small, ${info.contours.rejected_large} too large, ${info.contours.accepted} accepted`);
-              }
-            });
+            } catch (parseError) {
+              console.warn('Could not parse X-Detected-Objects header:', parseError);
+            }
           }
-          displayResults(results);
+
+          // Backward compatibility: older backend may not include X-Detected-Objects.
+          // Fall back to /api/vision/detect only when header-based object data is unavailable.
+          if (!detectedObjectsHeader) {
+            const detectResponse = await fetch(`${API_BASE}/api/vision/detect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                object_detection_enabled: true,
+                defect_detection_enabled: false,
+                object_method: objectMethod,
+                object_params: objectParams
+              })
+            });
+
+            if (detectResponse.ok) {
+              const fallbackResults = await detectResponse.json();
+              analyzeResults.object_count = fallbackResults.object_count || 0;
+              analyzeResults.objects = fallbackResults.objects || [];
+              analyzeResults.debug = fallbackResults.debug || {};
+              console.log('🔍 Detection Results (fallback /detect):', fallbackResults);
+            } else {
+              const fallbackErrorText = await detectResponse.text().catch(() => 'Unknown error');
+              console.warn('Fallback /detect failed:', detectResponse.status, fallbackErrorText);
+            }
+          }
+
+          console.log('🔍 Detection Results (single-frame):', analyzeResults);
+          displayResults(analyzeResults);
         } else {
-          const errorText = await detectResponse.text();
-          console.error('🔍 Detection Error:', detectResponse.status, errorText);
+          const errorText = await analyzeResponse.text().catch(() => 'Unknown error');
+          console.error('🔍 Analyze Error:', analyzeResponse.status, errorText);
+          alert('Quick test failed: ' + errorText);
         }
       } catch (error) {
         console.error('Error detecting objects:', error);
@@ -732,8 +790,8 @@
 
     // Crop Drawing Variables
     let isDrawingCropArea = false;
-    let cropDrawStartX = 0;
-    let cropDrawStartY = 0;
+    let cropDrawStartX = null;
+    let cropDrawStartY = null;
     let cropDrawCurrentX = 0;
     let cropDrawCurrentY = 0;
     let currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
@@ -797,7 +855,7 @@
     }
 
     function onCropDrawMove(event) {
-      if (cropDrawStartX === 0 && cropDrawStartY === 0) return;
+      if (cropDrawStartX === null || cropDrawStartY === null) return;
       
       const rect = event.target.getBoundingClientRect();
       cropDrawCurrentX = event.clientX - rect.left;
@@ -807,7 +865,7 @@
     }
 
     function onCropDrawEnd(event) {
-      if (cropDrawStartX === 0 && cropDrawStartY === 0) return;
+      if (cropDrawStartX === null || cropDrawStartY === null) return;
       
       const rect = event.target.getBoundingClientRect();
       cropDrawCurrentX = event.clientX - rect.left;
@@ -892,8 +950,8 @@
       const instructions = document.getElementById('cropDrawInstructions');
       
       isDrawingCropArea = false;
-      cropDrawStartX = 0;
-      cropDrawStartY = 0;
+      cropDrawStartX = null;
+      cropDrawStartY = null;
       cropDrawCurrentX = 0;
       cropDrawCurrentY = 0;
       
@@ -957,8 +1015,8 @@
 
     // Detection ROI (expected cube position) drawing
     let isDrawingRoi = false;
-    let roiStartX = 0;
-    let roiStartY = 0;
+    let roiStartX = null;
+    let roiStartY = null;
     let roiCurrentX = 0;
     let roiCurrentY = 0;
     let currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
@@ -1019,7 +1077,7 @@
     }
 
     function onRoiDrawMove(event) {
-      if (roiStartX === 0 && roiStartY === 0) return;
+      if (roiStartX === null || roiStartY === null) return;
 
       const rect = event.target.getBoundingClientRect();
       roiCurrentX = event.clientX - rect.left;
@@ -1029,7 +1087,7 @@
     }
 
     function onRoiDrawEnd(event) {
-      if (roiStartX === 0 && roiStartY === 0) return;
+      if (roiStartX === null || roiStartY === null) return;
 
       const rect = event.target.getBoundingClientRect();
       roiCurrentX = event.clientX - rect.left;
@@ -1102,8 +1160,8 @@
       const instructions = document.getElementById('roiDrawInstructions');
 
       isDrawingRoi = false;
-      roiStartX = 0;
-      roiStartY = 0;
+      roiStartX = null;
+      roiStartY = null;
       roiCurrentX = 0;
       roiCurrentY = 0;
 
@@ -1200,13 +1258,20 @@
     function toggleSettingsPanel() {
       const body = document.getElementById('settingsBody');
       const btn = document.getElementById('settingsToggleBtn');
+      const text = document.getElementById('settingsToggleText');
+      const icon = document.getElementById('settingsToggleIcon');
       const isHidden = body.style.display === 'none' || body.style.display === '';
+
       if (isHidden) {
         body.style.display = 'block';
-        btn.textContent = 'Hide';
+        if (text) text.textContent = 'Collapse';
+        if (icon) icon.textContent = 'expand_less';
+        if (btn) btn.setAttribute('aria-expanded', 'true');
       } else {
         body.style.display = 'none';
-        btn.textContent = 'Show';
+        if (text) text.textContent = 'Expand';
+        if (icon) icon.textContent = 'expand_more';
+        if (btn) btn.setAttribute('aria-expanded', 'false');
       }
     }
 
@@ -1255,8 +1320,8 @@
 
     // Cube Size Drawing Variables
     let isDrawingCubeSize = false;
-    let cubeDrawStartX = 0;
-    let cubeDrawStartY = 0;
+    let cubeDrawStartX = null;
+    let cubeDrawStartY = null;
     let cubeDrawCurrentX = 0;
     let cubeDrawCurrentY = 0;
 
@@ -1301,6 +1366,10 @@
       const instructions = document.getElementById('drawInstructions');
       
       isDrawingCubeSize = false;
+      cubeDrawStartX = null;
+      cubeDrawStartY = null;
+      cubeDrawCurrentX = 0;
+      cubeDrawCurrentY = 0;
       sizeOverlay.style.display = 'none';
       instructions.style.display = 'none';
       drawBtn.style.display = 'block';
@@ -1326,7 +1395,7 @@
     }
 
     function onCubeDrawMove(event) {
-      if (cubeDrawStartX === 0 && cubeDrawStartY === 0) return;
+      if (cubeDrawStartX === null || cubeDrawStartY === null) return;
       
       const rect = event.target.getBoundingClientRect();
       cubeDrawCurrentX = event.clientX - rect.left;
@@ -1337,7 +1406,7 @@
     }
 
     function onCubeDrawEnd(event) {
-      if (cubeDrawStartX === 0 && cubeDrawStartY === 0) return;
+      if (cubeDrawStartX === null || cubeDrawStartY === null) return;
       
       const rect = event.target.getBoundingClientRect();
       cubeDrawCurrentX = event.clientX - rect.left;
@@ -1383,8 +1452,8 @@
 
     function onCubeDrawCancel(event) {
       // Reset drawing state if mouse leaves canvas
-      cubeDrawStartX = 0;
-      cubeDrawStartY = 0;
+      cubeDrawStartX = null;
+      cubeDrawStartY = null;
       cubeDrawCurrentX = 0;
       cubeDrawCurrentY = 0;
       
