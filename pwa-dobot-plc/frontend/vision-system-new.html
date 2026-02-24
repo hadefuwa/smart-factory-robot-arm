@@ -810,19 +810,19 @@
       // Get actual image rendering info
       const renderInfo = getImageRenderInfo(cameraFrame);
       
-      // Set canvas to match container size
-      overlay.width = renderInfo.displayWidth;
-      overlay.height = renderInfo.displayHeight;
-      overlay.style.width = renderInfo.displayWidth + 'px';
-      overlay.style.height = renderInfo.displayHeight + 'px';
+      // Set canvas to match actual rendered image size
+      overlay.width = renderInfo.renderWidth;
+      overlay.height = renderInfo.renderHeight;
+      overlay.style.width = renderInfo.renderWidth + 'px';
+      overlay.style.height = renderInfo.renderHeight + 'px';
       overlay.style.display = 'block';
       
       const ctx = overlay.getContext('2d');
       ctx.clearRect(0, 0, overlay.width, overlay.height);
       
-      // Calculate crop rectangle in pixels (relative to actual image)
-      const cropX = renderInfo.offsetX + (x / 100) * renderInfo.renderWidth;
-      const cropY = renderInfo.offsetY + (y / 100) * renderInfo.renderHeight;
+      // Calculate crop rectangle in pixels (no offset needed)
+      const cropX = (x / 100) * renderInfo.renderWidth;
+      const cropY = (y / 100) * renderInfo.renderHeight;
       const cropWidth = (width / 100) * renderInfo.renderWidth;
       const cropHeight = (height / 100) * renderInfo.renderHeight;
       
@@ -942,25 +942,27 @@
     function getImageRenderInfo(imgElement) {
       const imgWidth = imgElement.naturalWidth;
       const imgHeight = imgElement.naturalHeight;
-      const displayWidth = imgElement.offsetWidth;
-      const displayHeight = imgElement.offsetHeight;
+      const displayWidth = imgElement.width || imgElement.offsetWidth;
+      const displayHeight = imgElement.height || imgElement.offsetHeight;
       
+      // Since image has width: 100%, it fills the container width
+      // and height is calculated automatically to maintain aspect ratio
       const imgAspect = imgWidth / imgHeight;
-      const displayAspect = displayWidth / displayHeight;
       
-      let renderWidth, renderHeight, offsetX, offsetY;
+      // The actual rendered size when width: 100% is set
+      const renderWidth = displayWidth;
+      const renderHeight = displayWidth / imgAspect;
       
-      if (imgAspect > displayAspect) {
-        renderWidth = displayWidth;
-        renderHeight = displayWidth / imgAspect;
-        offsetX = 0;
-        offsetY = (displayHeight - renderHeight) / 2;
-      } else {
-        renderHeight = displayHeight;
-        renderWidth = displayHeight * imgAspect;
-        offsetX = (displayWidth - renderWidth) / 2;
-        offsetY = 0;
-      }
+      // No offset needed since image fills width and height is auto
+      const offsetX = 0;
+      const offsetY = 0;
+      
+      console.log('Image render info:', {
+        natural: imgWidth + 'x' + imgHeight,
+        display: displayWidth + 'x' + displayHeight,
+        render: renderWidth + 'x' + renderHeight,
+        offset: offsetX + ',' + offsetY
+      });
       
       return {
         renderWidth: renderWidth,
@@ -968,7 +970,7 @@
         offsetX: offsetX,
         offsetY: offsetY,
         displayWidth: displayWidth,
-        displayHeight: displayHeight
+        displayHeight: renderHeight
       };
     }
 
@@ -992,11 +994,14 @@
         return;
       }
       
-      // Setup overlay canvas
-      sizeOverlay.width = cameraFrame.offsetWidth;
-      sizeOverlay.height = cameraFrame.offsetHeight;
-      sizeOverlay.style.width = cameraFrame.offsetWidth + 'px';
-      sizeOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      // Get actual image rendering info
+      const renderInfo = getImageRenderInfo(cameraFrame);
+      
+      // Setup overlay canvas to match actual image size
+      sizeOverlay.width = renderInfo.renderWidth;
+      sizeOverlay.height = renderInfo.renderHeight;
+      sizeOverlay.style.width = renderInfo.renderWidth + 'px';
+      sizeOverlay.style.height = renderInfo.renderHeight + 'px';
       sizeOverlay.style.display = 'block';
       
       // Show instructions and buttons
@@ -1062,18 +1067,9 @@
       cubeDrawCurrentX = event.clientX - rect.left;
       cubeDrawCurrentY = event.clientY - rect.top;
       
-      const cameraFrame = document.getElementById('cameraFrame');
-      const renderInfo = getImageRenderInfo(cameraFrame);
-      
-      // Adjust coordinates to be relative to actual image (not container)
-      const adjustedStartX = cubeDrawStartX - renderInfo.offsetX;
-      const adjustedStartY = cubeDrawStartY - renderInfo.offsetY;
-      const adjustedCurrentX = cubeDrawCurrentX - renderInfo.offsetX;
-      const adjustedCurrentY = cubeDrawCurrentY - renderInfo.offsetY;
-      
-      // Calculate the size (in actual image pixels)
-      const width = Math.abs(adjustedCurrentX - adjustedStartX);
-      const height = Math.abs(adjustedCurrentY - adjustedStartY);
+      // Calculate the size directly (canvas now matches image size)
+      const width = Math.abs(cubeDrawCurrentX - cubeDrawStartX);
+      const height = Math.abs(cubeDrawCurrentY - cubeDrawStartY);
       
       // Make it a square (use the larger dimension)
       const size = Math.max(width, height);

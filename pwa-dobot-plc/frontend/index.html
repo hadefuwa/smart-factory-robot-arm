@@ -7,948 +7,286 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>Smart Factory - Control Dashboard</title>
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
-  
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
+
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  
-  <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/demo/demo.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
-  
-  <!-- PWA Manifest -->
+
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#030c1d">
+  <meta name="theme-color" content="#050c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <!-- All styles consolidated in professional-theme.css -->
 </head>
-
-<body class="dark-edition dashboard-page">
-  <div class="wrapper ">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2">
+  <div class="sf-shell">
+    <aside class="sf-sidebar" id="sfSidebar">
+      <div class="sf-sidebar-brand">
+        <button class="sf-icon-btn sf-mobile-only" id="sfSidebarClose" type="button" aria-label="Close navigation">
+          <i class="material-icons">close</i>
+        </button>
+        <a href="/index.html" class="sf-brand-link">
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item active">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
 
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/digital-twin.html">
-              <i class="material-icons">view_in_ar</i>
-              <p>Digital Twin</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top ">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">Control Dashboard</a>
-          </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-          </button>
-          <div class="collapse navbar-collapse justify-content-end">
-            <ul class="navbar-nav">
-              <li class="nav-item">
-                <a class="nav-link" href="javascript:;">
-                  <i class="material-icons">notifications</i>
-                  <span class="notification">5</span>
-                  <p class="d-lg-none d-md-block">Notifications</p>
-                </a>
-              </li>
-              <li class="nav-item dropdown">
-                <a class="nav-link" href="javascript:;" id="navbarDropdownProfile" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  <i class="material-icons">person</i>
-                  <p class="d-lg-none d-md-block">Account</p>
-                </a>
-                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdownProfile">
-                  <a class="dropdown-item" href="#">Profile</a>
-                  <a class="dropdown-item" href="#">Settings</a>
-                  <div class="dropdown-divider"></div>
-                  <a class="dropdown-item" href="#">Log out</a>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
+      <nav class="sf-nav" aria-label="Main navigation">
+        <a class="sf-nav-item active" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a>
+        <a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a>
+        <a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">visibility</i><span>Vision System</span></a>
+        <a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a>
+        <a class="sf-nav-item" href="/digital-twin.html"><i class="material-icons">view_in_ar</i><span>Digital Twin</span></a>
+        <a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a>
+        <a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a>
       </nav>
-      <!-- End Navbar -->
 
-      <div class="content">
-        <div class="container-fluid">
-          <section class="dashboard-hero">
-            <div class="hero-copy">
-              <p class="hero-kicker">Factory Operations</p>
-              <h1 class="hero-title">Production Command Center</h1>
-              <p class="hero-subtitle">Live robot, PLC, vision, and line-health telemetry in one operational surface.</p>
-            </div>
-            <div class="hero-meta">
-              <div class="hero-chip">
-                <span>Backend</span>
-                <strong id="backend-health">CHECKING</strong>
-              </div>
-              <div class="hero-chip">
-                <span>Last Refresh</span>
-                <strong id="last-refresh">--:--:--</strong>
-              </div>
-            </div>
-          </section>
-
-          <!-- System Stats Cards -->
-          <div class="row">
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats">
-                <div class="card-header card-header-purple card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">precision_manufacturing</i>
-                  </div>
-                  <p class="card-category">Robot Status</p>
-                  <h3 class="card-title" id="robot-status">
-                    <span class="text-success">READY</span>
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons text-success">check_circle</i>
-                    <span id="robot-position">Position: (0, 0, 0)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats">
-                <div class="card-header card-header-purple card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">visibility</i>
-                  </div>
-                  <p class="card-category">Vision System</p>
-                  <h3 class="card-title" id="vision-status">
-                    <span class="text-success">ACTIVE</span>
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons">update</i>
-                    <span id="vision-fps">30 FPS</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats">
-                <div class="card-header card-header-purple card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">info_outline</i>
-                  </div>
-                  <p class="card-category">PLC Connection</p>
-                  <h3 class="card-title" id="plc-status">
-                    <span id="plc-state">CHECKING...</span>
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons">router</i>
-                    <span id="plc-ip">192.168.0.1</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats">
-                <div class="card-header card-header-rose card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">nfc</i>
-                  </div>
-                  <p class="card-category">RFID Scans</p>
-                  <h3 class="card-title" id="rfid-count">
-                    0
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons">update</i>
-                    Last scan: <span id="rfid-last">Never</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Factory KPIs -->
-          <div class="row">
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-info card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">inventory</i>
-                  </div>
-                  <p class="card-category">Production Counter</p>
-                  <h3 class="card-title kpi-value" id="production-counter">0</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status status-normal">Items Processed</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-success card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">conveyor_belt</i>
-                  </div>
-                  <p class="card-category">Conveyor System</p>
-                  <h3 class="card-title" id="conveyor-status">UNKNOWN</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status" id="conveyor-status-badge">Unknown</span>
-                    <div><small id="conveyor-subtitle">Status: Checking...</small></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-warning card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">precision_manufacturing</i>
-                  </div>
-                  <p class="card-category">Gantry Robot</p>
-                  <h3 class="card-title" id="gantry-status">UNKNOWN</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status" id="gantry-status-badge">Unknown</span>
-                    <div><small id="gantry-subtitle">Status: Checking...</small></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-primary card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">schedule</i>
-                  </div>
-                  <p class="card-category">System Uptime</p>
-                  <h3 class="card-title kpi-value" id="uptime">0%</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status status-normal" id="uptime-duration">0h 0m</span>
-                    <div class="progress-bar">
-                      <div class="progress-fill" id="uptime-bar" style="width: 0%"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-danger card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">error_outline</i>
-                  </div>
-                  <p class="card-category">Faults Detected</p>
-                  <h3 class="card-title kpi-value" id="total-faults">0</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status status-warning">Since Start</span>
-                    <div><small id="fault-subtitle">Monitoring...</small></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-rose card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">warning</i>
-                  </div>
-                  <p class="card-category">Active Faults</p>
-                  <h3 class="card-title kpi-value" id="active-faults">0</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status" id="active-faults-badge">None</span>
-                    <div class="fault-list" id="fault-list">
-                      <div class="no-faults">No active faults</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-success card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">speed</i>
-                  </div>
-                  <p class="card-category">Efficiency Rate</p>
-                  <h3 class="card-title kpi-value" id="efficiency">0%</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status status-normal">Target: 95%</span>
-                    <div class="progress-bar">
-                      <div class="progress-fill" id="efficiency-bar" style="width: 0%"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-3 col-md-6 col-sm-6">
-              <div class="card card-stats kpi-card">
-                <div class="card-header card-header-info card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">verified</i>
-                  </div>
-                  <p class="card-category">Quality Control</p>
-                  <h3 class="card-title kpi-value" id="quality">0%</h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <span class="kpi-status status-normal">Pass Rate</span>
-                    <div><small id="quality-subtitle">Defects: 0 items</small></div>
-                    <div class="progress-bar">
-                      <div class="progress-fill" id="quality-bar" style="width: 0%"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Actions -->
-          <div class="row">
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-tabs card-header-purple">
-                  <div class="nav-tabs-navigation">
-                    <div class="nav-tabs-wrapper">
-                      <span class="nav-tabs-title">Quick Actions:</span>
-                      <ul class="nav nav-tabs" data-tabs="tabs">
-                        <li class="nav-item">
-                          <a class="nav-link active" href="#robot" data-toggle="tab">
-                            <i class="material-icons">precision_manufacturing</i> Robot
-                            <div class="ripple-container"></div>
-                          </a>
-                        </li>
-                        <li class="nav-item">
-                          <a class="nav-link" href="#vision" data-toggle="tab">
-                            <i class="material-icons">camera_alt</i> Vision
-                            <div class="ripple-container"></div>
-                          </a>
-                        </li>
-                        <li class="nav-item">
-                          <a class="nav-link" href="#plc" data-toggle="tab">
-                            <i class="material-icons">settings_input_component</i> PLC
-                            <div class="ripple-container"></div>
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <div class="tab-content">
-                    <div class="tab-pane active" id="robot">
-                      <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-primary" onclick="homeRobot()">
-                          <i class="material-icons">home</i> Home
-                        </button>
-                        <button class="btn btn-success" onclick="pickPlace()">
-                          <i class="material-icons">vertical_align_center</i> Pick & Place
-                        </button>
-                        <button class="btn btn-danger" onclick="emergencyStop()">
-                          <i class="material-icons">stop</i> E-Stop
-                        </button>
-                        <button class="btn btn-info" onclick="window.location.href='/robot-arm.html'">
-                          <i class="material-icons">open_in_new</i> Full Control
-                        </button>
-                      </div>
-                    </div>
-                    <div class="tab-pane" id="vision">
-                      <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-primary" onclick="startVision()">
-                          <i class="material-icons">play_arrow</i> Start Camera
-                        </button>
-                        <button class="btn btn-warning" onclick="captureImage()">
-                          <i class="material-icons">camera</i> Capture
-                        </button>
-                        <button class="btn btn-success" onclick="runInspection()">
-                          <i class="material-icons">search</i> Inspect
-                        </button>
-                        <button class="btn btn-info" onclick="window.location.href='/vision-system.html'">
-                          <i class="material-icons">open_in_new</i> Full Interface
-                        </button>
-                      </div>
-                    </div>
-                    <div class="tab-pane" id="plc">
-                      <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-success" onclick="connectPLC()">
-                          <i class="material-icons">link</i> Connect
-                        </button>
-                        <button class="btn btn-primary" onclick="readPLC()">
-                          <i class="material-icons">refresh</i> Read Status
-                        </button>
-                        <button class="btn btn-warning" onclick="writePLC()">
-                          <i class="material-icons">edit</i> Write Data
-                        </button>
-                        <button class="btn btn-info" onclick="window.location.href='/plc-diagnostics.html'">
-                          <i class="material-icons">open_in_new</i> Diagnostics
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">System Alerts</h4>
-                  <p class="card-category">Recent notifications</p>
-                </div>
-                <div class="card-body table-responsive">
-                  <table class="table table-hover">
-                    <tbody id="alerts-table">
-                      <tr>
-                        <td>
-                          <div class="flag">
-                            <i class="material-icons text-success">check_circle</i>
-                          </div>
-                        </td>
-                        <td>System initialized successfully</td>
-                        <td class="text-right">Just now</td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div class="flag">
-                            <i class="material-icons text-info">info</i>
-                          </div>
-                        </td>
-                        <td>Robot ready for operations</td>
-                        <td class="text-right">1 min ago</td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div class="flag">
-                            <i class="material-icons text-warning">warning</i>
-                          </div>
-                        </td>
-                        <td>PLC connection check required</td>
-                        <td class="text-right">5 min ago</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div class="sf-sidebar-footer">
+        <div class="sf-sidebar-chip">
+          <span>Line Mode</span>
+          <strong data-bind="meta.mode">AUTONOMOUS</strong>
         </div>
       </div>
+    </aside>
 
-      <footer class="footer">
-        <div class="container-fluid">
-          <nav class="float-left">
-            <ul>
-              <li>
-                <a href="/">Smart Factory</a>
-              </li>
-              <li>
-                <a href="/about">About</a>
-              </li>
-            </ul>
-          </nav>
-          <div class="copyright float-right">
-            &copy;
-            <script>document.write(new Date().getFullYear())</script>, Smart Factory Control System
+    <div class="sf-backdrop" id="sfBackdrop"></div>
+
+    <div class="sf-main">
+      <header class="sf-topbar">
+        <div class="sf-topbar-left">
+          <button class="sf-icon-btn" id="sfMenuToggle" type="button" aria-label="Open navigation">
+            <i class="material-icons">menu</i>
+          </button>
+          <button class="sf-icon-btn sf-desktop-only" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+            <i class="material-icons">left_panel_open</i>
+          </button>
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Operations Cockpit</p>
+            <h1 class="sf-topbar-title">Production Command Center</h1>
           </div>
         </div>
-      </footer>
+        <div class="sf-topbar-right">
+          <button class="sf-btn sf-btn-ghost" type="button" data-action="refreshNow">
+            <i class="material-icons">refresh</i>
+            Refresh
+          </button>
+          <button class="sf-btn sf-btn-danger" type="button" data-action="emergencyStop">
+            <i class="material-icons">stop_circle</i>
+            E-Stop
+          </button>
+        </div>
+      </header>
+
+      <main class="sf-content">
+        <div class="sf-warning" id="sfSoftWarning" role="status" aria-live="polite"></div>
+
+        <section class="sf-hero sf-stage sf-stage-1">
+          <div class="sf-hero-copy">
+            <p class="sf-eyebrow">Live Industrial Telemetry</p>
+            <h2>Command, monitor, and diagnose the line in real time.</h2>
+            <p>
+              This dashboard aggregates robot, PLC, vision, and quality systems into a single cinematic command surface.
+            </p>
+            <div class="sf-hero-actions">
+              <button class="sf-btn sf-btn-primary" type="button" data-action="pickPlace">
+                <i class="material-icons">play_arrow</i>
+                Start Pick & Place
+              </button>
+              <button class="sf-btn sf-btn-ghost" type="button" data-action="homeRobot">
+                <i class="material-icons">home</i>
+                Home Robot
+              </button>
+            </div>
+          </div>
+          <div class="sf-hero-chips">
+            <div class="sf-chip">
+              <span>System Mode</span>
+              <strong data-bind="meta.mode">AUTONOMOUS</strong>
+            </div>
+            <div class="sf-chip" id="sfBackendChip">
+              <span>Backend Health</span>
+              <strong data-bind="meta.backendHealth">CHECKING</strong>
+            </div>
+            <div class="sf-chip">
+              <span>Last Refresh</span>
+              <strong data-bind="meta.lastRefresh">--:--:--</strong>
+            </div>
+            <button class="sf-btn sf-btn-danger sf-hero-estop" type="button" data-action="emergencyStop">
+              <i class="material-icons">warning</i>
+              Emergency Stop
+            </button>
+          </div>
+        </section>
+
+        <section class="sf-metrics sf-stage sf-stage-2" aria-label="Live metrics">
+          <article class="sf-kpi-tile" data-state="online">
+            <header><span>Robot Status</span><i class="material-icons">precision_manufacturing</i></header>
+            <div class="sf-kpi-value" data-bind="robot.status">READY</div>
+            <p class="sf-kpi-sub" data-bind="robot.positionText">Position: (0, 0, 0)</p>
+            <span class="sf-status-dot" data-bind="robot.connectedState"></span>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="online">
+            <header><span>Vision System</span><i class="material-icons">visibility</i></header>
+            <div class="sf-kpi-value" data-bind="vision.status">ACTIVE</div>
+            <p class="sf-kpi-sub"><span data-bind="vision.fps">0</span> FPS live throughput</p>
+            <span class="sf-status-dot" data-bind="vision.activeState"></span>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="pending">
+            <header><span>PLC Connection</span><i class="material-icons">router</i></header>
+            <div class="sf-kpi-value" data-bind="plc.status">CHECKING</div>
+            <p class="sf-kpi-sub" data-bind="plc.ip">192.168.0.1</p>
+            <span class="sf-status-dot" data-bind="plc.connectedState"></span>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="neutral">
+            <header><span>RFID Scans</span><i class="material-icons">nfc</i></header>
+            <div class="sf-kpi-value" data-bind="production.rfidCount">0</div>
+            <p class="sf-kpi-sub">Last scan: <span data-bind="production.rfidLast">Never</span></p>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="online">
+            <header><span>Production Counter</span><i class="material-icons">inventory_2</i></header>
+            <div class="sf-kpi-value" data-bind="production.counter">0</div>
+            <p class="sf-kpi-sub">Items processed</p>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="pending">
+            <header><span>Conveyor System</span><i class="material-icons">conveyor_belt</i></header>
+            <div class="sf-kpi-value" data-bind="line.conveyorStatus">UNKNOWN</div>
+            <p class="sf-kpi-sub" data-bind="line.conveyorLabel">Status: checking</p>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="pending">
+            <header><span>Gantry Robot</span><i class="material-icons">engineering</i></header>
+            <div class="sf-kpi-value" data-bind="line.gantryStatus">UNKNOWN</div>
+            <p class="sf-kpi-sub" data-bind="line.gantryLabel">Status: checking</p>
+          </article>
+
+          <article class="sf-kpi-tile" data-state="online">
+            <header><span>System Uptime</span><i class="material-icons">schedule</i></header>
+            <div class="sf-kpi-value"><span data-bind="uptime.percent">0.0</span>%</div>
+            <p class="sf-kpi-sub" data-bind="uptime.duration">0h 0m</p>
+            <div class="sf-progress-track"><div class="sf-progress-fill" id="uptimeFill"></div></div>
+          </article>
+        </section>
+
+        <section class="sf-row sf-stage sf-stage-3">
+          <article class="sf-panel sf-actions-panel">
+            <header class="sf-panel-head">
+              <h3>Quick Actions</h3>
+              <p>Execute operational controls without leaving the dashboard.</p>
+            </header>
+
+            <div class="sf-segmented" role="tablist" aria-label="Action groups">
+              <button class="active" type="button" role="tab" aria-selected="true" data-segment-target="segment-robot">Robot</button>
+              <button type="button" role="tab" aria-selected="false" data-segment-target="segment-vision">Vision</button>
+              <button type="button" role="tab" aria-selected="false" data-segment-target="segment-plc">PLC</button>
+            </div>
+
+            <div class="sf-action-group active" id="segment-robot" role="tabpanel">
+              <button class="sf-action-btn" type="button" data-action="homeRobot"><i class="material-icons">home</i><span>Home</span></button>
+              <button class="sf-action-btn" type="button" data-action="pickPlace"><i class="material-icons">vertical_align_center</i><span>Pick & Place</span></button>
+              <button class="sf-action-btn danger" type="button" data-action="emergencyStop"><i class="material-icons">stop</i><span>E-Stop</span></button>
+              <button class="sf-action-btn" type="button" data-action="openRobot"><i class="material-icons">open_in_new</i><span>Full Control</span></button>
+            </div>
+
+            <div class="sf-action-group" id="segment-vision" role="tabpanel">
+              <button class="sf-action-btn" type="button" data-action="startVision"><i class="material-icons">videocam</i><span>Start Camera</span></button>
+              <button class="sf-action-btn" type="button" data-action="captureImage"><i class="material-icons">camera</i><span>Capture</span></button>
+              <button class="sf-action-btn" type="button" data-action="runInspection"><i class="material-icons">search</i><span>Inspect</span></button>
+              <button class="sf-action-btn" type="button" data-action="openVision"><i class="material-icons">open_in_new</i><span>Full Interface</span></button>
+            </div>
+
+            <div class="sf-action-group" id="segment-plc" role="tabpanel">
+              <button class="sf-action-btn" type="button" data-action="connectPLC"><i class="material-icons">link</i><span>Connect</span></button>
+              <button class="sf-action-btn" type="button" data-action="readPLC"><i class="material-icons">refresh</i><span>Read Status</span></button>
+              <button class="sf-action-btn" type="button" data-action="writePLC"><i class="material-icons">edit</i><span>Write Data</span></button>
+              <button class="sf-action-btn" type="button" data-action="openPLC"><i class="material-icons">open_in_new</i><span>Diagnostics</span></button>
+            </div>
+          </article>
+
+          <article class="sf-panel sf-alerts-panel">
+            <header class="sf-panel-head">
+              <h3>System Alerts</h3>
+              <p>Recent events and state transitions.</p>
+            </header>
+
+            <div class="sf-alerts-list" id="alertsTimeline" aria-live="polite">
+              <div class="sf-alert-item success">
+                <i class="material-icons">check_circle</i>
+                <div>
+                  <strong>System initialized successfully</strong>
+                  <small>Just now</small>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="sf-row sf-quality-row sf-stage sf-stage-3">
+          <article class="sf-panel">
+            <header class="sf-panel-head">
+              <h3>Fault Overview</h3>
+              <p>Real-time quality anomaly monitoring.</p>
+            </header>
+
+            <div class="sf-fault-grid">
+              <div class="sf-mini-stat">
+                <span>Total Faults</span>
+                <strong data-bind="faults.total">0</strong>
+              </div>
+              <div class="sf-mini-stat">
+                <span>Active Faults</span>
+                <strong data-bind="faults.active">0</strong>
+              </div>
+            </div>
+
+            <p class="sf-kpi-sub" data-bind="faults.summary">Monitoring...</p>
+            <div class="sf-fault-list" id="faultList"></div>
+          </article>
+
+          <article class="sf-panel">
+            <header class="sf-panel-head">
+              <h3>Quality Performance</h3>
+              <p>Line efficiency and pass-rate trend.</p>
+            </header>
+
+            <div class="sf-metric-stack">
+              <div class="sf-progress-block">
+                <div class="sf-progress-head"><span>Efficiency</span><strong><span data-bind="efficiency.percent">0.0</span>%</strong></div>
+                <div class="sf-progress-track"><div class="sf-progress-fill" id="efficiencyFill"></div></div>
+              </div>
+
+              <div class="sf-progress-block">
+                <div class="sf-progress-head"><span>Quality Pass Rate</span><strong><span data-bind="quality.percent">0.0</span>%</strong></div>
+                <div class="sf-progress-track"><div class="sf-progress-fill" id="qualityFill"></div></div>
+              </div>
+            </div>
+
+            <p class="sf-kpi-sub" data-bind="quality.subtitle">Defects: 0 items</p>
+          </article>
+        </section>
+
+        <footer class="sf-footer-meta">
+          <span>&copy; <script>document.write(new Date().getFullYear())</script> Smart Factory Control System</span>
+          <a href="/">Smart Factory Home</a>
+        </footer>
+      </main>
     </div>
   </div>
 
-  <!-- Loading Overlay -->
-  <div class="loading-overlay" id="loading-overlay">
+  <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
     <div class="spinner"></div>
   </div>
 
-  <!--   Core JS Files   -->
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
   <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
   <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
+  <script src="/assets/js/plugins/bootstrap-notify.js"></script>
   <script src="/assets/js/material-dashboard.js?v=2.1.0" type="text/javascript"></script>
-
-  <!-- Custom JavaScript -->
-  <script>
-    // API Configuration
-    const API_BASE = window.location.origin;
-
-    // Status update interval
-    let statusInterval;
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Smart Factory Dashboard initializing...');
-      initializeDashboard();
-      startStatusUpdates();
-      
-      // Service Worker for PWA
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(err => {
-          console.log('ServiceWorker registration failed:', err);
-        });
-      }
-    });
-
-    function initializeDashboard() {
-      updateRobotStatus();
-      updatePLCStatus();
-      updateVisionStatus();
-      updateKPIs();
-      updateLastRefresh();
-    }
-
-    function startStatusUpdates() {
-      // Update every 2 seconds
-      statusInterval = setInterval(() => {
-        updateRobotStatus();
-        updatePLCStatus();
-        updateVisionStatus();
-        updateKPIs();
-        updateLastRefresh();
-      }, 2000);
-    }
-
-    // Robot Control Functions
-    async function homeRobot() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/robot/home`, {
-          method: 'POST'
-        });
-        const data = await response.json();
-        showNotification('Robot homing...', 'info');
-      } catch (error) {
-        showNotification('Failed to home robot', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function pickPlace() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/robot/pick-place`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pickX: 200,
-            pickY: 0,
-            pickZ: 50,
-            placeX: 200,
-            placeY: 100,
-            placeZ: 50
-          })
-        });
-        const data = await response.json();
-        showNotification('Pick and place operation started', 'success');
-      } catch (error) {
-        showNotification('Failed to execute pick and place', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function emergencyStop() {
-      try {
-        const response = await fetch(`${API_BASE}/api/robot/emergency-stop`, {
-          method: 'POST'
-        });
-        showNotification('EMERGENCY STOP ACTIVATED', 'danger');
-      } catch (error) {
-        console.error('E-Stop failed:', error);
-      }
-    }
-
-    // Vision System Functions
-    async function startVision() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/start`, {
-          method: 'POST'
-        });
-        showNotification('Vision system started', 'success');
-      } catch (error) {
-        showNotification('Failed to start vision system', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function captureImage() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/capture`);
-        const data = await response.json();
-        showNotification('Image captured', 'success');
-      } catch (error) {
-        showNotification('Failed to capture image', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function runInspection() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/inspect`);
-        const data = await response.json();
-        showNotification(`Inspection complete: ${data.result}`, 'info');
-      } catch (error) {
-        showNotification('Inspection failed', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    // PLC Functions
-    async function connectPLC() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/plc/connect`, {
-          method: 'POST'
-        });
-        const data = await response.json();
-        if (data.connected) {
-          showNotification('PLC connected', 'success');
-        }
-      } catch (error) {
-        showNotification('PLC connection failed', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function readPLC() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/plc/read`);
-        const data = await response.json();
-        showNotification('PLC data read successfully', 'success');
-      } catch (error) {
-        showNotification('Failed to read PLC data', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function writePLC() {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/api/plc/write`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address: 'DB1.DBW0', value: 100 })
-        });
-        showNotification('Data written to PLC', 'success');
-      } catch (error) {
-        showNotification('Failed to write to PLC', 'danger');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    // Status Update Functions
-    async function updateRobotStatus() {
-      try {
-        const response = await fetch(`${API_BASE}/api/robot/status`);
-        const data = await response.json();
-        
-        document.getElementById('robot-status').innerHTML = 
-          `<span class="text-${data.connected ? 'success' : 'danger'}">${data.status}</span>`;
-        
-        if (data.position) {
-          document.getElementById('robot-position').textContent = 
-            `Position: (${data.position.x}, ${data.position.y}, ${data.position.z})`;
-        }
-      } catch (error) {
-        document.getElementById('robot-status').innerHTML = 
-          '<span class="text-danger">ERROR</span>';
-      }
-    }
-
-    async function updatePLCStatus() {
-      try {
-        const response = await fetch(`${API_BASE}/api/plc/status`);
-        const data = await response.json();
-        
-        document.getElementById('plc-state').textContent = 
-          data.connected ? 'CONNECTED' : 'DISCONNECTED';
-        document.getElementById('plc-state').className = 
-          data.connected ? 'text-success' : 'text-danger';
-      } catch (error) {
-        document.getElementById('plc-state').textContent = 'ERROR';
-        document.getElementById('plc-state').className = 'text-danger';
-      }
-    }
-
-    async function updateVisionStatus() {
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/status`);
-        const data = await response.json();
-        
-        document.getElementById('vision-status').innerHTML = 
-          `<span class="text-${data.active ? 'success' : 'warning'}">${data.status}</span>`;
-        
-        if (data.fps) {
-          document.getElementById('vision-fps').textContent = `${data.fps} FPS`;
-        }
-      } catch (error) {
-        document.getElementById('vision-status').innerHTML = 
-          '<span class="text-danger">ERROR</span>';
-      }
-    }
-
-    function updateKPIs() {
-      fetch('/api/smart-factory')
-        .then(response => response.json())
-        .then(data => {
-          if (!data.success) throw new Error(data.error);
-          const backendHealth = document.getElementById('backend-health');
-          backendHealth.textContent = 'ONLINE';
-          backendHealth.className = 'text-success';
-
-          document.getElementById('production-counter').textContent = (data.production_counter || 0).toLocaleString();
-
-          // Conveyor
-          document.getElementById('conveyor-status').textContent = data.conveyor.status || 'UNKNOWN';
-          const conveyorBadge = document.getElementById('conveyor-status-badge');
-          conveyorBadge.textContent = data.conveyor.running ? 'Active' : 'Inactive';
-          conveyorBadge.className = 'kpi-status ' + (data.conveyor.running ? 'status-running' : 'status-stopped');
-          document.getElementById('conveyor-subtitle').textContent = data.conveyor.running ? 'System Active' : 'System Stopped';
-
-          // Gantry
-          document.getElementById('gantry-status').textContent = data.gantry.status || 'UNKNOWN';
-          const gantryBadge = document.getElementById('gantry-status-badge');
-          if (data.gantry.running) {
-            gantryBadge.textContent = 'Active';
-            gantryBadge.className = 'kpi-status status-running';
-          } else if (data.gantry.connected) {
-            gantryBadge.textContent = 'Connected';
-            gantryBadge.className = 'kpi-status status-normal';
-          } else {
-            gantryBadge.textContent = 'Disconnected';
-            gantryBadge.className = 'kpi-status status-stopped';
-          }
-          document.getElementById('gantry-subtitle').textContent =
-            data.gantry.running ? 'Cycle Active' : (data.gantry.connected ? 'Standby' : 'Not Connected');
-
-          // Uptime
-          document.getElementById('uptime').textContent = (data.uptime.percent || 0).toFixed(1) + '%';
-          document.getElementById('uptime-duration').textContent = data.uptime.duration || '0h 0m';
-          document.getElementById('uptime-bar').style.width = (data.uptime.percent || 0).toFixed(1) + '%';
-
-          // Faults
-          const totalFaults = data.faults.detected || 0;
-          const activeFaults = data.faults.active || 0;
-          document.getElementById('total-faults').textContent = totalFaults;
-          document.getElementById('active-faults').textContent = activeFaults;
-          document.getElementById('fault-subtitle').textContent = totalFaults > 0 ? `Total defects: ${totalFaults}` : 'No defects detected';
-
-          const activeFaultsBadge = document.getElementById('active-faults-badge');
-          const faultList = document.getElementById('fault-list');
-          if (activeFaults > 0 || data.faults.fault_detected) {
-            activeFaultsBadge.textContent = 'Critical';
-            activeFaultsBadge.className = 'kpi-status status-stopped';
-            faultList.innerHTML = '<div class="fault-item"><div class="fault-indicator"></div><div class="fault-text">Defect detected in production</div></div>';
-          } else {
-            activeFaultsBadge.textContent = 'None';
-            activeFaultsBadge.className = 'kpi-status status-normal';
-            faultList.innerHTML = '<div class="no-faults">No active faults</div>';
-          }
-
-          // Efficiency & Quality
-          document.getElementById('efficiency').textContent = (data.efficiency || 0).toFixed(1) + '%';
-          document.getElementById('efficiency-bar').style.width = (data.efficiency || 0).toFixed(1) + '%';
-          document.getElementById('quality').textContent = (data.quality || 0).toFixed(1) + '%';
-          document.getElementById('quality-bar').style.width = (data.quality || 0).toFixed(1) + '%';
-          document.getElementById('quality-subtitle').textContent = `Defects: ${totalFaults} items`;
-        })
-        .catch(error => {
-          console.error('Error fetching smart factory data:', error);
-          const backendHealth = document.getElementById('backend-health');
-          backendHealth.textContent = 'DEGRADED';
-          backendHealth.className = 'text-warning';
-        });
-    }
-
-    function updateLastRefresh() {
-      const refreshEl = document.getElementById('last-refresh');
-      if (refreshEl) {
-        refreshEl.textContent = new Date().toLocaleTimeString();
-      }
-    }
-
-    // Utility Functions
-    function showLoading() {
-      document.getElementById('loading-overlay').classList.add('active');
-    }
-
-    function hideLoading() {
-      document.getElementById('loading-overlay').classList.remove('active');
-    }
-
-    function showNotification(message, type) {
-      $.notify({
-        icon: "notifications",
-        message: message
-      }, {
-        type: type,
-        timer: 3000,
-        placement: {
-          from: 'top',
-          align: 'right'
-        }
-      });
-    }
-
-    // Add alert to table
-    function addAlert(icon, iconClass, message) {
-      const table = document.getElementById('alerts-table');
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString();
-      
-      const row = table.insertRow(0);
-      row.innerHTML = `
-        <td>
-          <div class="flag">
-            <i class="material-icons ${iconClass}">${icon}</i>
-          </div>
-        </td>
-        <td>${message}</td>
-        <td class="text-right">${timeStr}</td>
-      `;
-      
-      // Keep only last 10 alerts
-      while (table.rows.length > 10) {
-        table.deleteRow(10);
-      }
-    }
-
-    // Cleanup on page unload
-    window.addEventListener('beforeunload', function() {
-      if (statusInterval) {
-        clearInterval(statusInterval);
-      }
-    });
-  </script>
-
-  <script>
-    // Animated Factory Sidebar Background
-    function initSidebarAnimation() {
-      const container = document.getElementById('sidebarAnimatedBg');
-      if (!container) return;
-
-      // Create floating particles
-      for (let i = 0; i < 15; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'factory-particle';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-        particle.style.animationDelay = Math.random() * 5 + 's';
-        container.appendChild(particle);
-      }
-
-      // Create circuit lines
-      for (let i = 0; i < 8; i++) {
-        const line = document.createElement('div');
-        line.className = 'circuit-line';
-        line.style.top = Math.random() * 100 + '%';
-        line.style.width = Math.random() * 150 + 100 + 'px';
-        line.style.animationDuration = Math.random() * 6 + 4 + 's';
-        line.style.animationDelay = Math.random() * 3 + 's';
-        container.appendChild(line);
-      }
-    }
-
-    // Initialize on page load
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
-    }
-  </script>
+  <script src="/assets/js/dashboard-v2.js"></script>
 </body>
 </html>

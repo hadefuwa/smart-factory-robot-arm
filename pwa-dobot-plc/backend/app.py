@@ -1940,7 +1940,7 @@ def generate_frames():
             break
         
         # Prefer analyzed frames when available (within 5 seconds), fall back to raw frames
-        frame_bytes = camera_service.get_frame_jpeg(quality=70, prefer_analyzed=True, analyzed_max_age=5.0)
+        frame_bytes = camera_service.get_frame_jpeg(quality=90, prefer_analyzed=True, analyzed_max_age=5.0)
         if frame_bytes is None:
             time.sleep(0.05)  # Reduced sleep time when no frame available
             continue
@@ -1984,7 +1984,7 @@ def camera_frame():
     """Single JPEG frame from camera - no Playwright, no extra deps. Use with live-view.html"""
     if camera_service is None:
         return Response(b'', status=503, mimetype='image/jpeg')
-    frame = camera_service.get_frame_jpeg(quality=70, use_cache=True, max_cache_age=0.5)
+    frame = camera_service.get_frame_jpeg(quality=90, use_cache=True, max_cache_age=0.5)
     if frame is None:
         return Response(b'', status=503, mimetype='image/jpeg')
     return Response(frame, mimetype='image/jpeg')
@@ -2133,7 +2133,7 @@ def camera_capture():
                 return jsonify({'error': 'Camera not opened'}), 503
         
         # Use cached frame if less than 0.5 seconds old (optimization for 1-second snapshot updates)
-        frame_bytes = camera_service.get_frame_jpeg(quality=85, use_cache=True, max_cache_age=0.5)
+        frame_bytes = camera_service.get_frame_jpeg(quality=95, use_cache=True, max_cache_age=0.5)
         if frame_bytes is None:
             return jsonify({'error': 'Failed to capture frame - camera may still be warming up'}), 500
         
