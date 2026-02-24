@@ -89,22 +89,27 @@
                 </div>
                 <div class="card-body" style="padding-top: 14px;">
                   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px;">
-                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                    <div id="statusPlcStartCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
                       <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">PLC Start Bit</div>
                       <div id="statusPlcStartValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
                       <div id="statusPlcStartMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
                     </div>
-                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                    <div id="statusCameraCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
                       <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Camera</div>
                       <div id="statusCameraValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
                       <div id="statusCameraMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
                     </div>
-                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                    <div id="statusVisionCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Vision Cycle</div>
+                      <div id="statusVisionValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusVisionMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div id="statusUptimeCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
                       <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">System Uptime</div>
                       <div id="statusUptimeValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
                       <div id="statusUptimeMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
                     </div>
-                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                    <div id="statusBackendCard" style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
                       <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Backend</div>
                       <div id="statusBackendValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
                       <div id="statusBackendMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
@@ -419,7 +424,26 @@
       }
     }
 
-    function setLiveStatus(valueId, metaId, valueText, valueColor, metaText) {
+    function setStatusCardTone(cardId, tone) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+
+      if (tone === 'good') {
+        card.style.background = 'rgba(76, 175, 80, 0.16)';
+        card.style.borderColor = 'rgba(76, 175, 80, 0.55)';
+      } else if (tone === 'bad') {
+        card.style.background = 'rgba(244, 67, 54, 0.16)';
+        card.style.borderColor = 'rgba(244, 67, 54, 0.55)';
+      } else if (tone === 'warn') {
+        card.style.background = 'rgba(255, 179, 0, 0.16)';
+        card.style.borderColor = 'rgba(255, 179, 0, 0.55)';
+      } else {
+        card.style.background = 'rgba(255,255,255,0.04)';
+        card.style.borderColor = 'rgba(255,255,255,0.12)';
+      }
+    }
+
+    function setLiveStatus(cardId, valueId, metaId, valueText, valueColor, metaText, tone = 'neutral') {
       const valueEl = document.getElementById(valueId);
       const metaEl = document.getElementById(metaId);
       if (valueEl) {
@@ -429,6 +453,7 @@
       if (metaEl) {
         metaEl.textContent = metaText;
       }
+      setStatusCardTone(cardId, tone);
     }
 
     async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
@@ -442,9 +467,10 @@
     async function updateLiveStatus() {
       const refreshEl = document.getElementById('statusLastRefresh');
 
-      const [plcResult, cameraResult, smartFactoryResult, healthResult] = await Promise.allSettled([
+      const [plcResult, cameraResult, db123Result, smartFactoryResult, healthResult] = await Promise.allSettled([
         fetchJsonWithTimeout(`${API_BASE}/api/plc/db40/start`),
         fetchJsonWithTimeout(`${API_BASE}/api/camera/status`),
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/db123/read`),
         fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
         fetchJsonWithTimeout(`${API_BASE}/api/health`)
       ]);
@@ -453,14 +479,16 @@
         const plc = plcResult.value;
         const plcStartOn = Boolean(plc.start);
         setLiveStatus(
+          'statusPlcStartCard',
           'statusPlcStartValue',
           'statusPlcStartMeta',
           plcStartOn ? 'TRUE (ACTIVE)' : 'FALSE (IDLE)',
           plcStartOn ? '#4caf50' : '#ffb300',
-          `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`
+          `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`,
+          plcStartOn ? 'good' : 'warn'
         );
       } else {
-        setLiveStatus('statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit');
+        setLiveStatus('statusPlcStartCard', 'statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit', 'bad');
       }
 
       if (cameraResult.status === 'fulfilled') {
@@ -470,28 +498,72 @@
         const cameraState = connected ? (canRead ? 'CONNECTED' : 'WARMING UP') : 'DISCONNECTED';
         const color = connected ? (canRead ? '#4caf50' : '#ffb300') : '#f44336';
         setLiveStatus(
+          'statusCameraCard',
           'statusCameraValue',
           'statusCameraMeta',
           cameraState,
           color,
-          connected ? `Index ${cam.camera_index} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable'
+          connected ? `Index ${cam.camera_index} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable',
+          connected ? (canRead ? 'good' : 'warn') : 'bad'
         );
       } else {
-        setLiveStatus('statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status');
+        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status', 'bad');
+      }
+
+      if (db123Result.status === 'fulfilled' && db123Result.value.success) {
+        const tags = db123Result.value.tags || {};
+        const busy = Boolean(tags.busy);
+        const completed = Boolean(tags.completed);
+        const objectDetected = Boolean(tags.object_detected);
+        const objectNumber = Number(tags.object_number || 0);
+        const startBit = Boolean(tags.start);
+
+        let visionLabel = 'IDLE';
+        let tone = 'warn';
+        let color = '#ffb300';
+
+        if (busy) {
+          visionLabel = 'RUNNING';
+          tone = 'good';
+          color = '#4caf50';
+        } else if (completed) {
+          visionLabel = objectDetected ? 'DONE (OBJECT)' : 'DONE (NO OBJECT)';
+          tone = objectDetected ? 'good' : 'bad';
+          color = objectDetected ? '#4caf50' : '#f44336';
+        }
+
+        let meta = `Detected count: ${objectNumber}`;
+        if (startBit && !busy) {
+          meta += ' | Start bit is edge-triggered (toggle FALSE->TRUE to re-run)';
+        }
+
+        setLiveStatus(
+          'statusVisionCard',
+          'statusVisionValue',
+          'statusVisionMeta',
+          visionLabel,
+          color,
+          meta,
+          tone
+        );
+      } else {
+        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read DB123 vision tags', 'bad');
       }
 
       if (smartFactoryResult.status === 'fulfilled' && smartFactoryResult.value.uptime) {
         const uptime = smartFactoryResult.value.uptime;
         const uptimePercent = Number(uptime.percent || 0);
         setLiveStatus(
+          'statusUptimeCard',
           'statusUptimeValue',
           'statusUptimeMeta',
           uptime.duration || '0h 0m',
           uptimePercent > 0 ? '#4caf50' : '#f44336',
-          `${uptimePercent.toFixed(1)}% availability`
+          `${uptimePercent.toFixed(1)}% availability`,
+          uptimePercent > 0 ? 'good' : 'bad'
         );
       } else {
-        setLiveStatus('statusUptimeValue', 'statusUptimeMeta', 'UNKNOWN', '#f44336', 'Unable to read uptime');
+        setLiveStatus('statusUptimeCard', 'statusUptimeValue', 'statusUptimeMeta', 'UNKNOWN', '#f44336', 'Unable to read uptime', 'bad');
       }
 
       if (healthResult.status === 'fulfilled' && healthResult.value.status === 'ok') {
@@ -499,9 +571,9 @@
         const serverTimeLabel = serverTimestamp > 0
           ? new Date(serverTimestamp * 1000).toLocaleTimeString()
           : 'n/a';
-        setLiveStatus('statusBackendValue', 'statusBackendMeta', 'ONLINE', '#4caf50', `Server time ${serverTimeLabel}`);
+        setLiveStatus('statusBackendCard', 'statusBackendValue', 'statusBackendMeta', 'ONLINE', '#4caf50', `Server time ${serverTimeLabel}`, 'good');
       } else {
-        setLiveStatus('statusBackendValue', 'statusBackendMeta', 'OFFLINE', '#f44336', 'Health endpoint unreachable');
+        setLiveStatus('statusBackendCard', 'statusBackendValue', 'statusBackendMeta', 'OFFLINE', '#f44336', 'Health endpoint unreachable', 'bad');
       }
 
       if (refreshEl) {
