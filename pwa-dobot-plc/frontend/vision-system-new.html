@@ -212,6 +212,27 @@
             </div>
           </div>
 
+          <!-- Debug Console -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header card-header-danger">
+                  <h4 class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>Debug Console</span>
+                    <span style="display: flex; gap: 8px;">
+                      <button class="btn btn-sm btn-outline-light" onclick="runDebugChecks()" style="padding: 4px 10px; font-size: 11px;">Run Checks</button>
+                      <button class="btn btn-sm btn-outline-light" onclick="clearDebugLog()" style="padding: 4px 10px; font-size: 11px;">Clear</button>
+                    </span>
+                  </h4>
+                </div>
+                <div class="card-body">
+                  <div id="debugSummary" style="font-size: 12px; color: #ef9a9a; margin-bottom: 8px;">No debug events yet.</div>
+                  <pre id="debugLog" style="max-height: 220px; overflow: auto; margin: 0; padding: 12px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #cfd8dc; font-size: 11px; line-height: 1.45;">(waiting)</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Settings (collapsed by default) -->
           <div class="row">
             <div class="col-12">
@@ -395,11 +416,71 @@
     let detectionInterval = null;
     let detectionActive = false;
     let isFetchingCamera = false;
+    const debugLogEntries = [];
 
     let objectParams = {
       min_area: 500,
       max_area: 50000
     };
+
+    function addDebugLog(message, details = null, level = 'info') {
+      const ts = new Date().toLocaleTimeString();
+      const prefix = level.toUpperCase().padEnd(5, ' ');
+      let line = `[${ts}] ${prefix} ${message}`;
+      if (details !== null && details !== undefined) {
+        try {
+          line += ` | ${typeof details === 'string' ? details : JSON.stringify(details)}`;
+        } catch (e) {
+          line += ` | ${String(details)}`;
+        }
+      }
+      debugLogEntries.unshift(line);
+      if (debugLogEntries.length > 150) debugLogEntries.length = 150;
+
+      const logEl = document.getElementById('debugLog');
+      if (logEl) {
+        logEl.textContent = debugLogEntries.join('\n');
+      }
+      const summaryEl = document.getElementById('debugSummary');
+      if (summaryEl) {
+        summaryEl.textContent = `${debugLogEntries.length} events captured. Latest: ${message}`;
+      }
+    }
+
+    function clearDebugLog() {
+      debugLogEntries.length = 0;
+      const logEl = document.getElementById('debugLog');
+      if (logEl) logEl.textContent = '(cleared)';
+      const summaryEl = document.getElementById('debugSummary');
+      if (summaryEl) summaryEl.textContent = 'No debug events yet.';
+    }
+
+    async function runDebugChecks() {
+      const endpoints = [
+        '/api/health',
+        '/api/camera/status',
+        '/api/plc/db40/start',
+        '/api/plc/db123/read',
+        '/api/vision/annotated-result'
+      ];
+      addDebugLog('Running manual debug checks...');
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${API_BASE}${endpoint}`, { signal: AbortSignal.timeout(6000) });
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await response.json();
+            addDebugLog(`${endpoint} -> HTTP ${response.status}`, data, response.ok ? 'info' : 'error');
+          } else {
+            const blob = await response.blob();
+            addDebugLog(`${endpoint} -> HTTP ${response.status}, ${blob.size} bytes`, null, response.ok ? 'info' : 'error');
+          }
+        } catch (error) {
+          addDebugLog(`${endpoint} request failed`, error.message, 'error');
+        }
+      }
+    }
 
     function redrawPersistentOverlays() {
       const cameraFrame = document.getElementById('cameraFrame');
@@ -546,6 +627,12 @@
           meta,
           tone
         );
+
+        const annotatedImg = document.getElementById('annotatedImage');
+        if (completed && (!annotatedImg || annotatedImg.style.display === 'none')) {
+          addDebugLog('vision cycle completed', 'attempting annotated-result refresh from live status');
+          refreshAnnotatedResultImage('status-completed');
+        }
       } else {
         setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read DB123 vision tags', 'bad');
       }
@@ -597,6 +684,7 @@
     async function updateCameraFrame() {
       // Skip if previous fetch still in progress
       if (isFetchingCamera) {
+        addDebugLog('camera fetch skipped', 'previous request still in progress', 'warn');
         return;
       }
 
@@ -610,11 +698,13 @@
         const response = await fetch(`${API_BASE}/api/camera/capture?t=${timestamp}`, {
           signal: AbortSignal.timeout(10000) // 10 second timeout
         });
+        addDebugLog('camera capture response', { status: response.status, ok: response.ok });
         
         console.log(`🔍 Camera response status: ${response.status}`);
         
         if (response.ok) {
           const blob = await response.blob();
+          addDebugLog('camera frame updated', `${blob.size} bytes`);
           console.log(`🔍 Camera frame received: ${(blob.size / 1024).toFixed(1)} KB`);
           const url = URL.createObjectURL(blob);
           if (frame.src && frame.src.startsWith('blob:')) {
@@ -627,6 +717,7 @@
         } else {
           // Camera not available - show placeholder
           const errorText = await response.text().catch(() => 'Unknown error');
+          addDebugLog('camera capture failed', `HTTP ${response.status} ${errorText}`, 'error');
           console.error(`🔍 Camera error ${response.status}:`, errorText);
           if (response.status === 503) {
             frame.style.display = 'none';
@@ -637,6 +728,7 @@
           }
         }
       } catch (error) {
+        addDebugLog('camera capture exception', error.message, 'error');
         // Don't log timeout errors
         if (!error.message?.includes('timeout') && !error.message?.includes('aborted')) {
           console.error('🔍 Error fetching camera frame:', error);
@@ -671,10 +763,40 @@
       document.getElementById('maxAreaValue').textContent = objectParams.max_area;
     }
 
+    async function refreshAnnotatedResultImage(reason = 'manual') {
+      try {
+        const response = await fetch(`${API_BASE}/api/vision/annotated-result?t=${Date.now()}`, {
+          signal: AbortSignal.timeout(10000)
+        });
+        if (!response.ok) {
+          const txt = await response.text().catch(() => '');
+          addDebugLog(`annotated-result fetch failed (${reason})`, `HTTP ${response.status} ${txt}`, 'error');
+          return false;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const annotatedImg = document.getElementById('annotatedImage');
+        const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
+        if (annotatedImg.src && annotatedImg.src.startsWith('blob:')) {
+          URL.revokeObjectURL(annotatedImg.src);
+        }
+        annotatedImg.src = url;
+        annotatedImg.style.display = 'block';
+        if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
+        addDebugLog(`annotated-result updated (${reason})`, `${blob.size} bytes`);
+        return true;
+      } catch (error) {
+        addDebugLog(`annotated-result exception (${reason})`, error.message, 'error');
+        return false;
+      }
+    }
+
     // START ANALYSIS - Run voting-based detection (10 snapshots)
     async function startAnalysis() {
       console.log('🎯 Starting Analysis with Majority Voting (10 snapshots)');
       console.log('🎯 Using area limits for voting:', objectParams.min_area, 'to', objectParams.max_area, 'pixels');
+      addDebugLog('startAnalysis invoked', { min_area: objectParams.min_area, max_area: objectParams.max_area });
 
       const resultsDiv = document.getElementById('results');
       const resultsContent = document.getElementById('resultsContent');
@@ -694,6 +816,7 @@
             max_area: objectParams.max_area
           })
         });
+        addDebugLog('test-color-voting response', { status: response.status, ok: response.ok });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -707,12 +830,14 @@
 
         const data = await response.json();
         console.log('✅ Analysis complete:', data);
+        addDebugLog('test-color-voting payload', data);
 
         // Display final voting result
         displayVotingResult(data.result);
 
       } catch (error) {
         console.error('Error during analysis:', error);
+        addDebugLog('startAnalysis exception', error.message, 'error');
         resultsContent.innerHTML = `
           <div style="padding: 20px; text-align: center; color: #f44336; background: rgba(244, 67, 54, 0.1); border: 2px solid #f44336; border-radius: 8px;">
             <i class="material-icons" style="font-size: 48px; margin-bottom: 16px;">error_outline</i>
@@ -802,6 +927,11 @@
 
       resultsContent.innerHTML = html;
       resultsDiv.style.display = 'block';
+      addDebugLog('displayVotingResult called', {
+        color: result?.color || null,
+        confidence: result?.confidence || 0,
+        hasAnnotatedImage: Boolean(result?.annotated_image)
+      });
 
       // Display annotated image if available
       if (result.annotated_image) {
@@ -811,6 +941,10 @@
         annotatedImg.src = 'data:image/jpeg;base64,' + result.annotated_image;
         annotatedImg.style.display = 'block';
         if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
+        addDebugLog('final result image rendered', `base64 length ${result.annotated_image.length}`);
+      } else {
+        addDebugLog('no annotated_image in voting result', 'trying /api/vision/annotated-result fallback', 'warn');
+        refreshAnnotatedResultImage('voting-fallback');
       }
     }
 
@@ -819,6 +953,7 @@
       const objectMethod = document.getElementById('objectDetectionMethod').value;
 
       console.log('🔍 Starting detection with params:', objectParams);
+      addDebugLog('detectObjects invoked', { objectMethod, params: objectParams });
       
       try {
         // Get analyzed image
@@ -835,12 +970,19 @@
         });
         
         console.log('🔍 Analyze response status:', analyzeResponse.status);
+        addDebugLog('vision/analyze response', {
+          status: analyzeResponse.status,
+          ok: analyzeResponse.ok,
+          objectHeader: analyzeResponse.headers.get('X-Objects-Detected'),
+          hasDetectedObjectsHeader: Boolean(analyzeResponse.headers.get('X-Detected-Objects'))
+        });
 
         if (analyzeResponse.ok) {
           const objectCountHeader = analyzeResponse.headers.get('X-Objects-Detected');
           const detectedObjectsHeader = analyzeResponse.headers.get('X-Detected-Objects');
 
           const blob = await analyzeResponse.blob();
+          addDebugLog('analyzed image received', `${blob.size} bytes`);
           const url = URL.createObjectURL(blob);
           const analyzedImg = document.getElementById('analyzedImage');
           const analyzedPlaceholder = document.getElementById('analyzedPlaceholder');
@@ -866,6 +1008,7 @@
               }
             } catch (parseError) {
               console.warn('Could not parse X-Detected-Objects header:', parseError);
+              addDebugLog('X-Detected-Objects parse error', parseError.message, 'error');
             }
           }
 
@@ -889,9 +1032,11 @@
               analyzeResults.objects = fallbackResults.objects || [];
               analyzeResults.debug = fallbackResults.debug || {};
               console.log('🔍 Detection Results (fallback /detect):', fallbackResults);
+              addDebugLog('fallback /detect payload', fallbackResults);
             } else {
               const fallbackErrorText = await detectResponse.text().catch(() => 'Unknown error');
               console.warn('Fallback /detect failed:', detectResponse.status, fallbackErrorText);
+              addDebugLog('fallback /detect failed', `HTTP ${detectResponse.status} ${fallbackErrorText}`, 'error');
             }
           }
 
@@ -900,10 +1045,12 @@
         } else {
           const errorText = await analyzeResponse.text().catch(() => 'Unknown error');
           console.error('🔍 Analyze Error:', analyzeResponse.status, errorText);
+          addDebugLog('vision/analyze failed', `HTTP ${analyzeResponse.status} ${errorText}`, 'error');
           alert('Quick test failed: ' + errorText);
         }
       } catch (error) {
         console.error('Error detecting objects:', error);
+        addDebugLog('detectObjects exception', error.message, 'error');
         alert('Error detecting objects: ' + error.message);
       }
     }
@@ -1768,6 +1915,7 @@
     // Initialize
     window.addEventListener('load', () => {
       console.log('Color Detection Test Page Loaded');
+      addDebugLog('page loaded', { apiBase: API_BASE });
       updateParams();
       loadCropSettings(); // Load crop settings on page load
       loadDetectionRoi(); // Load detection ROI on page load
