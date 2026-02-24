@@ -116,15 +116,52 @@
             </div>
           </div>
 
-          <!-- Detection Controls -->
+          <!-- Final Result Image (Full Width) -->
           <div class="row">
             <div class="col-12">
               <div class="card">
-                <div class="card-header card-header-success">
-                  <h4 class="card-title">Color Detection</h4>
+                <div class="card-header card-header-warning">
+                  <h4 class="card-title">🎯 Final Result</h4>
                 </div>
                 <div class="card-body">
-                  
+                  <img id="annotatedImage" class="camera-frame" src="" alt="Annotated Result" style="display: none; width: 100%; max-width: 800px; margin: 0 auto; border-radius: 8px;">
+                  <div id="annotatedPlaceholder" style="min-height: 400px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-direction: column; gap: 10px; background: rgba(10, 22, 40, 0.8); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;">
+                    <div style="font-size: 64px;">🎯</div>
+                    <div style="font-size: 18px;">Voting result will appear here</div>
+                    <div style="font-size: 12px; color: #999;">Run "START ANALYSIS" to see the final result</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Voting Results Section -->
+          <div class="row">
+            <div class="col-12">
+              <div id="results" style="display: none;">
+                <div class="card">
+                  <div class="card-header card-header-warning">
+                    <h4 class="card-title">Voting Results Details</h4>
+                  </div>
+                  <div class="card-body">
+                    <div id="resultsContent" style="color: #b0bec5; font-size: 14px;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings (collapsed by default) -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header card-header-success" style="display: flex; align-items: center; justify-content: space-between;">
+                  <h4 class="card-title" style="margin: 0;">Settings</h4>
+                  <button type="button" class="btn btn-sm btn-outline-light" id="settingsToggleBtn" onclick="toggleSettingsPanel()" style="font-size: 11px; padding: 4px 10px;">
+                    Show
+                  </button>
+                </div>
+                <div class="card-body" id="settingsBody" style="display: none;">
                   <!-- Detection Method Info -->
                   <div style="margin-bottom: 24px; padding: 16px; background: rgba(255, 235, 59, 0.1); border: 2px solid #ffeb3b; border-radius: 8px;">
                     <div style="color: #ffeb3b; font-size: 18px; font-weight: 700; margin-bottom: 8px;">🎨 Color Filter Detection (OpenCV HSV)</div>
@@ -267,42 +304,6 @@
                     <button class="btn btn-danger" onclick="stopContinuousDetection()" id="stopBtn" style="display: none;">
                       <i class="material-icons">stop</i> Stop
                     </button>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Final Result Image (Full Width) -->
-          <div class="row">
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header card-header-warning">
-                  <h4 class="card-title">🎯 Final Result</h4>
-                </div>
-                <div class="card-body">
-                  <img id="annotatedImage" class="camera-frame" src="" alt="Annotated Result" style="display: none; width: 100%; max-width: 800px; margin: 0 auto; border-radius: 8px;">
-                  <div id="annotatedPlaceholder" style="min-height: 400px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-direction: column; gap: 10px; background: rgba(10, 22, 40, 0.8); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px;">
-                    <div style="font-size: 64px;">🎯</div>
-                    <div style="font-size: 18px;">Voting result will appear here</div>
-                    <div style="font-size: 12px; color: #999;">Run "START ANALYSIS" to see the final result</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Voting Results Section -->
-          <div class="row">
-            <div class="col-12">
-              <div id="results" style="display: none;">
-                <div class="card">
-                  <div class="card-header card-header-warning">
-                    <h4 class="card-title">Voting Results Details</h4>
-                  </div>
-                  <div class="card-body">
-                    <div id="resultsContent" style="color: #b0bec5; font-size: 14px;"></div>
                   </div>
                 </div>
               </div>
@@ -1194,6 +1195,19 @@
       document.getElementById('roiInfoWidth').textContent = currentRoiSettings.width.toFixed(1);
       document.getElementById('roiInfoHeight').textContent = currentRoiSettings.height.toFixed(1);
       roiInfo.style.display = 'block';
+    }
+
+    function toggleSettingsPanel() {
+      const body = document.getElementById('settingsBody');
+      const btn = document.getElementById('settingsToggleBtn');
+      const isHidden = body.style.display === 'none' || body.style.display === '';
+      if (isHidden) {
+        body.style.display = 'block';
+        btn.textContent = 'Hide';
+      } else {
+        body.style.display = 'none';
+        btn.textContent = 'Show';
+      }
     }
 
     async function applyCropSettings() {
