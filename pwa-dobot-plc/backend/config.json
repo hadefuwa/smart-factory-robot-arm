@@ -12,7 +12,25 @@
   "camera": {
     "index": 0,
     "width": 1640,
-    "height": 1232
+    "height": 1232,
+    "crop": {
+      "enabled": true,
+      "x": 20.7,
+      "y": 16.3,
+      "width": 58.4,
+      "height": 65.2
+    },
+    "detection_roi": {
+      "enabled": true,
+      "x": 28.1,
+      "y": 18.3,
+      "width": 47.7,
+      "height": 32.9
+    },
+    "object_params": {
+      "min_area": 1234,
+      "max_area": 56789
+    }
   },
   "plc": {
     "ip": "192.168.7.2",

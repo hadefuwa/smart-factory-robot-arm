@@ -170,6 +170,17 @@ dobot_client = None
 camera_service = None
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
+latest_plc_cycle_result = {
+    'timestamp': 0.0,
+    'running': False,
+    'success': False,
+    'detected_color': None,
+    'color_code': 0,
+    'confidence': 0.0,
+    'object_count': 0,
+    'vote_counts': {},
+    'message': 'No PLC-triggered cycle has completed yet.'
+}
 
 # Vision service configuration
 VISION_SERVICE_URL = os.getenv('VISION_SERVICE_URL', 'http://127.0.0.1:5001')
@@ -960,6 +971,16 @@ def init_clients():
             width=crop_config.get('width', 100),
             height=crop_config.get('height', 100)
         )
+    # Load detection ROI settings if available
+    detection_roi_config = camera_config.get('detection_roi', {})
+    if detection_roi_config:
+        camera_service.set_detection_roi(
+            enabled=detection_roi_config.get('enabled', False),
+            x=detection_roi_config.get('x', 0),
+            y=detection_roi_config.get('y', 0),
+            width=detection_roi_config.get('width', 100),
+            height=detection_roi_config.get('height', 100)
+        )
     # Initialize camera and keep it always active
     try:
         success = camera_service.initialize_camera()
@@ -1541,6 +1562,17 @@ def update_config():
             # Merge the rest of db123 (enabled, db_number, etc.)
             rest = {k: v for k, v in new_db123.items() if k != 'tags'}
             current_config['plc']['db123'].update(rest)
+
+        # Update camera config if provided (deep merge object params / crop / roi)
+        if 'camera' in new_config:
+            current_config.setdefault('camera', {})
+            camera_update = new_config['camera']
+            for key, value in camera_update.items():
+                if isinstance(value, dict):
+                    current_config['camera'].setdefault(key, {})
+                    current_config['camera'][key].update(value)
+                else:
+                    current_config['camera'][key] = value
         
         save_config(current_config)
         return jsonify({'success': True, 'message': 'Configuration saved'})
@@ -1695,7 +1727,7 @@ def process_vision_handshake():
     4. Writes results to PLC including color code
     5. Sets Completed flag when done
     """
-    global vision_handshake_processing, latest_annotated_image
+    global vision_handshake_processing, latest_annotated_image, latest_plc_cycle_result
 
     if camera_service is None:
         logger.warning("Camera service not available for handshake processing")
@@ -1703,6 +1735,11 @@ def process_vision_handshake():
 
     try:
         vision_handshake_processing = True
+        latest_plc_cycle_result.update({
+            'timestamp': time.time(),
+            'running': True,
+            'message': 'PLC start bit is TRUE - running 10-vote analysis.'
+        })
         logger.info("ðŸ”„ Vision handshake: Starting processing (Start command received)")
         logger.info("ðŸ”„ Vision handshake: Step 1 - Setting Busy flag")
 
@@ -1759,11 +1796,33 @@ def process_vision_handshake():
         )
 
         logger.info(f"âœ… Vision handshake: Completed - {object_count} objects, color_code={color_code} ({detected_color}), confidence={confidence}%")
+        latest_plc_cycle_result.update({
+            'timestamp': time.time(),
+            'running': False,
+            'success': True,
+            'detected_color': detected_color,
+            'color_code': color_code,
+            'confidence': float(confidence),
+            'object_count': object_count,
+            'vote_counts': vote_counts,
+            'message': f"Completed: {detected_color or 'none'} ({confidence}%)"
+        })
         return True
         
     except Exception as e:
         logger.error(f"Error in vision handshake processing: {e}", exc_info=True)
         write_vision_to_plc(0, 0, True, False, busy=False, completed=True, color_code=0)
+        latest_plc_cycle_result.update({
+            'timestamp': time.time(),
+            'running': False,
+            'success': False,
+            'detected_color': None,
+            'color_code': 0,
+            'confidence': 0.0,
+            'object_count': 0,
+            'vote_counts': {},
+            'message': f'Cycle failed: {str(e)}'
+        })
         return False
     finally:
         vision_handshake_processing = False
@@ -2500,6 +2559,44 @@ def vision_analyze():
         annotated_frame = frame.copy()
         if detected_objects:
             annotated_frame = camera_service.draw_objects(annotated_frame, detected_objects, color=(0, 255, 0))
+
+        # Draw detection ROI on analyzed image for visual verification
+        roi_cfg = object_params.get('detection_roi')
+        if isinstance(roi_cfg, dict):
+            roi_enabled = bool(roi_cfg.get('enabled', False))
+            roi_x = float(roi_cfg.get('x', 0))
+            roi_y = float(roi_cfg.get('y', 0))
+            roi_width = float(roi_cfg.get('width', 100))
+            roi_height = float(roi_cfg.get('height', 100))
+        else:
+            service_roi = camera_service.get_detection_roi()
+            roi_enabled = bool(service_roi.get('enabled', False))
+            roi_x = float(service_roi.get('x', 0))
+            roi_y = float(service_roi.get('y', 0))
+            roi_width = float(service_roi.get('width', 100))
+            roi_height = float(service_roi.get('height', 100))
+
+        if roi_enabled:
+            frame_h, frame_w = annotated_frame.shape[:2]
+            x1 = int(frame_w * max(0.0, min(100.0, roi_x)) / 100.0)
+            y1 = int(frame_h * max(0.0, min(100.0, roi_y)) / 100.0)
+            x2 = int(frame_w * max(0.0, min(100.0, roi_x + roi_width)) / 100.0)
+            y2 = int(frame_h * max(0.0, min(100.0, roi_y + roi_height)) / 100.0)
+            x1 = max(0, min(x1, frame_w - 1))
+            y1 = max(0, min(y1, frame_h - 1))
+            x2 = max(x1 + 1, min(x2, frame_w))
+            y2 = max(y1 + 1, min(y2, frame_h))
+
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
+            cv2.putText(
+                annotated_frame,
+                'DETECTION ROI',
+                (x1 + 6, max(20, y1 - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (255, 255, 0),
+                2
+            )
         
         # Cache the analyzed frame for PLC HMI stream
         camera_service.set_analyzed_frame(annotated_frame)
@@ -2759,6 +2856,21 @@ def get_annotated_result():
     except Exception as e:
         logger.error(f"Error serving annotated result: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/vision/latest-cycle', methods=['GET'])
+def get_latest_vision_cycle():
+    """Return latest PLC-triggered 10-vote cycle summary for UI/debug."""
+    global latest_plc_cycle_result, vision_handshake_processing
+    try:
+        payload = dict(latest_plc_cycle_result)
+        payload['running'] = bool(vision_handshake_processing or payload.get('running'))
+        return jsonify({
+            'success': True,
+            'cycle': payload
+        })
+    except Exception as e:
+        logger.error(f"Error serving latest vision cycle: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/plc/db123/read', methods=['GET'])
 def read_db123_tags():

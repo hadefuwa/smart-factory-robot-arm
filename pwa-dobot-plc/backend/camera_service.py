@@ -945,13 +945,34 @@ class CameraService:
             # Define HSV color ranges - IMPROVED to avoid conveyor structure false positives
             # Tuned for green side lighting and to ignore metal/white conveyor parts
 
-            # Optional detection ROI: limit detection to a user-defined rectangle
+            # Optional detection ROI: limit detection to a user-defined rectangle.
+            # Allow request-time overrides (used by Quick Test) while keeping
+            # camera_service defaults as fallback.
             roi_mask = None
-            if self.detection_roi_enabled:
-                x1 = int(frame_width * self.detection_roi_x / 100)
-                y1 = int(frame_height * self.detection_roi_y / 100)
-                x2 = int(frame_width * (self.detection_roi_x + self.detection_roi_width) / 100)
-                y2 = int(frame_height * (self.detection_roi_y + self.detection_roi_height) / 100)
+            roi_enabled = bool(params.get('detection_roi_enabled', self.detection_roi_enabled))
+            roi_x = float(params.get('detection_roi_x', self.detection_roi_x))
+            roi_y = float(params.get('detection_roi_y', self.detection_roi_y))
+            roi_width = float(params.get('detection_roi_width', self.detection_roi_width))
+            roi_height = float(params.get('detection_roi_height', self.detection_roi_height))
+
+            roi_payload = params.get('detection_roi')
+            if isinstance(roi_payload, dict):
+                roi_enabled = bool(roi_payload.get('enabled', roi_enabled))
+                roi_x = float(roi_payload.get('x', roi_x))
+                roi_y = float(roi_payload.get('y', roi_y))
+                roi_width = float(roi_payload.get('width', roi_width))
+                roi_height = float(roi_payload.get('height', roi_height))
+
+            roi_x = max(0.0, min(100.0, roi_x))
+            roi_y = max(0.0, min(100.0, roi_y))
+            roi_width = max(1.0, min(100.0, roi_width))
+            roi_height = max(1.0, min(100.0, roi_height))
+
+            if roi_enabled:
+                x1 = int(frame_width * roi_x / 100)
+                y1 = int(frame_height * roi_y / 100)
+                x2 = int(frame_width * (roi_x + roi_width) / 100)
+                y2 = int(frame_height * (roi_y + roi_height) / 100)
 
                 x1 = max(0, min(x1, frame_width - 1))
                 y1 = max(0, min(y1, frame_height - 1))

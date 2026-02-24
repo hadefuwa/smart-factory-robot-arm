@@ -416,6 +416,8 @@
     let detectionInterval = null;
     let detectionActive = false;
     let isFetchingCamera = false;
+    let objectParamsSaveTimer = null;
+    let lastCycleTimestampSeen = 0;
     const debugLogEntries = [];
 
     let objectParams = {
@@ -545,15 +547,40 @@
       return response.json();
     }
 
+    function renderCycleSummary(cycle) {
+      if (!cycle) return;
+      const objectCount = Number(cycle.object_count || 0);
+      const detectedColor = cycle.detected_color || 'none';
+      const confidence = Number(cycle.confidence || 0);
+      const voteCounts = cycle.vote_counts || {};
+
+      const resultsDiv = document.getElementById('results');
+      const resultsContent = document.getElementById('resultsContent');
+      if (!resultsDiv || !resultsContent) return;
+
+      const votesText = Object.keys(voteCounts).length
+        ? Object.entries(voteCounts).map(([k, v]) => `${k}: ${v}`).join(' | ')
+        : 'No votes captured';
+
+      resultsContent.innerHTML = `
+        <div style="margin-bottom: 10px;"><strong>Cubes Detected:</strong> ${objectCount}</div>
+        <div style="margin-bottom: 10px;"><strong>Final Result:</strong> ${String(detectedColor).toUpperCase()} (${confidence.toFixed(1)}%)</div>
+        <div style="margin-bottom: 10px;"><strong>Votes:</strong> ${votesText}</div>
+        <div style="font-size: 12px; color: #90a4ae;"><strong>Status:</strong> ${cycle.message || 'n/a'}</div>
+      `;
+      resultsDiv.style.display = 'block';
+    }
+
     async function updateLiveStatus() {
       const refreshEl = document.getElementById('statusLastRefresh');
 
-      const [plcResult, cameraResult, db123Result, smartFactoryResult, healthResult] = await Promise.allSettled([
+      const [plcResult, cameraResult, db123Result, smartFactoryResult, healthResult, cycleResult] = await Promise.allSettled([
         fetchJsonWithTimeout(`${API_BASE}/api/plc/db40/start`),
         fetchJsonWithTimeout(`${API_BASE}/api/camera/status`),
         fetchJsonWithTimeout(`${API_BASE}/api/plc/db123/read`),
         fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
-        fetchJsonWithTimeout(`${API_BASE}/api/health`)
+        fetchJsonWithTimeout(`${API_BASE}/api/health`),
+        fetchJsonWithTimeout(`${API_BASE}/api/vision/latest-cycle`)
       ]);
 
       if (plcResult.status === 'fulfilled' && plcResult.value.success) {
@@ -614,9 +641,7 @@
         }
 
         let meta = `Detected count: ${objectNumber}`;
-        if (startBit && !busy) {
-          meta += ' | Start bit is edge-triggered (toggle FALSE->TRUE to re-run)';
-        }
+        if (startBit && !busy) meta += ' | Start TRUE keeps 10-vote cycles running';
 
         setLiveStatus(
           'statusVisionCard',
@@ -635,6 +660,28 @@
         }
       } else {
         setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read DB123 vision tags', 'bad');
+      }
+
+      if (cycleResult.status === 'fulfilled' && cycleResult.value.success) {
+        const cycle = cycleResult.value.cycle || {};
+        renderCycleSummary(cycle);
+
+        const cycleTs = Number(cycle.timestamp || 0);
+        if (cycleTs > lastCycleTimestampSeen && !cycle.running) {
+          lastCycleTimestampSeen = cycleTs;
+          addDebugLog('new PLC cycle result', cycle);
+          refreshAnnotatedResultImage('plc-cycle');
+          const analyzedImg = document.getElementById('analyzedImage');
+          const analyzedPlaceholder = document.getElementById('analyzedPlaceholder');
+          const annotatedImg = document.getElementById('annotatedImage');
+          if (analyzedImg && annotatedImg && annotatedImg.src) {
+            analyzedImg.src = annotatedImg.src;
+            analyzedImg.style.display = 'block';
+            if (analyzedPlaceholder) analyzedPlaceholder.style.display = 'none';
+          }
+        }
+      } else {
+        addDebugLog('latest-cycle unavailable', cycleResult.reason?.message || 'request failed', 'warn');
       }
 
       if (smartFactoryResult.status === 'fulfilled' && smartFactoryResult.value.uptime) {
@@ -761,6 +808,58 @@
       objectParams.max_area = parseInt(document.getElementById('maxAreaSlider').value);
       document.getElementById('minAreaValue').textContent = objectParams.min_area;
       document.getElementById('maxAreaValue').textContent = objectParams.max_area;
+      queueSaveObjectParams();
+    }
+
+    function queueSaveObjectParams() {
+      if (objectParamsSaveTimer) {
+        clearTimeout(objectParamsSaveTimer);
+      }
+      objectParamsSaveTimer = setTimeout(() => {
+        saveObjectParams().catch((error) => {
+          addDebugLog('save object params failed', error.message, 'warn');
+        });
+      }, 400);
+    }
+
+    async function saveObjectParams() {
+      await fetch(`${API_BASE}/api/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          camera: {
+            object_params: {
+              min_area: objectParams.min_area,
+              max_area: objectParams.max_area
+            }
+          }
+        })
+      });
+      addDebugLog('object params saved', objectParams);
+    }
+
+    async function loadObjectParams() {
+      try {
+        const response = await fetch(`${API_BASE}/api/config`, { signal: AbortSignal.timeout(6000) });
+        if (!response.ok) return;
+        const cfg = await response.json();
+        const saved = cfg?.camera?.object_params || {};
+        const min = Number(saved.min_area);
+        const max = Number(saved.max_area);
+        if (Number.isFinite(min) && min > 0) {
+          document.getElementById('minAreaSlider').value = min;
+        }
+        if (Number.isFinite(max) && max > 0) {
+          document.getElementById('maxAreaSlider').value = max;
+        }
+        objectParams.min_area = parseInt(document.getElementById('minAreaSlider').value, 10);
+        objectParams.max_area = parseInt(document.getElementById('maxAreaSlider').value, 10);
+        document.getElementById('minAreaValue').textContent = objectParams.min_area;
+        document.getElementById('maxAreaValue').textContent = objectParams.max_area;
+        addDebugLog('object params loaded', objectParams);
+      } catch (error) {
+        addDebugLog('load object params failed', error.message, 'warn');
+      }
     }
 
     async function refreshAnnotatedResultImage(reason = 'manual') {
@@ -951,9 +1050,16 @@
     // Detect objects once (quick test - single frame)
     async function detectObjects() {
       const objectMethod = document.getElementById('objectDetectionMethod').value;
+      const roiForRequest = {
+        enabled: Boolean(currentRoiSettings?.enabled),
+        x: Number(currentRoiSettings?.x || 0),
+        y: Number(currentRoiSettings?.y || 0),
+        width: Number(currentRoiSettings?.width || 100),
+        height: Number(currentRoiSettings?.height || 100)
+      };
 
       console.log('🔍 Starting detection with params:', objectParams);
-      addDebugLog('detectObjects invoked', { objectMethod, params: objectParams });
+      addDebugLog('detectObjects invoked', { objectMethod, params: objectParams, detection_roi: roiForRequest });
       
       try {
         // Get analyzed image
@@ -964,7 +1070,11 @@
             method: 'combined',
             use_object_detection: true,
             object_method: objectMethod,
-            object_params: objectParams,
+            object_params: {
+              ...objectParams,
+              detection_roi_enabled: roiForRequest.enabled,
+              detection_roi: roiForRequest
+            },
             defect_detection_enabled: false
           })
         });
@@ -1022,7 +1132,11 @@
                 object_detection_enabled: true,
                 defect_detection_enabled: false,
                 object_method: objectMethod,
-                object_params: objectParams
+                object_params: {
+                  ...objectParams,
+                  detection_roi_enabled: roiForRequest.enabled,
+                  detection_roi: roiForRequest
+                }
               })
             });
 
@@ -1916,7 +2030,7 @@
     window.addEventListener('load', () => {
       console.log('Color Detection Test Page Loaded');
       addDebugLog('page loaded', { apiBase: API_BASE });
-      updateParams();
+      loadObjectParams();
       loadCropSettings(); // Load crop settings on page load
       loadDetectionRoi(); // Load detection ROI on page load
       startLiveStatusPolling(); // Start live status polling
