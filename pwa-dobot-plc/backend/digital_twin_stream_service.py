@@ -98,7 +98,7 @@ class DigitalTwinStreamService:
                     now = time.time()
                     if now - last_capture >= capture_interval:
                         try:
-                            screenshot_bytes = self._page.screenshot(type="jpeg", quality=70)
+                            screenshot_bytes = self._page.screenshot(type="jpeg", quality=85)
                             if screenshot_bytes:
                                 with self._lock:
                                     self._latest_frame = screenshot_bytes

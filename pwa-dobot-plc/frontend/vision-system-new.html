@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
  <meta charset="utf-8" />
@@ -43,7 +43,7 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="/vision-system.html">
+            <a class="nav-link" href="/vision-system-new.html">
               <i class="material-icons">visibility</i>
               <p>Vision System</p>
             </a>
@@ -76,6 +76,62 @@
               <div><span>Output</span><strong>Live Overlay + Counts</strong></div>
             </div>
           </section>
+
+          <!-- Live Status Area -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header card-header-info">
+                  <h4 class="card-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span><i class="material-icons" style="font-size: 18px; vertical-align: middle;">monitoring</i> Live Status</span>
+                    <span id="statusLastRefresh" style="font-size: 11px; font-weight: 500; opacity: 0.9;">Updating...</span>
+                  </h4>
+                </div>
+                <div class="card-body" style="padding-top: 14px;">
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px;">
+                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">PLC Start Bit</div>
+                      <div id="statusPlcStartValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusPlcStartMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Camera</div>
+                      <div id="statusCameraValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusCameraMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">System Uptime</div>
+                      <div id="statusUptimeValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusUptimeMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                    <div style="padding: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;">
+                      <div style="font-size: 11px; color: #9fb1bf; margin-bottom: 6px;">Backend</div>
+                      <div id="statusBackendValue" style="font-size: 18px; font-weight: 700; color: #b0bec5;">--</div>
+                      <div id="statusBackendMeta" style="font-size: 11px; color: #7f919f;">Reading...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Primary Actions -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card" style="margin-top: -6px;">
+                <div class="card-body" style="padding-top: 14px; padding-bottom: 14px;">
+                  <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-success" onclick="startAnalysis()" style="flex: 2; min-width: 240px; font-size: 16px; padding: 12px;">
+                      <i class="material-icons">analytics</i> START ANALYSIS (10 votes)
+                    </button>
+                    <button class="btn btn-info" onclick="detectObjects()" style="flex: 1; min-width: 180px;">
+                      <i class="material-icons">search</i> Quick Test
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <!-- Camera View -->
           <div class="row">
@@ -302,16 +358,6 @@
                     </div>
                   </div>
 
-                  <!-- Detection Buttons -->
-                  <div style="display: flex; gap: 12px; margin-bottom: 24px;">
-                    <button class="btn btn-success" onclick="startAnalysis()" style="flex: 2; font-size: 16px; padding: 12px;">
-                      <i class="material-icons">analytics</i> START ANALYSIS (10 votes)
-                    </button>
-                    <button class="btn btn-info" onclick="detectObjects()" style="flex: 1;">
-                      <i class="material-icons">search</i> Quick Test
-                    </button>
-                  </div>
-
                   <div style="display: none; gap: 12px; margin-bottom: 24px;" id="oldButtons">
                     <button class="btn btn-primary" onclick="startContinuousDetection()" id="startBtn">
                       <i class="material-icons">play_arrow</i> Start Continuous
@@ -340,6 +386,7 @@
   <script>
     const API_BASE = window.location.origin;
     let streamInterval = null;
+    let statusInterval = null;
     let detectionInterval = null;
     let detectionActive = false;
     let isFetchingCamera = false;
@@ -370,6 +417,108 @@
           currentRoiSettings.height
         );
       }
+    }
+
+    function setLiveStatus(valueId, metaId, valueText, valueColor, metaText) {
+      const valueEl = document.getElementById(valueId);
+      const metaEl = document.getElementById(metaId);
+      if (valueEl) {
+        valueEl.textContent = valueText;
+        valueEl.style.color = valueColor;
+      }
+      if (metaEl) {
+        metaEl.textContent = metaText;
+      }
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+      const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    async function updateLiveStatus() {
+      const refreshEl = document.getElementById('statusLastRefresh');
+
+      const [plcResult, cameraResult, smartFactoryResult, healthResult] = await Promise.allSettled([
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/db40/start`),
+        fetchJsonWithTimeout(`${API_BASE}/api/camera/status`),
+        fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
+        fetchJsonWithTimeout(`${API_BASE}/api/health`)
+      ]);
+
+      if (plcResult.status === 'fulfilled' && plcResult.value.success) {
+        const plc = plcResult.value;
+        const plcStartOn = Boolean(plc.start);
+        setLiveStatus(
+          'statusPlcStartValue',
+          'statusPlcStartMeta',
+          plcStartOn ? 'TRUE (ACTIVE)' : 'FALSE (IDLE)',
+          plcStartOn ? '#4caf50' : '#ffb300',
+          `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`
+        );
+      } else {
+        setLiveStatus('statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit');
+      }
+
+      if (cameraResult.status === 'fulfilled') {
+        const cam = cameraResult.value;
+        const connected = Boolean(cam.connected);
+        const canRead = Boolean(cam.can_read);
+        const cameraState = connected ? (canRead ? 'CONNECTED' : 'WARMING UP') : 'DISCONNECTED';
+        const color = connected ? (canRead ? '#4caf50' : '#ffb300') : '#f44336';
+        setLiveStatus(
+          'statusCameraValue',
+          'statusCameraMeta',
+          cameraState,
+          color,
+          connected ? `Index ${cam.camera_index} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable'
+        );
+      } else {
+        setLiveStatus('statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status');
+      }
+
+      if (smartFactoryResult.status === 'fulfilled' && smartFactoryResult.value.uptime) {
+        const uptime = smartFactoryResult.value.uptime;
+        const uptimePercent = Number(uptime.percent || 0);
+        setLiveStatus(
+          'statusUptimeValue',
+          'statusUptimeMeta',
+          uptime.duration || '0h 0m',
+          uptimePercent > 0 ? '#4caf50' : '#f44336',
+          `${uptimePercent.toFixed(1)}% availability`
+        );
+      } else {
+        setLiveStatus('statusUptimeValue', 'statusUptimeMeta', 'UNKNOWN', '#f44336', 'Unable to read uptime');
+      }
+
+      if (healthResult.status === 'fulfilled' && healthResult.value.status === 'ok') {
+        const serverTimestamp = Number(healthResult.value.timestamp || 0);
+        const serverTimeLabel = serverTimestamp > 0
+          ? new Date(serverTimestamp * 1000).toLocaleTimeString()
+          : 'n/a';
+        setLiveStatus('statusBackendValue', 'statusBackendMeta', 'ONLINE', '#4caf50', `Server time ${serverTimeLabel}`);
+      } else {
+        setLiveStatus('statusBackendValue', 'statusBackendMeta', 'OFFLINE', '#f44336', 'Health endpoint unreachable');
+      }
+
+      if (refreshEl) {
+        refreshEl.textContent = `Last refresh ${new Date().toLocaleTimeString()}`;
+      }
+    }
+
+    function startLiveStatusPolling() {
+      if (statusInterval) return;
+      updateLiveStatus().catch((error) => {
+        console.error('Error loading live status:', error);
+      });
+      statusInterval = setInterval(() => {
+        updateLiveStatus().catch((error) => {
+          console.error('Error refreshing live status:', error);
+        });
+      }, 4000);
     }
 
     // Update camera frame from existing camera feed
@@ -1550,8 +1699,10 @@
       updateParams();
       loadCropSettings(); // Load crop settings on page load
       loadDetectionRoi(); // Load detection ROI on page load
+      startLiveStatusPolling(); // Start live status polling
       startStream(); // Start fetching camera frames automatically
     });
   </script>
 </body>
 </html>
+
