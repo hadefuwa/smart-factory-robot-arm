@@ -25,7 +25,7 @@
   <!-- All styles consolidated in professional-theme.css -->
 </head>
 
-<body class="dark-edition">
+<body class="dark-edition dashboard-page">
   <div class="wrapper ">
     <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
       <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
@@ -126,6 +126,24 @@
 
       <div class="content">
         <div class="container-fluid">
+          <section class="dashboard-hero">
+            <div class="hero-copy">
+              <p class="hero-kicker">Factory Operations</p>
+              <h1 class="hero-title">Production Command Center</h1>
+              <p class="hero-subtitle">Live robot, PLC, vision, and line-health telemetry in one operational surface.</p>
+            </div>
+            <div class="hero-meta">
+              <div class="hero-chip">
+                <span>Backend</span>
+                <strong id="backend-health">CHECKING</strong>
+              </div>
+              <div class="hero-chip">
+                <span>Last Refresh</span>
+                <strong id="last-refresh">--:--:--</strong>
+              </div>
+            </div>
+          </section>
+
           <!-- System Stats Cards -->
           <div class="row">
             <div class="col-lg-3 col-md-6 col-sm-6">
@@ -557,6 +575,7 @@
       updatePLCStatus();
       updateVisionStatus();
       updateKPIs();
+      updateLastRefresh();
     }
 
     function startStatusUpdates() {
@@ -566,6 +585,7 @@
         updatePLCStatus();
         updateVisionStatus();
         updateKPIs();
+        updateLastRefresh();
       }, 2000);
     }
 
@@ -764,6 +784,9 @@
         .then(response => response.json())
         .then(data => {
           if (!data.success) throw new Error(data.error);
+          const backendHealth = document.getElementById('backend-health');
+          backendHealth.textContent = 'ONLINE';
+          backendHealth.className = 'text-success';
 
           document.getElementById('production-counter').textContent = (data.production_counter || 0).toLocaleString();
 
@@ -823,7 +846,17 @@
         })
         .catch(error => {
           console.error('Error fetching smart factory data:', error);
+          const backendHealth = document.getElementById('backend-health');
+          backendHealth.textContent = 'DEGRADED';
+          backendHealth.className = 'text-warning';
         });
+    }
+
+    function updateLastRefresh() {
+      const refreshEl = document.getElementById('last-refresh');
+      if (refreshEl) {
+        refreshEl.textContent = new Date().toLocaleTimeString();
+      }
     }
 
     // Utility Functions

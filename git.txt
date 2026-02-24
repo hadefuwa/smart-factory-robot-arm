@@ -1,0 +1,6 @@
+cd C:\Users\HamedA\Documents\sf2
+git status
+git add .
+git commit -m "Updates"
+git push origin main
+ssh pi@rpi "cd ~/sf2 && git pull"
