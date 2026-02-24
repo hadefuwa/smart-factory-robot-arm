@@ -363,11 +363,6 @@
           frame.src = url;
           frame.style.display = 'block';
           if (placeholder) placeholder.style.display = 'none';
-          
-          // Redraw crop overlay after image loads
-          frame.onload = function() {
-            updateCropPreview();
-          };
         } else {
           // Camera not available - show placeholder
           const errorText = await response.text().catch(() => 'Unknown error');
@@ -1172,9 +1167,9 @@
           showRoiInfo();
           drawRoiOverlay(currentRoiSettings.x, currentRoiSettings.y, currentRoiSettings.width, currentRoiSettings.height);
         } else {
-          const error = await response.json();
-          console.error('Error saving detection ROI:', error);
-          alert('Error saving detection area: ' + (error.error || 'Unknown error'));
+          const text = await response.text();
+          console.error('Error saving detection ROI (HTTP):', response.status, text);
+          alert('Error saving detection area (HTTP ' + response.status + '): ' + text);
         }
       } catch (error) {
         console.error('Error saving detection ROI:', error);
