@@ -1,4 +1,4 @@
-"""
+﻿"""
 PWA Dobot-PLC Control Backend
 Flask API with WebSocket support for real-time PLC monitoring
 """
@@ -352,8 +352,8 @@ def queue_plc_write(db_number: int, offset: int, data: bytearray):
     is_allowed, reason = check_write_permission(db_number, offset, len(data))
     
     if not is_allowed:
-        logger.warning(f"⚠️ Attempted to write to read-only tag: DB{db_number}.{offset} - {reason}")
-        logger.warning(f"⚠️ Write operation blocked to protect read-only tag")
+        logger.warning(f"âš ï¸ Attempted to write to read-only tag: DB{db_number}.{offset} - {reason}")
+        logger.warning(f"âš ï¸ Write operation blocked to protect read-only tag")
         return False
     
     with plc_write_lock:
@@ -964,9 +964,9 @@ def init_clients():
     try:
         success = camera_service.initialize_camera()
         if success:
-            logger.info("📷 Camera initialized and will stay always active")
+            logger.info("ðŸ“· Camera initialized and will stay always active")
         else:
-            logger.warning("📷 Camera initialization failed - will retry automatically")
+            logger.warning("ðŸ“· Camera initialization failed - will retry automatically")
             # Retry in background
             def retry_camera_init():
                 while True:
@@ -976,7 +976,7 @@ def init_clients():
                             if camera_service.camera is None or (camera_service.camera is not None and not camera_service.camera.isOpened()):
                                 success = camera_service.initialize_camera()
                                 if success:
-                                    logger.info("📷 Camera initialized successfully (retry)")
+                                    logger.info("ðŸ“· Camera initialized successfully (retry)")
                                     break
                         except Exception:
                             pass
@@ -1253,12 +1253,12 @@ def dobot_debug():
 @app.route('/api/dobot/connect', methods=['POST'])
 def dobot_connect():
     """Connect to Dobot"""
-    logger.info("🔌 Manual Dobot connection requested")
+    logger.info("ðŸ”Œ Manual Dobot connection requested")
     success = dobot_client.connect()
     if success:
-        logger.info("✅ Manual Dobot connection successful")
+        logger.info("âœ… Manual Dobot connection successful")
     else:
-        logger.error(f"❌ Manual Dobot connection failed: {dobot_client.last_error}")
+        logger.error(f"âŒ Manual Dobot connection failed: {dobot_client.last_error}")
     return jsonify({
         'success': success,
         'connected': dobot_client.connected,
@@ -1271,9 +1271,9 @@ def dobot_home():
     if not dobot_client.connected:
         return jsonify({'error': 'Dobot not connected'}), 503
 
-    logger.info("🏠 Home command received from web interface")
+    logger.info("ðŸ  Home command received from web interface")
     success = dobot_client.home(wait=True)  # Wait=True for immediate execution
-    logger.info(f"✅ Home command result: {success}")
+    logger.info(f"âœ… Home command result: {success}")
     return jsonify({'success': success})
 
 @app.route('/api/dobot/move', methods=['POST'])
@@ -1288,7 +1288,7 @@ def dobot_move():
 
     # Get position before move
     pos_before = dobot_client.get_pose()
-    logger.info(f"▶️ Move command: ({data['x']}, {data['y']}, {data['z']}, {data.get('r', 0)}) - Current: ({pos_before['x']:.1f}, {pos_before['y']:.1f}, {pos_before['z']:.1f})")
+    logger.info(f"â–¶ï¸ Move command: ({data['x']}, {data['y']}, {data['z']}, {data.get('r', 0)}) - Current: ({pos_before['x']:.1f}, {pos_before['y']:.1f}, {pos_before['z']:.1f})")
 
     success = dobot_client.move_to(
         data['x'],
@@ -1309,14 +1309,14 @@ def dobot_move():
                    (pos_after['z'] - pos_before['z'])**2)**0.5
 
         if distance > 1.0:  # Moved more than 1mm
-            logger.info(f"✅ ACTUAL MOVEMENT: Moved {distance:.1f}mm to ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
+            logger.info(f"âœ… ACTUAL MOVEMENT: Moved {distance:.1f}mm to ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
             return jsonify({'success': True, 'executed': True, 'distance_moved': round(distance, 1)})
         else:
-            logger.error(f"⚠️ ROBOT DID NOT MOVE! Distance: {distance:.1f}mm - Position: ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
+            logger.error(f"âš ï¸ ROBOT DID NOT MOVE! Distance: {distance:.1f}mm - Position: ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
             return jsonify({'success': False, 'error': f'Robot did not move (only {distance:.1f}mm)', 'distance_moved': round(distance, 1)}), 500
     else:
         error_msg = dobot_client.last_error or 'Movement failed'
-        logger.error(f"❌ Move command failed: {error_msg}")
+        logger.error(f"âŒ Move command failed: {error_msg}")
         return jsonify({'success': False, 'error': error_msg}), 500
 
 @app.route('/api/dobot/pose', methods=['GET'])
@@ -1338,11 +1338,11 @@ def dobot_suction():
     enable = data.get('enable', False)
     
     try:
-        logger.info(f"💨 Suction cup: {'ON' if enable else 'OFF'}")
+        logger.info(f"ðŸ’¨ Suction cup: {'ON' if enable else 'OFF'}")
         dobot_client.set_suction(enable)
         return jsonify({'success': True, 'enabled': enable})
     except Exception as e:
-        logger.error(f"❌ Suction control failed: {e}")
+        logger.error(f"âŒ Suction control failed: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/dobot/gripper', methods=['POST'])
@@ -1357,23 +1357,23 @@ def dobot_gripper():
     try:
         # Check if gripper control method exists
         if hasattr(dobot_client, 'set_gripper'):
-            logger.info(f"✋ Gripper: {'OPEN' if open_gripper else 'CLOSE'}")
+            logger.info(f"âœ‹ Gripper: {'OPEN' if open_gripper else 'CLOSE'}")
             dobot_client.set_gripper(open_gripper)
             return jsonify({'success': True, 'open': open_gripper})
         else:
-            logger.warning("⚠️ Gripper not available on this Dobot model")
+            logger.warning("âš ï¸ Gripper not available on this Dobot model")
             return jsonify({
                 'success': False,
                 'message': 'Gripper not available. This Dobot model only has suction cup.'
             })
     except Exception as e:
-        logger.error(f"❌ Gripper control failed: {e}")
+        logger.error(f"âŒ Gripper control failed: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/emergency-stop', methods=['POST'])
 def emergency_stop():
     """Emergency stop - stop both Dobot and signal PLC"""
-    logger.error("🛑 EMERGENCY STOP TRIGGERED")
+    logger.error("ðŸ›‘ EMERGENCY STOP TRIGGERED")
 
     results = {}
 
@@ -1414,7 +1414,7 @@ def dobot_test():
 
     try:
         # Step 1: Get current position
-        logger.info("🧪 Test Step 1: Getting current position...")
+        logger.info("ðŸ§ª Test Step 1: Getting current position...")
         pos = dobot_client.get_pose()
         results.append({
             'step': 1,
@@ -1425,7 +1425,7 @@ def dobot_test():
         time.sleep(0.5)
 
         # Step 2: Move to home position
-        logger.info("🧪 Test Step 2: Moving to HOME position...")
+        logger.info("ðŸ§ª Test Step 2: Moving to HOME position...")
         if dobot_client.home(wait=True):
             results.append({
                 'step': 2,
@@ -1439,7 +1439,7 @@ def dobot_test():
         time.sleep(1)
 
         # Step 3: Verify home position
-        logger.info("🧪 Test Step 3: Verifying position...")
+        logger.info("ðŸ§ª Test Step 3: Verifying position...")
         pos = dobot_client.get_pose()
         results.append({
             'step': 3,
@@ -1450,7 +1450,7 @@ def dobot_test():
         time.sleep(0.5)
 
         # Step 4: Small movement test (20mm forward)
-        logger.info("🧪 Test Step 4: Small movement test...")
+        logger.info("ðŸ§ª Test Step 4: Small movement test...")
         home = dobot_client.HOME_POSITION
         if dobot_client.move_to(home['x'] + 20, home['y'], home['z'], home['r'], wait=True):
             results.append({
@@ -1462,7 +1462,7 @@ def dobot_test():
             time.sleep(1)
             
             # Move back
-            logger.info("🧪 Test Step 4b: Moving back...")
+            logger.info("ðŸ§ª Test Step 4b: Moving back...")
             dobot_client.home(wait=True)
             time.sleep(0.5)
         else:
@@ -1470,7 +1470,7 @@ def dobot_test():
             success = False
 
         # Step 5: Suction test
-        logger.info("🧪 Test Step 5: Testing suction cup...")
+        logger.info("ðŸ§ª Test Step 5: Testing suction cup...")
         try:
             dobot_client.set_suction(True)
             time.sleep(2)
@@ -1485,7 +1485,7 @@ def dobot_test():
             results.append({'step': 5, 'name': 'Suction Cup Test', 'success': False, 'message': str(e)})
             success = False
 
-        logger.info("✅ Dobot test sequence completed!")
+        logger.info("âœ… Dobot test sequence completed!")
         return jsonify({
             'success': success,
             'steps': results,
@@ -1493,7 +1493,7 @@ def dobot_test():
         })
 
     except Exception as e:
-        logger.error(f"❌ Test failed: {e}")
+        logger.error(f"âŒ Test failed: {e}")
         return jsonify({
             'success': False,
             'steps': results,
@@ -1586,7 +1586,7 @@ def update_settings():
         # Save to file
         save_config(current_config)
         
-        logger.info("⚙️ Settings updated - restart required to apply changes")
+        logger.info("âš™ï¸ Settings updated - restart required to apply changes")
         return jsonify({
             'success': True,
             'message': 'Settings saved. Restart server to apply changes.'
@@ -1599,14 +1599,14 @@ def update_settings():
 def restart_server():
     """Restart the server"""
     try:
-        logger.info("🔄 Server restart requested")
+        logger.info("ðŸ”„ Server restart requested")
         
         # Try PM2 restart first (if running under PM2)
         try:
             result = subprocess.run(['pm2', 'restart', 'pwa-dobot-plc'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                logger.info("✅ PM2 restart successful")
+                logger.info("âœ… PM2 restart successful")
                 return jsonify({
                     'success': True,
                     'message': 'Server restarting via PM2...'
@@ -1619,7 +1619,7 @@ def restart_server():
             result = subprocess.run(['sudo', 'systemctl', 'restart', 'pwa-dobot-plc'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                logger.info("✅ Systemctl restart successful")
+                logger.info("âœ… Systemctl restart successful")
                 return jsonify({
                     'success': True,
                     'message': 'Server restarting via systemctl...'
@@ -1628,7 +1628,7 @@ def restart_server():
             pass
         
         # Last resort: exit the process (will be restarted by supervisor/PM2)
-        logger.info("⚠️ No restart method available, exiting process")
+        logger.info("âš ï¸ No restart method available, exiting process")
         threading.Timer(2.0, lambda: sys.exit(0)).start()
         return jsonify({
             'success': True,
@@ -1695,7 +1695,7 @@ def process_vision_handshake():
     4. Writes results to PLC including color code
     5. Sets Completed flag when done
     """
-    global vision_handshake_processing
+    global vision_handshake_processing, latest_annotated_image
 
     if camera_service is None:
         logger.warning("Camera service not available for handshake processing")
@@ -1703,15 +1703,15 @@ def process_vision_handshake():
 
     try:
         vision_handshake_processing = True
-        logger.info("🔄 Vision handshake: Starting processing (Start command received)")
-        logger.info("🔄 Vision handshake: Step 1 - Setting Busy flag")
+        logger.info("ðŸ”„ Vision handshake: Starting processing (Start command received)")
+        logger.info("ðŸ”„ Vision handshake: Step 1 - Setting Busy flag")
 
         # Set busy flag
         write_vision_to_plc(0, 0, True, False, busy=True, completed=False, color_code=0)
-        logger.info("🔄 Vision handshake: Step 2 - Busy flag set, starting color detection")
+        logger.info("ðŸ”„ Vision handshake: Step 2 - Busy flag set, starting color detection")
 
         # Use majority voting to detect cube color (10 snapshots)
-        logger.info("🔄 Vision handshake: Step 3 - Running majority voting detection (10 frames)")
+        logger.info("ðŸ”„ Vision handshake: Step 3 - Running majority voting detection (10 frames)")
         voting_result = camera_service.detect_cube_color_with_voting(
             num_samples=10,
             delay_ms=50,
@@ -1719,12 +1719,16 @@ def process_vision_handshake():
             max_area=50000
         )
 
+        # Publish the PLC-triggered 10-vote annotated frame for frontend viewers
+        if voting_result.get('annotated_image'):
+            latest_annotated_image = voting_result['annotated_image']
+
         detected_color = voting_result.get('color')
         color_code = voting_result.get('color_code', 0)
         confidence = voting_result.get('confidence', 0)
         vote_counts = voting_result.get('vote_counts', {})
 
-        logger.info(f"🔄 Vision handshake: Step 4 - Voting complete")
+        logger.info(f"ðŸ”„ Vision handshake: Step 4 - Voting complete")
         logger.info(f"   Detected color: {detected_color}")
         logger.info(f"   Color code: {color_code} (1=yellow, 2=white, 3=metal)")
         logger.info(f"   Confidence: {confidence}%")
@@ -1733,10 +1737,10 @@ def process_vision_handshake():
         # Determine if we successfully detected a cube
         if detected_color is not None:
             object_count = 1
-            logger.info(f"✅ Successfully detected {detected_color} cube with {confidence}% confidence")
+            logger.info(f"âœ… Successfully detected {detected_color} cube with {confidence}% confidence")
         else:
             object_count = 0
-            logger.info("⚠️ No cube detected in majority voting")
+            logger.info("âš ï¸ No cube detected in majority voting")
 
         # For now, we're not doing defect detection - focus on color only
         defect_count = 0
@@ -1754,7 +1758,7 @@ def process_vision_handshake():
             color_code=color_code
         )
 
-        logger.info(f"✅ Vision handshake: Completed - {object_count} objects, color_code={color_code} ({detected_color}), confidence={confidence}%")
+        logger.info(f"âœ… Vision handshake: Completed - {object_count} objects, color_code={color_code} ({detected_color}), confidence={confidence}%")
         return True
         
     except Exception as e:
@@ -1772,7 +1776,7 @@ def poll_loop():
     """
     global vision_handshake_last_start_state, vision_handshake_processing, plc_cache
 
-    logger.info("🔄 Unified PLC polling loop started (1 second intervals)")
+    logger.info("ðŸ”„ Unified PLC polling loop started (1 second intervals)")
 
     while True:
         cycle_start = time.time()
@@ -1837,7 +1841,7 @@ def poll_loop():
                     # Final check: verify this write is not to a read-only tag
                     is_allowed, reason = check_write_permission(write_op['db'], write_op['offset'], len(write_op['data']))
                     if not is_allowed:
-                        logger.error(f"❌ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
+                        logger.error(f"âŒ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
                         continue  # Skip this write
                     
                     # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
@@ -1845,7 +1849,7 @@ def poll_loop():
                     
                     # Execute the write
                     plc_client.client.db_write(write_op['db'], write_op['offset'], write_op['data'])
-                    logger.debug(f"✍️ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
+                    logger.debug(f"âœï¸ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
                 except Exception as e:
                     logger.error(f"PLC write error DB{write_op['db']}.{write_op['offset']}: {e}")
 
@@ -1856,17 +1860,12 @@ def poll_loop():
 
             # Log state changes
             if start_bit != vision_handshake_last_start_state:
-                logger.info(f"🔄 Start bit changed: {vision_handshake_last_start_state} -> {start_bit}")
+                logger.info(f"ðŸ”„ Start bit changed: {vision_handshake_last_start_state} -> {start_bit}")
                 vision_handshake_last_start_state = start_bit
 
-                if start_bit:
-                    # Start is TRUE - trigger vision processing
-                    if not vision_handshake_processing:
-                        logger.info("📸 Start bit TRUE - triggering vision processing")
-                        threading.Thread(target=process_vision_handshake, daemon=True).start()
-                else:
+                if not start_bit:
                     # Start is FALSE - reset (queue write instead of direct write)
-                    logger.info("📸 Start bit FALSE - resetting vision")
+                    logger.info("ðŸ“¸ Start bit FALSE - resetting vision")
                     # Queue the reset writes for next cycle
                     # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
                     reset_byte40 = bytearray(1)
@@ -1890,6 +1889,14 @@ def poll_loop():
                     defect_number_reset = bytearray(2)
                     snap7.util.set_int(defect_number_reset, 0, 0)
                     queue_plc_write(123, 44, defect_number_reset)
+
+
+            # LEVEL-TRIGGERED behavior:
+            # While Start bit remains TRUE, keep running 10-vote analysis cycles.
+            # A new cycle starts only when the previous cycle has completed.
+            if start_bit and not vision_handshake_processing:
+                logger.info("📸 Start bit TRUE - triggering 10-vote vision processing cycle")
+                threading.Thread(target=process_vision_handshake, daemon=True).start()
 
         except Exception as e:
             logger.error(f"Polling error: {e}")
@@ -2404,7 +2411,7 @@ def vision_analyze():
             
             if central_counter:
                 # Only process the most central counter
-                logger.info(f"🎯 Processing most central counter (out of {len(detected_objects)} detected)")
+                logger.info(f"ðŸŽ¯ Processing most central counter (out of {len(detected_objects)} detected)")
                 
                 # Load existing counter positions (from JSON file and saved images)
                 existing_counters = load_existing_counter_positions()
@@ -2645,7 +2652,7 @@ def vision_detect():
 @app.route('/api/vision/process-manual', methods=['POST'])
 def vision_process_manual():
     """Manually trigger vision processing"""
-    logger.info("📸 Manual vision processing triggered via API")
+    logger.info("ðŸ“¸ Manual vision processing triggered via API")
 
     # Run the handshake process in a background thread to avoid blocking the API response
     threading.Thread(target=process_vision_handshake, daemon=True).start()
@@ -2670,7 +2677,7 @@ def test_color_voting():
         min_area = data.get('min_area', 500)
         max_area = data.get('max_area', 50000)
 
-        logger.info(f"🧪 Testing color voting with {num_samples} samples")
+        logger.info(f"ðŸ§ª Testing color voting with {num_samples} samples")
 
         # Run majority voting detection
         result = camera_service.detect_cube_color_with_voting(
@@ -3270,7 +3277,7 @@ _IO_LINK_HISTORY_MAX = 120
 
 
 def _parse_supervision_number(val, default=0):
-    """Parse supervision value to number. E.g. '251mA'->251, '23758mV'->23.758, '39°C'->39"""
+    """Parse supervision value to number. E.g. '251mA'->251, '23758mV'->23.758, '39Â°C'->39"""
     if val is None or val == '':
         return default
     s = str(val).strip()
@@ -3279,7 +3286,7 @@ def _parse_supervision_number(val, default=0):
         num = float(m.group(1))
         if 'mV' in s.lower():
             return round(num / 1000, 2)
-        if 'mA' in s.lower() or '°c' in s.lower() or 'c' in s.lower():
+        if 'mA' in s.lower() or 'Â°c' in s.lower() or 'c' in s.lower():
             return num
         return num
     try:
@@ -3890,24 +3897,24 @@ if __name__ == '__main__':
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
         plc_ip = plc_client.ip if hasattr(plc_client, 'ip') else 'unknown'
-        logger.info(f"🔌 Attempting to connect to PLC at {plc_ip}...")
+        logger.info(f"ðŸ”Œ Attempting to connect to PLC at {plc_ip}...")
         plc_connected = plc_client.connect()
         if plc_connected:
-            logger.info(f"✅ PLC connected successfully to {plc_ip}")
+            logger.info(f"âœ… PLC connected successfully to {plc_ip}")
         else:
-            logger.warning(f"⚠️ PLC connection failed: {plc_client.last_error}")
-            logger.info("💡 PLC will retry connection automatically, or use /api/plc/connect endpoint")
+            logger.warning(f"âš ï¸ PLC connection failed: {plc_client.last_error}")
+            logger.info("ðŸ’¡ PLC will retry connection automatically, or use /api/plc/connect endpoint")
     else:
         logger.info("PLC client not initialized - PLC features disabled")
 
     # Auto-connect to Dobot
-    logger.info("🤖 Attempting to connect to Dobot robot...")
+    logger.info("ðŸ¤– Attempting to connect to Dobot robot...")
     dobot_connected = dobot_client.connect()
     if dobot_connected:
-        logger.info("✅ Dobot connected successfully")
+        logger.info("âœ… Dobot connected successfully")
     else:
-        logger.error(f"❌ Dobot connection failed: {dobot_client.last_error}")
-        logger.error("💡 Check the debug logs above for detailed troubleshooting steps")
+        logger.error(f"âŒ Dobot connection failed: {dobot_client.last_error}")
+        logger.error("ðŸ’¡ Check the debug logs above for detailed troubleshooting steps")
 
     # Start lightweight polling for start command (camera control only)
     # This is separate from the main polling loop to avoid lock contention
@@ -3934,7 +3941,7 @@ if __name__ == '__main__':
     if os.path.exists(cert_path) and os.path.exists(key_path):
         # Werkzeug run_simple expects ssl_context as (cert_path, key_path) tuple
         run_kwargs['ssl_context'] = (cert_path, key_path)
-        logger.info(f"🔒 HTTPS enabled (cert: {cert_path})")
+        logger.info(f"ðŸ”’ HTTPS enabled (cert: {cert_path})")
         logger.info(f"   Camera stream: https://<pi-ip>:{port}/api/camera/stream")
     else:
         logger.info("HTTP only (no SSL certs - run deploy/generate_ssl_cert.sh for HTTPS)")

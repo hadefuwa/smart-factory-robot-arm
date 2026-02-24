@@ -798,6 +798,8 @@
  
  const API_BASE = window.location.origin;
  console.log('Vision System v1.1 - API_BASE:', API_BASE);
+ // Legacy page analysis is intentionally disabled; use vision-system-new.html for active runtime behavior.
+ const LEGACY_ANALYSIS_DISABLED = true;
  let cameraConnected = false;
  let streamInterval = null;
  let autoAnalyzeInterval = null;
@@ -891,7 +893,7 @@
  if (cameraConnected && !objectDetectionActive) {
  const continuousCheckbox = document.getElementById('continuousObjectDetection');
  if (continuousCheckbox) continuousCheckbox.checked = true;
- startObjectDetection();
+ // startObjectDetection(); // DISABLED (legacy page): auto-analysis moved to vision-system-new.html
  }
  }, 2000);
  });
@@ -907,7 +909,7 @@
  if (!objectDetectionActive) {
  const continuousCheckbox = document.getElementById('continuousObjectDetection');
  if (continuousCheckbox) continuousCheckbox.checked = true;
- startObjectDetection();
+ // startObjectDetection(); // DISABLED (legacy page): auto-analysis moved to vision-system-new.html
  }
  }, 1000);
  } else {
@@ -979,7 +981,7 @@
  if (!objectDetectionActive) {
  const continuousCheckbox = document.getElementById('continuousObjectDetection');
  if (continuousCheckbox) continuousCheckbox.checked = true;
- startObjectDetection();
+ // startObjectDetection(); // DISABLED (legacy page): auto-analysis moved to vision-system-new.html
  }
  }, 1500);
  } else {
@@ -1148,6 +1150,10 @@
  }
 
  async function processFrame() {
+    if (LEGACY_ANALYSIS_DISABLED) {
+        addSerialLog('Legacy page manual processing is disabled. Use Vision System New.', 'warning');
+        return;
+    }
     try {
         addSerialLog('Manually processing frame...', 'camera');
         const response = await fetch(`${API_BASE}/api/vision/process-manual`, { method: 'POST' });
@@ -1174,6 +1180,10 @@
  }
 
  async function startObjectDetection() {
+ if (LEGACY_ANALYSIS_DISABLED) {
+ addSerialLog('Legacy page object detection is disabled. Use Vision System New.', 'warning');
+ return;
+ }
  if (objectDetectionActive) return;
  objectDetectionActive = true;
  const startBtn = document.getElementById('startObjectDetectionBtn');
