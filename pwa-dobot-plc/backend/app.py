@@ -4318,15 +4318,7 @@ if __name__ == '__main__':
     cert_path = os.getenv('SSL_CERT') or os.path.join(backend_dir, 'ssl', 'cert.pem')
     key_path = os.getenv('SSL_KEY') or os.path.join(backend_dir, 'ssl', 'key.pem')
     
-    # Threaded mode is required because MJPEG endpoints keep connections open.
-    # Without this, one stream client can block other HTTP requests.
-    run_kwargs = {
-        'host': '0.0.0.0',
-        'port': port,
-        'debug': False,
-        'allow_unsafe_werkzeug': True,
-        'threaded': True
-    }
+    run_kwargs = {'host': '0.0.0.0', 'port': port, 'debug': False, 'allow_unsafe_werkzeug': True}
     if os.path.exists(cert_path) and os.path.exists(key_path):
         # Werkzeug run_simple expects ssl_context as (cert_path, key_path) tuple
         run_kwargs['ssl_context'] = (cert_path, key_path)
