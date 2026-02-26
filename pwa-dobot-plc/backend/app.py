@@ -4318,7 +4318,7 @@ if __name__ == '__main__':
     cert_path = os.getenv('SSL_CERT') or os.path.join(backend_dir, 'ssl', 'cert.pem')
     key_path = os.getenv('SSL_KEY') or os.path.join(backend_dir, 'ssl', 'key.pem')
     
-    run_kwargs = {'host': '0.0.0.0', 'port': port, 'debug': False, 'allow_unsafe_werkzeug': True}
+    run_kwargs = {'host': '0.0.0.0', 'port': port, 'debug': False}
     if os.path.exists(cert_path) and os.path.exists(key_path):
         # Werkzeug run_simple expects ssl_context as (cert_path, key_path) tuple
         run_kwargs['ssl_context'] = (cert_path, key_path)
@@ -4328,4 +4328,6 @@ if __name__ == '__main__':
         logger.info("HTTP only (no SSL certs - run deploy/generate_ssl_cert.sh for HTTPS)")
     
     logger.info(f"Starting server on port {port}")
-    socketio.run(app, **run_kwargs)
+    # Serve with Flask threaded WSGI for robust HTTP handling of long-lived MJPEG streams.
+    # Socket.IO endpoints remain defined but are not used for transport in this mode.
+    app.run(threaded=True, **run_kwargs)
