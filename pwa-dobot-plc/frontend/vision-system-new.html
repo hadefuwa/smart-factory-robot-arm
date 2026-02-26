@@ -538,15 +538,7 @@
       const cameraFrame = document.getElementById('cameraFrame');
       if (!cameraFrame || cameraFrame.style.display === 'none') return;
 
-      if (currentCropSettings?.enabled && !isDrawingCropArea) {
-        drawCropOverlay(
-          currentCropSettings.x,
-          currentCropSettings.y,
-          currentCropSettings.width,
-          currentCropSettings.height
-        );
-      }
-
+      // Only redraw ROI (detection area). Crop overlay is disabled.
       if (currentRoiSettings?.enabled && !isDrawingRoi) {
         drawRoiOverlay(
           currentRoiSettings.x,
@@ -1422,21 +1414,26 @@
     let cropDrawCurrentY = 0;
     let currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
 
-    // Load existing crop settings
+    // Load existing crop settings (now only to ensure cropping is OFF)
     async function loadCropSettings() {
       try {
         const response = await fetch(`${API_BASE}/api/camera/crop`);
         if (response.ok) {
           const crop = await response.json();
-          currentCropSettings = crop;
-          if (crop.enabled) {
-            showCropInfo();
-            drawCropOverlay(crop.x, crop.y, crop.width, crop.height);
-          }
-          console.log('Crop settings loaded:', crop);
+          // Force crop disabled so the backend sends the full frame
+          currentCropSettings = {
+            enabled: false,
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100
+          };
+          // Save disabled crop back to backend
+          await applyCropSettings();
+          console.log('Crop disabled (full frame used instead). Previous settings were:', crop);
         }
       } catch (error) {
-        console.error('Error loading crop settings:', error);
+        console.error('Error loading/disabling crop settings:', error);
       }
     }
 
@@ -1912,8 +1909,7 @@
 
         if (response.ok) {
           console.log('Crop settings saved:', currentCropSettings);
-          showCropInfo();
-          drawCropOverlay(currentCropSettings.x, currentCropSettings.y, currentCropSettings.width, currentCropSettings.height);
+          // Do not draw crop overlay anymore; just refresh camera frame
           updateCameraFrame();
         } else {
           const error = await response.json();
