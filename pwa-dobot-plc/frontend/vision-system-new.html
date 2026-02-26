@@ -817,7 +817,7 @@
         console.log(`🔍 Fetching camera frame at ${new Date().toLocaleTimeString()}`);
         
         const response = await fetch(`${API_BASE}/api/camera/capture?t=${timestamp}`, {
-          signal: AbortSignal.timeout(10000) // 10 second timeout
+          signal: AbortSignal.timeout(20000) // 20 second timeout for slower clients/networks
         });
         addDebugLog('camera capture response', { status: response.status, ok: response.ok });
         
@@ -849,10 +849,11 @@
           }
         }
       } catch (error) {
-        addDebugLog('camera capture exception', error.message, 'error');
-        // Don't log timeout errors
-        if (!error.message?.includes('timeout') && !error.message?.includes('aborted')) {
-          console.error('🔍 Error fetching camera frame:', error);
+        const message = String(error?.message || '');
+        const isTimeout = error?.name === 'TimeoutError' || /timeout|timed out|aborted/i.test(message);
+        addDebugLog('camera capture exception', message, isTimeout ? 'warn' : 'error');
+        if (!isTimeout) {
+          console.error('Error fetching camera frame:', error);
         }
       } finally {
         isFetchingCamera = false;
@@ -865,7 +866,7 @@
       updateCameraFrame(); // Initial update
       streamInterval = setInterval(() => {
         updateCameraFrame();
-      }, 2000); // Update every 2 seconds
+      }, 3000); // Update every 3 seconds to reduce timeout pressure
     }
 
     // Stop camera stream
