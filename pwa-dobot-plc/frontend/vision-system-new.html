@@ -354,6 +354,16 @@
                     <div style="color: #b0bec5; font-size: 11px; margin-bottom: 12px;">
                       Draw a square on the camera to show the expected cube size. This will automatically set the Min/Max Area values.
                     </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                      <div>
+                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 4px;">Min Area %</label>
+                        <input type="number" id="minAreaScalePercent" min="1" max="500" step="1" value="70" oninput="updateCubeAreaScaleFromInputs()" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #fff;">
+                      </div>
+                      <div>
+                        <label style="display: block; color: #e0e0e0; font-size: 11px; margin-bottom: 4px;">Max Area %</label>
+                        <input type="number" id="maxAreaScalePercent" min="1" max="500" step="1" value="150" oninput="updateCubeAreaScaleFromInputs()" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #fff;">
+                      </div>
+                    </div>
                     <div style="display: flex; gap: 8px; margin-bottom: 12px;">
                       <button class="btn btn-warning" onclick="startDrawingCubeSize()" id="drawCubeSizeBtn" style="flex: 1; font-size: 12px; padding: 8px 16px;">
                         <i class="material-icons" style="font-size: 16px; vertical-align: middle;">edit</i> Draw Expected Cube Size
@@ -367,8 +377,8 @@
                       <div style="color: #e0e0e0; font-size: 11px;">
                         <div>Width: <span id="cubeWidth">0</span>px × Height: <span id="cubeHeight">0</span>px</div>
                         <div>Area: <span id="cubeArea">0</span> pixels²</div>
-                        <div style="margin-top: 6px; color: #ffb74d;">Min Area set to: <span id="calculatedMin">0</span> pixels (70% of drawn size)</div>
-                        <div style="color: #ffb74d;">Max Area set to: <span id="calculatedMax">0</span> pixels (150% of drawn size)</div>
+                        <div style="margin-top: 6px; color: #ffb74d;">Min Area set to: <span id="calculatedMin">0</span> pixels (<span id="calcMinPercent">70</span>% of drawn size)</div>
+                        <div style="color: #ffb74d;">Max Area set to: <span id="calculatedMax">0</span> pixels (<span id="calcMaxPercent">150</span>% of drawn size)</div>
                       </div>
                     </div>
                       <div id="drawInstructions" style="display: none; padding: 12px; background: rgba(33, 150, 243, 0.2); border: 1px solid #64b5f6; border-radius: 4px; color: #64b5f6; font-size: 11px;">
@@ -474,6 +484,88 @@
       min_area: 500,
       max_area: 50000
     };
+    let cubeAreaScaleSaveTimer = null;
+    let cubeAreaScale = {
+      min_percent: 70,
+      max_percent: 150
+    };
+
+    function sanitizeCubeAreaScale(minPercent, maxPercent) {
+      let minVal = Number(minPercent);
+      let maxVal = Number(maxPercent);
+      if (!Number.isFinite(minVal)) minVal = 70;
+      if (!Number.isFinite(maxVal)) maxVal = 150;
+      minVal = Math.max(1, Math.min(500, Math.round(minVal)));
+      maxVal = Math.max(1, Math.min(500, Math.round(maxVal)));
+      if (maxVal < minVal) maxVal = minVal;
+      return { min_percent: minVal, max_percent: maxVal };
+    }
+
+    function reflectCubeAreaScaleUi() {
+      const minInput = document.getElementById('minAreaScalePercent');
+      const maxInput = document.getElementById('maxAreaScalePercent');
+      const minLabel = document.getElementById('calcMinPercent');
+      const maxLabel = document.getElementById('calcMaxPercent');
+      if (minInput) minInput.value = cubeAreaScale.min_percent;
+      if (maxInput) maxInput.value = cubeAreaScale.max_percent;
+      if (minLabel) minLabel.textContent = cubeAreaScale.min_percent;
+      if (maxLabel) maxLabel.textContent = cubeAreaScale.max_percent;
+    }
+
+    function queueSaveCubeAreaScale() {
+      if (cubeAreaScaleSaveTimer) clearTimeout(cubeAreaScaleSaveTimer);
+      cubeAreaScaleSaveTimer = setTimeout(() => {
+        saveCubeAreaScale().catch((error) => addDebugLog('save cube area scale failed', error.message, 'warn'));
+      }, 350);
+    }
+
+    function updateCubeAreaScaleFromInputs() {
+      const minInput = document.getElementById('minAreaScalePercent');
+      const maxInput = document.getElementById('maxAreaScalePercent');
+      cubeAreaScale = sanitizeCubeAreaScale(minInput?.value, maxInput?.value);
+      reflectCubeAreaScaleUi();
+      queueSaveCubeAreaScale();
+    }
+
+    async function saveCubeAreaScale() {
+      const response = await fetch(`${API_BASE}/api/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          camera: {
+            vision_system_new: {
+              cube_area_scale_min_percent: cubeAreaScale.min_percent,
+              cube_area_scale_max_percent: cubeAreaScale.max_percent
+            }
+          }
+        })
+      });
+      if (!response.ok) {
+        const txt = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status} ${txt}`);
+      }
+      addDebugLog('cube area scale saved', cubeAreaScale);
+    }
+
+    async function loadCubeAreaScale() {
+      try {
+        const response = await fetch(`${API_BASE}/api/config?t=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000),
+          cache: 'no-store'
+        });
+        if (!response.ok) return;
+        const cfg = await response.json();
+        const pref = cfg?.camera?.vision_system_new || {};
+        cubeAreaScale = sanitizeCubeAreaScale(
+          pref.cube_area_scale_min_percent,
+          pref.cube_area_scale_max_percent
+        );
+      } catch (error) {
+        addDebugLog('load cube area scale failed', error.message, 'warn');
+      } finally {
+        reflectCubeAreaScaleUi();
+      }
+    }
 
     function addDebugLog(message, details = null, level = 'info') {
       const ts = new Date().toLocaleTimeString();
@@ -2070,9 +2162,9 @@
       // Calculate area
       const area = size * size;
       
-      // Calculate min/max area (70% to 150% of drawn size)
-      const minArea = Math.round(area * 0.7);
-      const maxArea = Math.round(area * 1.5);
+      // Calculate min/max area from configurable percentages.
+      const minArea = Math.round(area * (cubeAreaScale.min_percent / 100));
+      const maxArea = Math.round(area * (cubeAreaScale.max_percent / 100));
       
       // Update the sliders
       document.getElementById('minAreaSlider').value = minArea;
@@ -2085,6 +2177,10 @@
       document.getElementById('cubeArea').textContent = Math.round(area);
       document.getElementById('calculatedMin').textContent = minArea;
       document.getElementById('calculatedMax').textContent = maxArea;
+      const minPctLabel = document.getElementById('calcMinPercent');
+      const maxPctLabel = document.getElementById('calcMaxPercent');
+      if (minPctLabel) minPctLabel.textContent = cubeAreaScale.min_percent;
+      if (maxPctLabel) maxPctLabel.textContent = cubeAreaScale.max_percent;
       document.getElementById('cubeSizeInfo').style.display = 'block';
       
       // Cancel drawing mode
@@ -2198,6 +2294,7 @@
       addDebugLog('page loaded', { apiBase: API_BASE });
 
       // Load saved settings
+      loadCubeAreaScale();
       loadObjectParams();
       loadPagePrefs();
       loadCropSettings(); // Load crop settings on page load
