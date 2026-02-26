@@ -824,11 +824,36 @@ class CameraService:
             # Extract the dominant color from this detection
             objects = result.get('objects', [])
             if objects:
-                # Get the largest object (most likely the cube we care about)
+                # Decide sample color by total area per color instead of single largest contour.
+                # This is more stable when yellow cubes have white-hot glare spots.
+                color_area = {'yellow': 0.0, 'white': 0.0, 'metal': 0.0}
+                for obj in objects:
+                    c = obj.get('color')
+                    if c in color_area:
+                        color_area[c] += float(obj.get('area', 0.0))
+
+                yellow_area = color_area.get('yellow', 0.0)
+                white_area = color_area.get('white', 0.0)
+                metal_area = color_area.get('metal', 0.0)
+
+                if yellow_area > 0 and white_area > 0:
+                    # Bias toward yellow when both appear in same ROI and yellow is significant.
+                    if yellow_area >= (white_area * 0.45):
+                        detected_color = 'yellow'
+                    elif white_area >= (yellow_area * 2.2):
+                        detected_color = 'white'
+                    else:
+                        detected_color = max(color_area.items(), key=lambda kv: kv[1])[0]
+                else:
+                    detected_color = max(color_area.items(), key=lambda kv: kv[1])[0]
+
                 largest_obj = max(objects, key=lambda o: o.get('area', 0))
-                detected_color = largest_obj.get('color')
                 color_votes.append(detected_color)
-                logger.info(f"Sample {i+1}/{num_samples}: Detected {detected_color} (area: {largest_obj.get('area', 0):.0f})")
+                logger.info(
+                    f"Sample {i+1}/{num_samples}: Detected {detected_color} "
+                    f"(areas y={yellow_area:.0f}, w={white_area:.0f}, m={metal_area:.0f}; "
+                    f"largest={largest_obj.get('area', 0):.0f})"
+                )
             else:
                 color_votes.append(None)
                 logger.info(f"Sample {i+1}/{num_samples}: No object detected")
@@ -1034,15 +1059,19 @@ class CameraService:
                 all_objects.extend(objects_yellow)
                 debug_info['yellow'] = {'pixels': yellow_pixels, 'objects': len(objects_yellow)}
 
-            # White cubes - VERY strict to avoid conveyor sides (disable if not working well)
+            # White cubes - strict to avoid overexposed yellow highlights counting as white
             if detect_white:
-                lower_white = np.array([0, 0, 230])  # VERY high brightness required (almost pure white)
-                upper_white = np.array([180, 15, 255])  # Very low saturation (no color tint)
+                lower_white = np.array([0, 0, 238])  # Only near-pure whites
+                upper_white = np.array([180, 12, 255])  # Very low saturation
                 mask_white = cv2.inRange(hsv, lower_white, upper_white)
+                # Exclude tiny specular points that frequently appear on yellow cubes.
+                bright_specular = cv2.inRange(hsv, np.array([0, 0, 248]), np.array([180, 40, 255]))
+                bright_specular = cv2.morphologyEx(bright_specular, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+                mask_white = cv2.bitwise_and(mask_white, cv2.bitwise_not(bright_specular))
                 if roi_mask is not None:
                     mask_white = cv2.bitwise_and(mask_white, roi_mask)
                 white_pixels = np.sum(mask_white > 0)
-                logger.info(f"🔍 White mask: {white_pixels} pixels matched (range: H[0-180], S[0-15], V[230-255])")
+                logger.info(f"🔍 White mask: {white_pixels} pixels matched (range: H[0-180], S[0-12], V[238-255], glare-suppressed)")
                 # Much higher min_area for white to filter out conveyor highlights
                 objects_white = self._find_objects_from_mask(mask_white, max(min_area, 5000), max_area, 'white', debug_info)
                 all_objects.extend(objects_white)
