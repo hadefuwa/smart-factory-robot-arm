@@ -928,9 +928,8 @@ class CameraService:
                         cv2.LINE_AA
                     )
 
-                    # Encode image to base64 with higher quality to reduce artifacting.
-                    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 98]
-                    _, buffer = cv2.imencode('.jpg', final_raw_frame, encode_param)
+                    # Encode as PNG to avoid JPEG artifacts on HMI displays.
+                    _, buffer = cv2.imencode('.png', final_raw_frame)
                     annotated_image_base64 = base64.b64encode(buffer).decode('utf-8')
                     logger.info(f"✅ Created annotated image for {winner} cube")
 
@@ -941,7 +940,8 @@ class CameraService:
             'vote_counts': {str(k): int(v) for k, v in vote_counts.items()},
             'total_samples': int(len(color_votes)),
             'valid_samples': int(len(valid_votes)),
-            'annotated_image': annotated_image_base64
+            'annotated_image': annotated_image_base64,
+            'annotated_image_format': 'png'
         }
 
     def _detect_with_color(self, frame: np.ndarray, params: Dict) -> Dict:

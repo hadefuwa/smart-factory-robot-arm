@@ -170,6 +170,7 @@ dobot_client = None
 camera_service = None
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
+latest_annotated_mime = 'image/jpeg'
 latest_plc_cycle_result = {
     'timestamp': 0.0,
     'running': False,
@@ -1781,7 +1782,7 @@ def process_vision_handshake():
     4. Writes results to PLC including color code
     5. Sets Completed flag when done
     """
-    global vision_handshake_processing, latest_annotated_image, latest_plc_cycle_result
+    global vision_handshake_processing, latest_annotated_image, latest_annotated_mime, latest_plc_cycle_result
 
     if camera_service is None:
         logger.warning("Camera service not available for handshake processing")
@@ -1814,6 +1815,8 @@ def process_vision_handshake():
         # Publish the PLC-triggered 10-vote annotated frame for frontend viewers
         if voting_result.get('annotated_image'):
             latest_annotated_image = voting_result['annotated_image']
+            fmt = str(voting_result.get('annotated_image_format', 'jpeg')).lower()
+            latest_annotated_mime = 'image/png' if fmt == 'png' else 'image/jpeg'
 
         detected_color = voting_result.get('color')
         color_code = voting_result.get('color_code', 0)
@@ -2832,7 +2835,7 @@ def vision_process_manual():
 @app.route('/api/vision/test-color-voting', methods=['POST'])
 def test_color_voting():
     """Test the majority voting color detection system"""
-    global latest_annotated_image
+    global latest_annotated_image, latest_annotated_mime
 
     if camera_service is None:
         return jsonify({'error': 'Camera service not initialized'}), 503
@@ -2858,6 +2861,8 @@ def test_color_voting():
         # Store the annotated image for the stream endpoint
         if result.get('annotated_image'):
             latest_annotated_image = result['annotated_image']
+            fmt = str(result.get('annotated_image_format', 'jpeg')).lower()
+            latest_annotated_mime = 'image/png' if fmt == 'png' else 'image/jpeg'
 
         return jsonify({
             'success': True,
@@ -2870,7 +2875,7 @@ def test_color_voting():
 @app.route('/api/vision/annotated-result')
 def get_annotated_result():
     """Get the latest annotated voting result image"""
-    global latest_annotated_image
+    global latest_annotated_image, latest_annotated_mime
 
     try:
         import base64
@@ -2910,16 +2915,18 @@ def get_annotated_result():
             cv2.line(placeholder, (320, 70), (320, 110), (100, 100, 100), 3)
             cv2.line(placeholder, (300, 100), (340, 100), (100, 100, 100), 3)
 
-            # Encode to JPEG
-            _, buffer = cv2.imencode('.jpg', placeholder)
+            # Encode placeholder as PNG for consistent lossless output
+            _, buffer = cv2.imencode('.png', placeholder)
             image_data = buffer.tobytes()
+            mime_type = 'image/png'
         else:
             # Decode base64 to binary
             image_data = base64.b64decode(latest_annotated_image)
+            mime_type = latest_annotated_mime or 'image/jpeg'
 
-        # Return as JPEG image
+        # Return latest annotated image (PNG/JPEG)
         response = make_response(image_data)
-        response.headers['Content-Type'] = 'image/jpeg'
+        response.headers['Content-Type'] = mime_type
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'

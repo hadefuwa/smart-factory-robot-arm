@@ -1160,8 +1160,9 @@
       if (result.annotated_image) {
         const annotatedImg = document.getElementById('annotatedImage');
         const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
+        const imageFormat = (result.annotated_image_format || 'jpeg').toLowerCase();
 
-        annotatedImg.src = 'data:image/jpeg;base64,' + result.annotated_image;
+        annotatedImg.src = `data:image/${imageFormat};base64,${result.annotated_image}`;
         annotatedImg.style.display = 'block';
         if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
         addDebugLog('final result image rendered', `base64 length ${result.annotated_image.length}`);
