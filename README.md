@@ -11,6 +11,7 @@ A comprehensive smart factory automation system featuring Dobot Magician robot c
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Key Features](#-key-features)
+- [Recent Vision System Work (2026-02-24)](#-recent-vision-system-work-2026-02-24)
 - [Documentation](#-documentation)
 - [Testing](#-testing)
 - [Troubleshooting](#-troubleshooting)
@@ -388,6 +389,98 @@ python3 app.py
 - ✅ **Camera Support** - Multiple MJPEG streams for raw feed, analyzed image, and annotated results
 - ✅ **HTTPS for WinCC** - Self-signed SSL for embedding camera in WinCC Unified HMI (run `deploy/generate_ssl_cert.sh`)
 - ✅ **WinCC HMI Support** - Custom Web Control to view camera streams on Siemens Unified Panels
+
+---
+
+## 🔧 Recent Vision System Work (2026-02-24)
+
+This section documents the latest production changes made to the vision pipeline and UI so the current behavior is clear and repeatable.
+
+### 1. Vision page migration and menu consistency
+
+- `vision-system-new.html` is the active Vision System page.
+- Sidebar links across pages now point to `/vision-system-new.html`.
+- The new page sidebar was aligned with the full standard menu used by other pages (Dashboard, Robot Arm, Vision, RFID, Digital Twin, PLC Diagnostics, IO-Link).
+
+### 2. Live status dashboard rework
+
+The top status area now behaves like a true runtime dashboard with green/red/warn tones and frequent polling:
+
+- PLC Start Bit status
+- Camera status
+- Vision Cycle status (running/last result)
+- System uptime
+- Backend health
+- Cube color PLC bits (DB123.DBX32.0..32.3): yellow, white, steel, alluminium
+
+### 3. PLC-driven continuous analysis logic
+
+Backend behavior was changed from edge-only triggering to level behavior:
+
+- While PLC start bit is `TRUE`, backend repeatedly runs 10-vote color analysis cycles.
+- A new cycle starts only after the previous cycle finishes.
+- Legacy auto-analysis behavior on the old page was disabled to prevent competing loops.
+
+### 4. Results visibility and debug instrumentation
+
+- Added/expanded debug console on the vision page for API/status/error traces.
+- Added backend endpoint for latest PLC-triggered cycle summary: `GET /api/vision/latest-cycle`
+- Final annotated image retrieval hardened using: `GET /api/vision/annotated-result`
+- Frontend now uses latest-cycle + annotated-result flow so Final Result updates reliably.
+
+### 5. Detection ROI and parameter persistence
+
+Persistence across restart was fixed and verified:
+
+- Camera crop (`/api/camera/crop`) persists in `backend/config.json`.
+- Detection ROI (`/api/vision/roi`) persists in `backend/config.json` and is now loaded on backend startup.
+- Quick Test now explicitly sends the active ROI in request payload so detection honors "Expected Cube Position".
+- Min/Max area settings persist in `backend/config.json` under `camera.object_params` and are loaded on page start.
+
+### 6. PLC cube color bit write logic (DB123)
+
+Cube color handoff to PLC now uses one-hot bits in DB123 byte 32:
+
+- `yellow_cube_detected` -> `DB123.DBX32.0`
+- `white_cube_detected` -> `DB123.DBX32.1`
+- `steel_cube_detected` -> `DB123.DBX32.2`
+- `alluminium_cube_detected` -> `DB123.DBX32.3`
+
+Write sequence on detection:
+
+1. Clear bits `32.0..32.3`
+2. Set exactly one bit for detected color
+
+Clear sequence:
+
+- On PLC Completed Command, bits are cleared for next cube.
+
+### 7. PLC mapping conflict fix for byte 32
+
+A tag conflict was discovered and fixed:
+
+- Byte 32 was previously overlapping with a robot status/error mapping in cache logic.
+- Conflict removed by moving that read mapping away from DB123 byte 32 (`error_code` moved to byte 34 in config/cache path), leaving byte 32 dedicated to cube color bits.
+
+### 8. Color bit hold/latch timing
+
+To make PLC/HMI reads reliable, color bits are latched:
+
+- Color bit hold time is currently `3.0s`.
+- Clear requests during hold are deferred until hold expires.
+- This prevents the white/yellow/etc. bit from turning off too quickly to be observed.
+
+### 9. UI simplification
+
+- Removed the separate "Detected Cubes / Analyzed Image" panel from `vision-system-new.html`.
+- Final result rendering remains in the `Final Result` section with live updates.
+
+### 10. Checkpoint tags created
+
+Working checkpoints were tagged in Git:
+
+- `vision-checkpoint-2026-02-24`
+- `vision-checkpoint-2026-02-24-plc-color-latch`
 
 ---
 
