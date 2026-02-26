@@ -174,7 +174,41 @@ class CameraService:
         except Exception as e:
             logger.warning(f"Error reading camera frame: {e}")
             return None
-    
+
+    def read_frame_raw(self) -> Optional[np.ndarray]:
+        """Read a frame from camera without applying crop.
+
+        Used when we need highest available output resolution while still
+        allowing detection logic to run on a cropped region.
+        """
+        try:
+            with self.lock:
+                if self.camera is None:
+                    return None
+                if not self.camera.isOpened():
+                    logger.warning("Camera is no longer opened")
+                    return None
+                ret, frame = self.camera.read()
+                if ret and frame is not None:
+                    return frame
+                return None
+        except Exception as e:
+            logger.warning(f"Error reading raw camera frame: {e}")
+            return None
+
+    def _get_crop_bounds(self, frame_width: int, frame_height: int) -> Tuple[int, int, int, int]:
+        """Return pixel crop bounds (x, y, width, height) with clamping."""
+        x_px = int(frame_width * self.crop_x / 100)
+        y_px = int(frame_height * self.crop_y / 100)
+        width_px = int(frame_width * self.crop_width / 100)
+        height_px = int(frame_height * self.crop_height / 100)
+
+        x_px = max(0, min(x_px, frame_width - 1))
+        y_px = max(0, min(y_px, frame_height - 1))
+        width_px = max(1, min(width_px, frame_width - x_px))
+        height_px = max(1, min(height_px, frame_height - y_px))
+        return x_px, y_px, width_px, height_px
+
     def _apply_crop(self, frame: np.ndarray) -> np.ndarray:
         """Apply crop/zoom to frame based on crop settings"""
         if frame is None or frame.size == 0:
@@ -183,17 +217,7 @@ class CameraService:
         try:
             frame_height, frame_width = frame.shape[:2]
             
-            # Calculate crop region in pixels
-            x_px = int(frame_width * self.crop_x / 100)
-            y_px = int(frame_height * self.crop_y / 100)
-            width_px = int(frame_width * self.crop_width / 100)
-            height_px = int(frame_height * self.crop_height / 100)
-            
-            # Ensure crop region is within frame bounds
-            x_px = max(0, min(x_px, frame_width - 1))
-            y_px = max(0, min(y_px, frame_height - 1))
-            width_px = max(1, min(width_px, frame_width - x_px))
-            height_px = max(1, min(height_px, frame_height - y_px))
+            x_px, y_px, width_px, height_px = self._get_crop_bounds(frame_width, frame_height)
             
             # Crop the frame
             cropped = frame[y_px:y_px + height_px, x_px:x_px + width_px]
@@ -786,11 +810,12 @@ class CameraService:
         }
 
         for i in range(num_samples):
-            # Read frame
-            frame = self.read_frame()
-            if frame is None:
+            # Read full raw frame, then apply crop for detection only.
+            raw_frame = self.read_frame_raw()
+            if raw_frame is None:
                 logger.warning(f"Sample {i+1}/{num_samples}: Failed to read frame")
                 continue
+            frame = self._apply_crop(raw_frame) if self.crop_enabled else raw_frame
 
             # Detect color
             result = self._detect_with_color(frame, params)
@@ -837,11 +862,12 @@ class CameraService:
         # Create annotated image showing the detected cube
         annotated_image_base64 = None
         if winner is not None:
-            # Take one final snapshot to annotate
-            final_frame = self.read_frame()
-            if final_frame is not None:
-                # Re-run detection on this frame to get bounding box
-                final_result = self._detect_with_color(final_frame, params)
+            # Take one final raw snapshot for high-resolution annotation.
+            final_raw_frame = self.read_frame_raw()
+            if final_raw_frame is not None:
+                detect_frame = self._apply_crop(final_raw_frame) if self.crop_enabled else final_raw_frame
+                # Re-run detection on detection frame to get bounding box
+                final_result = self._detect_with_color(detect_frame, params)
                 objects = final_result.get('objects', [])
 
                 # Find the object matching the winner color
@@ -856,6 +882,13 @@ class CameraService:
                     w = winning_obj['width']
                     h = winning_obj['height']
 
+                    # If detection ran on cropped frame, map box back to full frame coords.
+                    if self.crop_enabled:
+                        raw_h, raw_w = final_raw_frame.shape[:2]
+                        crop_x, crop_y, _, _ = self._get_crop_bounds(raw_w, raw_h)
+                        x += crop_x
+                        y += crop_y
+
                     # Color map for bounding box
                     color_map = {
                         'yellow': (0, 255, 255),  # BGR: Yellow
@@ -865,7 +898,7 @@ class CameraService:
                     box_color = color_map.get(winner, (0, 255, 0))
 
                     # Draw rectangle
-                    cv2.rectangle(final_frame, (x, y), (x + w, y + h), box_color, 3)
+                    cv2.rectangle(final_raw_frame, (x, y), (x + w, y + h), box_color, 3)
 
                     # Prepare label text
                     label = f"{winner.upper()} CUBE"
@@ -876,7 +909,7 @@ class CameraService:
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
                     )
                     cv2.rectangle(
-                        final_frame,
+                        final_raw_frame,
                         (x, label_bg_y),
                         (x + text_width + 10, label_bg_y + text_height + 10),
                         box_color,
@@ -885,7 +918,7 @@ class CameraService:
 
                     # Draw text label
                     cv2.putText(
-                        final_frame,
+                        final_raw_frame,
                         label,
                         (x + 5, label_bg_y + text_height + 5),
                         cv2.FONT_HERSHEY_SIMPLEX,
@@ -895,8 +928,9 @@ class CameraService:
                         cv2.LINE_AA
                     )
 
-                    # Encode image to base64
-                    _, buffer = cv2.imencode('.jpg', final_frame)
+                    # Encode image to base64 with higher quality to reduce artifacting.
+                    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 98]
+                    _, buffer = cv2.imencode('.jpg', final_raw_frame, encode_param)
                     annotated_image_base64 = base64.b64encode(buffer).decode('utf-8')
                     logger.info(f"✅ Created annotated image for {winner} cube")
 

@@ -899,6 +899,22 @@ def save_config(config):
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
 
+def get_saved_object_params() -> Dict[str, int]:
+    """Get persisted vision-system-new object parameters from config.json."""
+    config = load_config()
+    camera_cfg = config.get('camera', {})
+    saved = camera_cfg.get('object_params', {})
+    min_area = int(saved.get('min_area', 500))
+    max_area = int(saved.get('max_area', 50000))
+    if min_area < 1:
+        min_area = 500
+    if max_area < min_area:
+        max_area = max(min_area, 50000)
+    return {
+        'min_area': min_area,
+        'max_area': max_area
+    }
+
 def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, defect_detected: bool,
                        busy: bool = False, completed: bool = False, color_code: int = 0):
     """Write vision detection results to PLC DB123 tags
@@ -1785,13 +1801,14 @@ def process_vision_handshake():
         write_vision_to_plc(0, 0, True, False, busy=True, completed=False, color_code=0)
         logger.info("ðŸ”„ Vision handshake: Step 2 - Busy flag set, starting color detection")
 
-        # Use majority voting to detect cube color (10 snapshots)
+        # Use majority voting to detect cube color (10 snapshots), using persisted UI params.
+        persisted_params = get_saved_object_params()
         logger.info("ðŸ”„ Vision handshake: Step 3 - Running majority voting detection (10 frames)")
         voting_result = camera_service.detect_cube_color_with_voting(
             num_samples=10,
             delay_ms=50,
-            min_area=500,
-            max_area=50000
+            min_area=persisted_params['min_area'],
+            max_area=persisted_params['max_area']
         )
 
         # Publish the PLC-triggered 10-vote annotated frame for frontend viewers
@@ -2824,8 +2841,9 @@ def test_color_voting():
         data = request.json or {}
         num_samples = data.get('num_samples', 10)
         delay_ms = data.get('delay_ms', 50)
-        min_area = data.get('min_area', 500)
-        max_area = data.get('max_area', 50000)
+        persisted_params = get_saved_object_params()
+        min_area = data.get('min_area', persisted_params['min_area'])
+        max_area = data.get('max_area', persisted_params['max_area'])
 
         logger.info(f"ðŸ§ª Testing color voting with {num_samples} samples")
 
