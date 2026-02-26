@@ -1082,10 +1082,15 @@ class CameraService:
                     mask_yellow = cv2.bitwise_and(mask_yellow, roi_mask)
                 yellow_pixels = np.sum(mask_yellow > 0)
                 logger.info(f"🔍 Yellow mask: {yellow_pixels} pixels matched (range: H[18-35], S[100-255], V[120-255])")
-                # Use higher min_area for yellow to avoid small reflections
-                objects_yellow = self._find_objects_from_mask(mask_yellow, max(min_area, 3000), max_area, 'yellow', debug_info)
+                # Use the configured min/max area directly from UI/config.
+                objects_yellow = self._find_objects_from_mask(mask_yellow, min_area, max_area, 'yellow', debug_info)
                 all_objects.extend(objects_yellow)
-                debug_info['yellow'] = {'pixels': yellow_pixels, 'objects': len(objects_yellow)}
+                debug_info['yellow'] = {
+                    'pixels': yellow_pixels,
+                    'objects': len(objects_yellow),
+                    'effective_min_area': int(min_area),
+                    'effective_max_area': int(max_area)
+                }
 
             # White cubes - strict to avoid overexposed yellow highlights counting as white
             if detect_white:
@@ -1100,10 +1105,15 @@ class CameraService:
                     mask_white = cv2.bitwise_and(mask_white, roi_mask)
                 white_pixels = np.sum(mask_white > 0)
                 logger.info(f"🔍 White mask: {white_pixels} pixels matched (range: H[0-180], S[0-12], V[238-255], glare-suppressed)")
-                # Much higher min_area for white to filter out conveyor highlights
-                objects_white = self._find_objects_from_mask(mask_white, max(min_area, 5000), max_area, 'white', debug_info)
+                # Use the configured min/max area directly from UI/config.
+                objects_white = self._find_objects_from_mask(mask_white, min_area, max_area, 'white', debug_info)
                 all_objects.extend(objects_white)
-                debug_info['white'] = {'pixels': white_pixels, 'objects': len(objects_white)}
+                debug_info['white'] = {
+                    'pixels': white_pixels,
+                    'objects': len(objects_white),
+                    'effective_min_area': int(min_area),
+                    'effective_max_area': int(max_area)
+                }
 
             # Metal/Grey cubes - narrow range to avoid conveyor frame
             if detect_metal:
@@ -1114,10 +1124,15 @@ class CameraService:
                     mask_metal = cv2.bitwise_and(mask_metal, roi_mask)
                 metal_pixels = np.sum(mask_metal > 0)
                 logger.info(f"🔍 Metal mask: {metal_pixels} pixels matched (range: H[0-180], S[0-40], V[80-140])")
-                # Much higher min_area for metal to filter out conveyor frame
-                objects_metal = self._find_objects_from_mask(mask_metal, max(min_area, 4000), max_area, 'metal', debug_info)
+                # Use the configured min/max area directly from UI/config.
+                objects_metal = self._find_objects_from_mask(mask_metal, min_area, max_area, 'metal', debug_info)
                 all_objects.extend(objects_metal)
-                debug_info['metal'] = {'pixels': metal_pixels, 'objects': len(objects_metal)}
+                debug_info['metal'] = {
+                    'pixels': metal_pixels,
+                    'objects': len(objects_metal),
+                    'effective_min_area': int(min_area),
+                    'effective_max_area': int(max_area)
+                }
 
             logger.info(f"🔍 Color filter detected {len(all_objects)} objects (yellow: {len([o for o in all_objects if o.get('color') == 'yellow'])}, white: {len([o for o in all_objects if o.get('color') == 'white'])}, metal: {len([o for o in all_objects if o.get('color') == 'metal'])})")
             
