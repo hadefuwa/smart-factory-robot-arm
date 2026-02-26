@@ -478,6 +478,7 @@
     let pagePrefsSaveTimer = null;
     let lastCycleTimestampSeen = 0;
     let lastAnnotatedRefreshMs = 0;
+    let lastAnnotatedRefreshWhileStartMs = 0;
     const debugLogEntries = [];
 
     let objectParams = {
@@ -737,6 +738,15 @@
           `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`,
           plcStartOn ? 'good' : 'warn'
         );
+
+        // Keep Final Result moving while Start bit is continuously TRUE.
+        if (plcStartOn) {
+          const now = Date.now();
+          if (now - lastAnnotatedRefreshWhileStartMs >= 2500) {
+            refreshAnnotatedResultImage('plc-start-true');
+            lastAnnotatedRefreshWhileStartMs = now;
+          }
+        }
       } else {
         setLiveStatus('statusPlcStartCard', 'statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit', 'bad');
       }
