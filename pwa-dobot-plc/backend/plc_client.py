@@ -595,10 +595,18 @@ class PLCClient:
             logger.error(self.last_error)
             return False
 
-    def read_vision_tags(self, db_number: int = 123, start_byte: int = 26, start_bit: int = 0) -> Dict[str, Any]:
+    def read_vision_tags(
+        self,
+        db_number: int = 123,
+        start_byte: int = 26,
+        start_bit: int = 0,
+        connected_byte: int = 26,
+        connected_bit: int = 1
+    ) -> Dict[str, Any]:
         """Read all vision system tags from DB123 (ultra-simple version)
         
-        start_byte, start_bit: configurable address for the PLC start bit (default DB123.DBX26.0).
+        start_byte/start_bit: configurable address for the PLC start bit.
+        connected_byte/connected_bit: configurable address for the connected bit.
         Returns cached values immediately if lock is busy or PLC not ready.
         No timeouts, no waiting - just return what we have.
         """
@@ -646,6 +654,7 @@ class PLCClient:
                 # Read other flags from byte 40 (1 byte) + padding + INT values
                 # Read from offset 40, 6 bytes total
                 all_data = self.client.db_read(db_number, 40, 6)
+                connected_byte_data = self.client.db_read(db_number, connected_byte, 1)
                 
                 # Extract bool flags from byte 0
                 bool_data = all_data[0:1]
@@ -656,7 +665,7 @@ class PLCClient:
                 
                 result = {
                     'start': start_command,                      # 36.0
-                    'connected': get_bool(bool_data, 0, 1),     # 40.1
+                    'connected': get_bool(connected_byte_data, 0, connected_bit),
                     'busy': get_bool(bool_data, 0, 2),          # 40.2
                     'completed': get_bool(bool_data, 0, 3),     # 40.3
                     'object_detected': get_bool(bool_data, 0, 4),  # 40.4
@@ -681,7 +690,12 @@ class PLCClient:
                     logger.debug(f"Could not read cube color bits from DB{db_number}.DBX32.0-32.3: {color_err}")
                 
                 # Log what we read for debugging
-                logger.info(f"📡 Read vision tags from DB{db_number}: start={start_command} (DBX{start_byte}.{start_bit}), connected={result['connected']}, busy={result['busy']}, completed={result['completed']}")
+                logger.info(
+                    f"📡 Read vision tags from DB{db_number}: "
+                    f"start={start_command} (DBX{start_byte}.{start_bit}), "
+                    f"connected={result['connected']} (DBX{connected_byte}.{connected_bit}), "
+                    f"busy={result['busy']}, completed={result['completed']}"
+                )
                 
                 # Update cache
                 self.cached_vision_tags = result.copy()

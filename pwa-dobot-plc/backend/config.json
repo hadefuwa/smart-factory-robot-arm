@@ -93,7 +93,7 @@
           "bit": 0
         },
         "connected": {
-          "byte": 40,
+          "byte": 26,
           "bit": 1
         },
         "busy": {

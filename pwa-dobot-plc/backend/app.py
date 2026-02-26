@@ -261,6 +261,15 @@ def get_start_bit_config():
     bit_val = start.get('bit', 0)
     return (byte_val, bit_val)
 
+def get_connected_bit_config():
+    """Get PLC connected bit byte and bit from config."""
+    config = load_config()
+    tags = config.get('plc', {}).get('db123', {}).get('tags', {})
+    connected = tags.get('connected', {})
+    byte_val = connected.get('byte', 26)
+    bit_val = connected.get('bit', 1)
+    return (byte_val, bit_val)
+
 def get_read_only_tags() -> List[Dict[str, Any]]:
     """Get a list of all read-only tags in a readable format
     
@@ -349,6 +358,8 @@ def check_write_permission(db_number: int, offset: int, data_length: int = 1) ->
 vision_handshake_processing = False
 vision_handshake_last_start_state = False
 vision_last_completed_command_state = False
+camera_connected_last_written_state = None
+camera_connected_last_written_address = None
 cube_color_hold_seconds = 3.0
 cube_color_latched_until = 0.0
 cube_color_pending_clear = False
@@ -419,9 +430,34 @@ def queue_plc_write(db_number: int, offset: int, data: bytearray):
         plc_write_queue.append({
             'db': db_number,
             'offset': offset,
-            'data': data
+            'data': data,
+            'type': 'bytes'
         })
         logger.debug(f"Queued PLC write: DB{db_number}.{offset} ({len(data)} bytes)")
+    return True
+
+def queue_plc_bit_write(db_number: int, offset: int, bit: int, value: bool):
+    """Queue a single-bit PLC write (applied as read-modify-write in poll loop)."""
+    global plc_write_queue, plc_write_lock
+
+    if bit < 0 or bit > 7:
+        logger.warning(f"Invalid bit offset for queued bit write: DB{db_number}.DBX{offset}.{bit}")
+        return False
+
+    if is_tag_read_only(db_number, offset, bit):
+        logger.warning(f"⚠️ Attempted to write to read-only bit: DB{db_number}.DBX{offset}.{bit}")
+        logger.warning("⚠️ Bit write operation blocked to protect read-only tag")
+        return False
+
+    with plc_write_lock:
+        plc_write_queue.append({
+            'db': db_number,
+            'offset': offset,
+            'bit': bit,
+            'value': bool(value),
+            'type': 'bit'
+        })
+        logger.debug(f"Queued PLC bit write: DB{db_number}.DBX{offset}.{bit}={bool(value)}")
     return True
 
 def call_vision_service(frame: np.ndarray, params: Dict) -> Dict:
@@ -945,11 +981,11 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
 
         db_number = db123_config.get('db_number', 123)
 
-        # Prepare byte 40 with all bool flags
-        # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
+        # Prepare byte 40 with fixed vision bool flags.
+        # Connected bit is now configurable and written separately below.
         byte40_data = bytearray(1)
         snap7.util.set_bool(byte40_data, 0, 0, False)              # Bit 0 unused in byte 40 now
-        snap7.util.set_bool(byte40_data, 0, 1, True)              # Connected = True
+        snap7.util.set_bool(byte40_data, 0, 1, False)             # Connected handled by configurable bit writer
         snap7.util.set_bool(byte40_data, 0, 2, busy)              # Busy
         snap7.util.set_bool(byte40_data, 0, 3, completed)         # Completed
         snap7.util.set_bool(byte40_data, 0, 4, object_count > 0)  # Object_Detected
@@ -968,6 +1004,15 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
         queue_plc_write(db_number, 40, byte40_data)           # Bool flags
         queue_plc_write(db_number, 42, object_number_data)    # Object_Number
         queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number
+        connected_byte, connected_bit = get_connected_bit_config()
+        camera_connected = False
+        if camera_service is not None:
+            try:
+                with camera_service.lock:
+                    camera_connected = camera_service.camera is not None and camera_service.camera.isOpened()
+            except Exception:
+                camera_connected = False
+        queue_plc_bit_write(db_number, connected_byte, connected_bit, camera_connected)
         queue_cube_color_bits(color_code)                     # DB123.DBX32.0-32.3 one-hot color bits
 
         logger.debug(f"Queued vision writes: busy={busy}, completed={completed}, objects={object_count}, defects={defect_count}, color={color_code} (DBX32 bits)")
@@ -1893,6 +1938,7 @@ def poll_loop():
     """
     global vision_handshake_last_start_state, vision_handshake_processing, vision_last_completed_command_state
     global cube_color_latched_until, cube_color_pending_clear, plc_cache
+    global camera_connected_last_written_state, camera_connected_last_written_address
 
     logger.info("ðŸ”„ Unified PLC polling loop started (1 second intervals)")
 
@@ -1949,6 +1995,24 @@ def poll_loop():
 
             plc_cache['last_update'] = time.time()
 
+            # Keep PLC camera connected bit in sync with actual camera connection state.
+            connected_byte, connected_bit = get_connected_bit_config()
+            camera_connected = False
+            if camera_service is not None:
+                try:
+                    with camera_service.lock:
+                        camera_connected = camera_service.camera is not None and camera_service.camera.isOpened()
+                except Exception:
+                    camera_connected = False
+            connected_address = (123, connected_byte, connected_bit)
+            if (camera_connected_last_written_state is None
+                or camera_connected_last_written_state != camera_connected
+                or camera_connected_last_written_address != connected_address):
+                if queue_plc_bit_write(123, connected_byte, connected_bit, camera_connected):
+                    camera_connected_last_written_state = camera_connected
+                    camera_connected_last_written_address = connected_address
+                    logger.info(f"📡 Camera connected bit synced -> DB123.DBX{connected_byte}.{connected_bit}={camera_connected}")
+
             # ==================================================
             # EXECUTE QUEUED WRITES (after reads to avoid conflicts)
             # ==================================================
@@ -1958,18 +2022,31 @@ def poll_loop():
 
             for write_op in writes_to_process:
                 try:
-                    # Final check: verify this write is not to a read-only tag
-                    is_allowed, reason = check_write_permission(write_op['db'], write_op['offset'], len(write_op['data']))
-                    if not is_allowed:
-                        logger.error(f"âŒ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
-                        continue  # Skip this write
-                    
-                    # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
-                    # Byte 40 no longer contains the start bit, so no special preservation needed
-                    
-                    # Execute the write
-                    plc_client.client.db_write(write_op['db'], write_op['offset'], write_op['data'])
-                    logger.debug(f"âœï¸ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
+                    op_type = write_op.get('type', 'bytes')
+                    if op_type == 'bit':
+                        bit = int(write_op.get('bit', -1))
+                        value = bool(write_op.get('value', False))
+                        if bit < 0 or bit > 7:
+                            logger.error(f"❌ Invalid queued bit write: DB{write_op['db']}.DBX{write_op['offset']}.{bit}")
+                            continue
+                        if is_tag_read_only(write_op['db'], write_op['offset'], bit):
+                            logger.error(f"❌ BLOCKED write to read-only bit: DB{write_op['db']}.DBX{write_op['offset']}.{bit}")
+                            continue
+                        current_data = plc_client.client.db_read(write_op['db'], write_op['offset'], 1)
+                        merged = bytearray(current_data)
+                        snap7.util.set_bool(merged, 0, bit, value)
+                        plc_client.client.db_write(write_op['db'], write_op['offset'], merged)
+                        logger.debug(f"✍️ Executed PLC bit write: DB{write_op['db']}.DBX{write_op['offset']}.{bit}={value}")
+                    else:
+                        # Final check: verify this write is not to a read-only tag
+                        is_allowed, reason = check_write_permission(write_op['db'], write_op['offset'], len(write_op['data']))
+                        if not is_allowed:
+                            logger.error(f"âŒ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
+                            continue  # Skip this write
+
+                        # Execute the write
+                        plc_client.client.db_write(write_op['db'], write_op['offset'], write_op['data'])
+                        logger.debug(f"âœï¸ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
                 except Exception as e:
                     logger.error(f"PLC write error DB{write_op['db']}.{write_op['offset']}: {e}")
 
@@ -2002,7 +2079,7 @@ def poll_loop():
                     # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
                     reset_byte40 = bytearray(1)
                     snap7.util.set_bool(reset_byte40, 0, 0, False)      # Bit 0 unused in byte 40 now
-                    snap7.util.set_bool(reset_byte40, 0, 1, True)       # Connected = True
+                    snap7.util.set_bool(reset_byte40, 0, 1, False)      # Connected handled by configurable bit writer
                     snap7.util.set_bool(reset_byte40, 0, 2, False)     # Busy = False
                     snap7.util.set_bool(reset_byte40, 0, 3, False)     # Complete = False
                     snap7.util.set_bool(reset_byte40, 0, 4, False)     # Object_Detected = False
@@ -2987,7 +3064,14 @@ def read_db123_tags():
 
         # Try to read tags (returns immediately with cached values if lock busy)
         start_byte, start_bit = get_start_bit_config()
-        tags = plc_client.read_vision_tags(db_number, start_byte=start_byte, start_bit=start_bit)
+        connected_byte, connected_bit = get_connected_bit_config()
+        tags = plc_client.read_vision_tags(
+            db_number,
+            start_byte=start_byte,
+            start_bit=start_bit,
+            connected_byte=connected_byte,
+            connected_bit=connected_bit
+        )
 
         # Always return success - even if we got cached values
         return jsonify({
@@ -3018,6 +3102,7 @@ def read_db40_start_bit():
 
     try:
         start_byte, start_bit = get_start_bit_config()
+        connected_byte, connected_bit = get_connected_bit_config()
         address = f"DB123.DBX{start_byte}.{start_bit}"
         cache_age = time.time() - plc_cache['last_update'] if plc_cache['last_update'] > 0 else 999
 
@@ -3029,6 +3114,8 @@ def read_db40_start_bit():
             'address': address,
             'start_byte': start_byte,
             'start_bit': start_bit,
+            'connected_byte': connected_byte,
+            'connected_bit': connected_bit,
             'cache_age_ms': int(cache_age * 1000),
             'cached': True
         })
