@@ -439,7 +439,9 @@
     let objectParams = {
       min_area: 500,
       max_area: 50000
-    };`r`n    function addDebugLog(message, details = null, level = 'info') {
+    };
+
+    function addDebugLog(message, details = null, level = 'info') {
       const ts = new Date().toLocaleTimeString();
       const prefix = level.toUpperCase().padEnd(5, ' ');
       let line = `[${ts}] ${prefix} ${message}`;
@@ -1937,7 +1939,9 @@
       document.getElementById('cropInfoWidth').textContent = currentCropSettings.width.toFixed(1);
       document.getElementById('cropInfoHeight').textContent = currentCropSettings.height.toFixed(1);
       cropInfo.style.display = 'block';
-    }`r`n    // Initialize
+    }
+
+    // Initialize
     window.addEventListener('load', () => {
       console.log('Color Detection Test Page Loaded');
       addDebugLog('page loaded', { apiBase: API_BASE });

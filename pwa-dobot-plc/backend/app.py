@@ -4302,10 +4302,14 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
 
     # Start digital twin stream (same approach as camera: Pi renders 3D, streams MJPEG for HMI)
-    if PLAYWRIGHT_AVAILABLE:
+    # Default OFF to avoid overloading the Pi unless explicitly enabled.
+    enable_digital_twin_stream = str(os.getenv('ENABLE_DIGITAL_TWIN_STREAM', '0')).strip().lower() in ('1', 'true', 'yes', 'on')
+    if PLAYWRIGHT_AVAILABLE and enable_digital_twin_stream:
         digital_twin_stream_service = DigitalTwinStreamService(port=port, width=640, height=480)
         digital_twin_stream_service.start()
         logger.info(f"   Digital twin stream: http(s)://<pi-ip>:{port}/api/digital-twin/stream")
+    elif PLAYWRIGHT_AVAILABLE:
+        logger.info("   Digital twin stream: disabled (set ENABLE_DIGITAL_TWIN_STREAM=1 to enable)")
     else:
         logger.info("   Digital twin stream: disabled (playwright not installed)")
     
