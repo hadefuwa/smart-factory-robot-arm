@@ -2195,6 +2195,100 @@ def generate_frames():
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
         time.sleep(0.05)  # ~20 FPS - reduced for faster initial load
 
+
+def _build_annotated_placeholder():
+    """Build placeholder image bytes when no annotated cycle is available yet."""
+    import cv2
+    import numpy as np
+
+    placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+    placeholder[:] = (20, 30, 50)  # Dark blue-grey background
+
+    # Add status text (PLC-driven mode friendly)
+    plc_start = bool(plc_cache.get('db123', {}).get('start', False))
+    if plc_start:
+        text_lines = [
+            "WAITING FOR FIRST PLC CYCLE",
+            "",
+            "Start bit is TRUE.",
+            "Analysis is running continuously."
+        ]
+    else:
+        text_lines = [
+            "NO CYCLE RESULT YET",
+            "",
+            "Set PLC Start bit TRUE",
+            "to begin continuous analysis"
+        ]
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.8
+    thickness = 2
+    color = (180, 180, 180)  # Light grey text
+
+    y_start = 180
+    line_height = 40
+
+    for i, line in enumerate(text_lines):
+        if line:  # Skip empty lines
+            text_size = cv2.getTextSize(line, font, font_scale, thickness)[0]
+            x = (640 - text_size[0]) // 2  # Center horizontally
+            y = y_start + (i * line_height)
+            cv2.putText(placeholder, line, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+
+    # Add icon/symbol at top
+    cv2.circle(placeholder, (320, 100), 40, (100, 100, 100), 3)
+    cv2.line(placeholder, (320, 70), (320, 110), (100, 100, 100), 3)
+    cv2.line(placeholder, (300, 100), (340, 100), (100, 100, 100), 3)
+
+    # Encode placeholder as PNG for consistent lossless output
+    _, buffer = cv2.imencode('.png', placeholder)
+    return buffer.tobytes(), 'image/png'
+
+
+def _get_latest_annotated_result_image():
+    """Return latest annotated result bytes + mime type."""
+    global latest_annotated_image, latest_annotated_mime
+
+    import base64
+
+    if latest_annotated_image is None:
+        return _build_annotated_placeholder()
+
+    image_data = base64.b64decode(latest_annotated_image)
+    mime_type = latest_annotated_mime or 'image/jpeg'
+    return image_data, mime_type
+
+
+def generate_annotated_result_frames():
+    """Generator for annotated voting result as MJPEG for HMI compatibility."""
+    import cv2
+    import numpy as np
+
+    while True:
+        try:
+            image_data, mime_type = _get_latest_annotated_result_image()
+
+            if mime_type != 'image/jpeg':
+                # MJPEG clients are most compatible with JPEG parts.
+                arr = np.frombuffer(image_data, dtype=np.uint8)
+                decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if decoded is not None:
+                    ok, jpg = cv2.imencode('.jpg', decoded, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+                    if ok:
+                        image_data = jpg.tobytes()
+                        mime_type = 'image/jpeg'
+
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   + f'Content-Length: {len(image_data)}\r\n\r\n'.encode('ascii')
+                   + image_data + b'\r\n')
+        except Exception as e:
+            logger.debug(f"Annotated MJPEG frame generation error: {e}")
+
+        # 5 FPS is enough for cycle-result monitoring and avoids overloading HMI.
+        time.sleep(0.2)
+
 @app.route('/api/camera/stream')
 def camera_stream():
     """MJPEG video stream endpoint - iFrame embeddable for WinCC Unified"""
@@ -2208,6 +2302,10 @@ def camera_stream():
     # Allow embedding in iFrames for WinCC Unified HMI panels
     response.headers['X-Frame-Options'] = 'ALLOWALL'
     response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['X-Accel-Buffering'] = 'no'
     return response
 
 
@@ -2982,63 +3080,22 @@ def test_color_voting():
 @app.route('/api/vision/annotated-result')
 def get_annotated_result():
     """Get the latest annotated voting result image"""
-    global latest_annotated_image, latest_annotated_mime
-
     try:
-        import base64
-        import cv2
-        import numpy as np
+        # HMI-friendly mode: stream as MJPEG to avoid stale single-image caching.
+        if request.args.get('stream', '').lower() in ('1', 'true', 'yes'):
+            response = Response(
+                generate_annotated_result_frames(),
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+            response.headers['X-Frame-Options'] = 'ALLOWALL'
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['X-Accel-Buffering'] = 'no'
+            return response
 
-        if latest_annotated_image is None:
-            # Create placeholder image
-            placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
-            placeholder[:] = (20, 30, 50)  # Dark blue-grey background
-
-            # Add status text (PLC-driven mode friendly)
-            plc_start = bool(plc_cache.get('db123', {}).get('start', False))
-            if plc_start:
-                text_lines = [
-                    "WAITING FOR FIRST PLC CYCLE",
-                    "",
-                    "Start bit is TRUE.",
-                    "Analysis is running continuously."
-                ]
-            else:
-                text_lines = [
-                    "NO CYCLE RESULT YET",
-                    "",
-                    "Set PLC Start bit TRUE",
-                    "to begin continuous analysis"
-                ]
-
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.8
-            thickness = 2
-            color = (180, 180, 180)  # Light grey text
-
-            y_start = 180
-            line_height = 40
-
-            for i, line in enumerate(text_lines):
-                if line:  # Skip empty lines
-                    text_size = cv2.getTextSize(line, font, font_scale, thickness)[0]
-                    x = (640 - text_size[0]) // 2  # Center horizontally
-                    y = y_start + (i * line_height)
-                    cv2.putText(placeholder, line, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
-
-            # Add icon/symbol at top
-            cv2.circle(placeholder, (320, 100), 40, (100, 100, 100), 3)
-            cv2.line(placeholder, (320, 70), (320, 110), (100, 100, 100), 3)
-            cv2.line(placeholder, (300, 100), (340, 100), (100, 100, 100), 3)
-
-            # Encode placeholder as PNG for consistent lossless output
-            _, buffer = cv2.imencode('.png', placeholder)
-            image_data = buffer.tobytes()
-            mime_type = 'image/png'
-        else:
-            # Decode base64 to binary
-            image_data = base64.b64decode(latest_annotated_image)
-            mime_type = latest_annotated_mime or 'image/jpeg'
+        image_data, mime_type = _get_latest_annotated_result_image()
 
         # Return latest annotated image (PNG/JPEG)
         response = make_response(image_data)
