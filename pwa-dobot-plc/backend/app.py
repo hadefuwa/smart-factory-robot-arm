@@ -56,6 +56,10 @@ logger.info(f"Logging to file: {log_file}")
 COUNTER_IMAGES_DIR = os.path.expanduser('~/counter_images')
 COUNTER_POSITIONS_FILE = os.path.join(COUNTER_IMAGES_DIR, 'counter_positions.json')
 COUNTER_DEFECTS_FILE = os.path.join(COUNTER_IMAGES_DIR, 'counter_defects.json')
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_CONFIG_PATH = os.path.join(BACKEND_DIR, 'config.json')
+LOCAL_CONFIG_DIR = os.path.expanduser('~/.sf2')
+LOCAL_CONFIG_PATH = os.path.join(LOCAL_CONFIG_DIR, 'config.local.json')
 
 # Track last save time for each counter (to enforce 15-second interval)
 counter_last_save_time = {}  # counter_number -> timestamp
@@ -545,14 +549,27 @@ def call_vision_service(frame: np.ndarray, params: Dict) -> Dict:
         }
 
 def load_config():
-    """Load configuration from config.json"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    """Load config by merging repo defaults with local runtime overrides.
+
+    Repo config (`backend/config.json`) is source-controlled defaults.
+    Local config (`~/.sf2/config.local.json`) stores persistent runtime edits
+    and is not tracked by git, so settings survive pulls/resets.
+    """
+    def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = _deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    base_config = {}
     try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
+        with open(REPO_CONFIG_PATH, 'r') as f:
+            base_config = json.load(f)
     except FileNotFoundError:
-        # Return defaults if config doesn't exist
-        return {
+        base_config = {
             "dobot": {
                 "usb_path": "/dev/ttyACM0",
                 "home_position": {"x": 200.0, "y": 0.0, "z": 150.0, "r": 0.0},
@@ -567,6 +584,19 @@ def load_config():
             },
             "server": {"port": 8080}
         }
+    except Exception as e:
+        logger.error(f"Error loading repo config ({REPO_CONFIG_PATH}): {e}")
+        base_config = {}
+
+    try:
+        if os.path.exists(LOCAL_CONFIG_PATH):
+            with open(LOCAL_CONFIG_PATH, 'r') as f:
+                local_override = json.load(f)
+            return _deep_merge(base_config, local_override)
+    except Exception as e:
+        logger.error(f"Error loading local config override ({LOCAL_CONFIG_PATH}): {e}")
+
+    return base_config
 
 def delete_old_counter_images(counter_number: int):
     """
@@ -931,9 +961,9 @@ def auto_analyze_counter_image(counter_number: int, image_path: str):
         logger.error(f"Error auto-analyzing counter {counter_number}: {e}", exc_info=True)
 
 def save_config(config):
-    """Save configuration to config.json"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    with open(config_path, 'w') as f:
+    """Save runtime config to local override file outside the git repo."""
+    os.makedirs(LOCAL_CONFIG_DIR, exist_ok=True)
+    with open(LOCAL_CONFIG_PATH, 'w') as f:
         json.dump(config, f, indent=2)
 
 def get_saved_object_params() -> Dict[str, int]:
