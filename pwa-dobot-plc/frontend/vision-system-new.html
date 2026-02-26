@@ -467,6 +467,7 @@
     let objectParamsSaveTimer = null;
     let pagePrefsSaveTimer = null;
     let lastCycleTimestampSeen = 0;
+    let lastAnnotatedRefreshMs = 0;
     const debugLogEntries = [];
 
     let objectParams = {
@@ -588,8 +589,16 @@
       setStatusCardTone(cardId, tone);
     }
 
+    function withCacheBuster(url) {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}_=${Date.now()}`;
+    }
+
     async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
-      const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      const response = await fetch(withCacheBuster(url), {
+        signal: AbortSignal.timeout(timeoutMs),
+        cache: 'no-store'
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -753,6 +762,14 @@
           lastCycleTimestampSeen = cycleTs;
           addDebugLog('new PLC cycle result', cycle);
           refreshAnnotatedResultImage('plc-cycle');
+          lastAnnotatedRefreshMs = Date.now();
+        } else if (!cycle.running) {
+          // Fallback refresh in case cycle endpoint was cached/stale upstream.
+          const now = Date.now();
+          if (now - lastAnnotatedRefreshMs >= 5000) {
+            refreshAnnotatedResultImage('plc-cycle-fallback');
+            lastAnnotatedRefreshMs = now;
+          }
         }
       } else {
         addDebugLog('latest-cycle unavailable', cycleResult.reason?.message || 'request failed', 'warn');
@@ -996,7 +1013,8 @@
     async function refreshAnnotatedResultImage(reason = 'manual') {
       try {
         const response = await fetch(`${API_BASE}/api/vision/annotated-result?t=${Date.now()}`, {
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(10000),
+          cache: 'no-store'
         });
         if (!response.ok) {
           const txt = await response.text().catch(() => '');
