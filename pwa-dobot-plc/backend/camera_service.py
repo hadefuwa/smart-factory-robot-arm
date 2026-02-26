@@ -911,24 +911,19 @@ class CameraService:
             color_code = 0
             logger.info(f"🗳️ Voting complete: No valid detections")
 
-        # Create annotated image showing the detected cube
+        # Create annotated image for every cycle (even if nothing is detected).
         annotated_image_base64 = None
-        if winner is not None:
-            # Take one final raw snapshot for high-resolution annotation.
-            final_raw_frame = self.read_frame_raw()
-            if final_raw_frame is not None:
-                detect_frame = self._apply_crop(final_raw_frame) if self.crop_enabled else final_raw_frame
-                # Re-run detection on detection frame to get bounding box
-                final_result = self._detect_with_color(detect_frame, params)
-                objects = final_result.get('objects', [])
+        final_raw_frame = self.read_frame_raw()
+        if final_raw_frame is not None:
+            detect_frame = self._apply_crop(final_raw_frame) if self.crop_enabled else final_raw_frame
+            final_result = self._detect_with_color(detect_frame, params)
+            objects = final_result.get('objects', [])
 
-                # Find the object matching the winner color
+            drew_box = False
+            if winner is not None:
                 winning_objects = [obj for obj in objects if obj.get('color') == winner]
                 if winning_objects:
-                    # Get the largest object of the winning color
                     winning_obj = max(winning_objects, key=lambda o: o.get('area', 0))
-
-                    # Draw bounding box and label on the frame
                     x = winning_obj['x']
                     y = winning_obj['y']
                     w = winning_obj['width']
@@ -941,23 +936,17 @@ class CameraService:
                         x += crop_x
                         y += crop_y
 
-                    # Color map for bounding box
                     color_map = {
-                        'yellow': (0, 255, 255),  # BGR: Yellow
-                        'white': (255, 255, 255),  # BGR: White
-                        'metal': (128, 128, 128)   # BGR: Grey
+                        'yellow': (0, 255, 255),
+                        'white': (255, 255, 255),
+                        'metal': (128, 128, 128)
                     }
                     box_color = color_map.get(winner, (0, 255, 0))
-
-                    # Draw rectangle
                     cv2.rectangle(final_raw_frame, (x, y), (x + w, y + h), box_color, 3)
 
-                    # Prepare label text
                     label = f"{winner.upper()} CUBE"
                     label_bg_y = max(y - 35, 0)
-
-                    # Draw background rectangle for text
-                    (text_width, text_height), baseline = cv2.getTextSize(
+                    (text_width, text_height), _ = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
                     )
                     cv2.rectangle(
@@ -965,26 +954,37 @@ class CameraService:
                         (x, label_bg_y),
                         (x + text_width + 10, label_bg_y + text_height + 10),
                         box_color,
-                        -1  # Filled rectangle
+                        -1
                     )
-
-                    # Draw text label
                     cv2.putText(
                         final_raw_frame,
                         label,
                         (x + 5, label_bg_y + text_height + 5),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.8,
-                        (0, 0, 0),  # Black text
+                        (0, 0, 0),
                         2,
                         cv2.LINE_AA
                     )
+                    drew_box = True
 
-                    # Encode as PNG to avoid JPEG artifacts on HMI displays.
-                    _, buffer = cv2.imencode('.png', final_raw_frame)
-                    annotated_image_base64 = base64.b64encode(buffer).decode('utf-8')
-                    logger.info(f"✅ Created annotated image for {winner} cube")
+            if not drew_box:
+                status_text = "NO CUBE DETECTED" if winner is None else f"LABEL: {str(winner).upper()}"
+                cv2.rectangle(final_raw_frame, (20, 20), (450, 70), (30, 30, 30), -1)
+                cv2.putText(
+                    final_raw_frame,
+                    status_text,
+                    (30, 55),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9,
+                    (0, 165, 255),
+                    2,
+                    cv2.LINE_AA
+                )
 
+            _, buffer = cv2.imencode('.png', final_raw_frame)
+            annotated_image_base64 = base64.b64encode(buffer).decode('utf-8')
+            logger.info(f"Created annotated cycle image (winner={winner})")
         return {
             'color': winner,
             'color_code': int(color_code) if color_code is not None else 0,
@@ -1648,4 +1648,5 @@ class CameraService:
         """
         # Defect detection is disabled, just return the frame as-is
         return frame.copy()
+
 

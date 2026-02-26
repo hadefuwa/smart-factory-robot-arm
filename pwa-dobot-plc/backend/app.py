@@ -2994,13 +2994,22 @@ def get_annotated_result():
             placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
             placeholder[:] = (20, 30, 50)  # Dark blue-grey background
 
-            # Add text
-            text_lines = [
-                "ANALYSIS NOT COMPLETE",
-                "",
-                "Click 'START ANALYSIS'",
-                "to generate result"
-            ]
+            # Add status text (PLC-driven mode friendly)
+            plc_start = bool(plc_cache.get('db123', {}).get('start', False))
+            if plc_start:
+                text_lines = [
+                    "WAITING FOR FIRST PLC CYCLE",
+                    "",
+                    "Start bit is TRUE.",
+                    "Analysis is running continuously."
+                ]
+            else:
+                text_lines = [
+                    "NO CYCLE RESULT YET",
+                    "",
+                    "Set PLC Start bit TRUE",
+                    "to begin continuous analysis"
+                ]
 
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.8
