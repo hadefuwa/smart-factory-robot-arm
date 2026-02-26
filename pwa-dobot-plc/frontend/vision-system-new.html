@@ -1715,8 +1715,8 @@
       const widthPercent = ((x2 - x1) / canvasWidth) * 100;
       const heightPercent = ((y2 - y1) / canvasHeight) * 100;
 
-      if (widthPercent < 5 || heightPercent < 5) {
-        alert('Detection area is too small. Please draw a larger rectangle.');
+      // Allow very small ROI selections; only reject zero-size accidental clicks.
+      if (widthPercent <= 0 || heightPercent <= 0) {
         cancelDetectionRoiDrawing();
         return;
       }
