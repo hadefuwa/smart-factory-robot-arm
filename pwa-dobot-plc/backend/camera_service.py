@@ -339,6 +339,9 @@ class CameraService:
         
         if frame is None:
             return None
+
+        # Reduce highlight clipping from bright lighting so HMI feed is less washed out.
+        frame = self._reduce_overexposure(frame)
         
         try:
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
@@ -349,6 +352,30 @@ class CameraService:
             logger.error(f"Error encoding frame: {e}")
         
         return None
+
+    def _reduce_overexposure(self, frame: np.ndarray) -> np.ndarray:
+        """Compress highlights if frame has strong clipping/white wash."""
+        try:
+            if frame is None or frame.size == 0:
+                return frame
+
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            v = hsv[:, :, 2]
+            p99 = float(np.percentile(v, 99))
+
+            # Only apply when highlights are strongly clipped.
+            if p99 < 245.0:
+                return frame
+
+            # Scale bright values down, then apply mild gamma darkening.
+            scale = 242.0 / max(p99, 1.0)
+            v_scaled = np.clip(v.astype(np.float32) * scale, 0, 255).astype(np.float32)
+            v_gamma = np.power(v_scaled / 255.0, 1.18) * 255.0
+            hsv[:, :, 2] = np.clip(v_gamma, 0, 255).astype(np.uint8)
+            return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        except Exception as e:
+            logger.debug(f"Overexposure reduction skipped: {e}")
+            return frame
     
     def load_yolo_model(self, model_path: str = 'yolov8n.pt') -> bool:
         """
@@ -985,6 +1012,7 @@ class CameraService:
         detect_metal = params.get('detect_metal', True)
         
         try:
+            frame = self._reduce_overexposure(frame)
             # Debug: Log frame info
             frame_height, frame_width = frame.shape[:2]
             logger.info(f"🔍 Color Detection Debug - Frame size: {frame_width}x{frame_height}, Min area: {min_area}, Max area: {max_area}")
