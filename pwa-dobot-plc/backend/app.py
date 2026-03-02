@@ -2083,7 +2083,10 @@ def poll_loop():
             # ==================================================
             # VISION HANDSHAKING (using cached start bit)
             # ==================================================
-            start_bit = plc_cache['db123']['start']
+            # CAMERA ALWAYS RUNNING MODE - PLC start bit disabled
+            # Uncomment below to re-enable PLC start bit control
+            # start_bit = plc_cache['db123']['start']
+            start_bit = True  # Force camera to always run
             completed_command = bool(plc_cache['db4']['cycle_complete'])
 
             # When PLC sends Completed Command, clear all cube color bits (DB123.DBX32.0-32.3)
@@ -2097,44 +2100,45 @@ def poll_loop():
                 logger.info("⏱️ Cube color bit hold elapsed - clearing DB123.DBX32.0-32.3")
                 queue_cube_color_bits(0, force_clear=True)
 
-            # Log state changes
-            if start_bit != vision_handshake_last_start_state:
-                logger.info(f"ðŸ”„ Start bit changed: {vision_handshake_last_start_state} -> {start_bit}")
-                vision_handshake_last_start_state = start_bit
+            # Log state changes (DISABLED - camera always running)
+            # if start_bit != vision_handshake_last_start_state:
+            #     logger.info(f"ðŸ"„ Start bit changed: {vision_handshake_last_start_state} -> {start_bit}")
+            #     vision_handshake_last_start_state = start_bit
+            #
+            #     if not start_bit:
+            #         # Start is FALSE - reset (queue write instead of direct write)
+            #         logger.info("ðŸ"¸ Start bit FALSE - resetting vision")
+            #         # Queue the reset writes for next cycle
+            #         # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
+            #         reset_byte40 = bytearray(1)
+            #         snap7.util.set_bool(reset_byte40, 0, 0, False)      # Bit 0 unused in byte 40 now
+            #         snap7.util.set_bool(reset_byte40, 0, 1, False)      # Connected handled by configurable bit writer
+            #         snap7.util.set_bool(reset_byte40, 0, 2, False)     # Busy = False
+            #         snap7.util.set_bool(reset_byte40, 0, 3, False)     # Complete = False
+            #         snap7.util.set_bool(reset_byte40, 0, 4, False)     # Object_Detected = False
+            #         snap7.util.set_bool(reset_byte40, 0, 5, True)      # Object_OK = True (default)
+            #         snap7.util.set_bool(reset_byte40, 0, 6, False)      # Defect_Detected = False
+            #
+            #         # Queue separate writes for byte 40, 42, and 44
+            #         queue_plc_write(123, 40, reset_byte40)
+            #
+            #         # Reset object_number to 0
+            #         object_number_reset = bytearray(2)
+            #         snap7.util.set_int(object_number_reset, 0, 0)
+            #         queue_plc_write(123, 42, object_number_reset)
+            #
+            #         # Reset defect_number to 0
+            #         defect_number_reset = bytearray(2)
+            #         snap7.util.set_int(defect_number_reset, 0, 0)
+            #         queue_plc_write(123, 44, defect_number_reset)
 
-                if not start_bit:
-                    # Start is FALSE - reset (queue write instead of direct write)
-                    logger.info("ðŸ“¸ Start bit FALSE - resetting vision")
-                    # Queue the reset writes for next cycle
-                    # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
-                    reset_byte40 = bytearray(1)
-                    snap7.util.set_bool(reset_byte40, 0, 0, False)      # Bit 0 unused in byte 40 now
-                    snap7.util.set_bool(reset_byte40, 0, 1, False)      # Connected handled by configurable bit writer
-                    snap7.util.set_bool(reset_byte40, 0, 2, False)     # Busy = False
-                    snap7.util.set_bool(reset_byte40, 0, 3, False)     # Complete = False
-                    snap7.util.set_bool(reset_byte40, 0, 4, False)     # Object_Detected = False
-                    snap7.util.set_bool(reset_byte40, 0, 5, True)      # Object_OK = True (default)
-                    snap7.util.set_bool(reset_byte40, 0, 6, False)      # Defect_Detected = False
-                    
-                    # Queue separate writes for byte 40, 42, and 44
-                    queue_plc_write(123, 40, reset_byte40)
-                    
-                    # Reset object_number to 0
-                    object_number_reset = bytearray(2)
-                    snap7.util.set_int(object_number_reset, 0, 0)
-                    queue_plc_write(123, 42, object_number_reset)
-                    
-                    # Reset defect_number to 0
-                    defect_number_reset = bytearray(2)
-                    snap7.util.set_int(defect_number_reset, 0, 0)
-                    queue_plc_write(123, 44, defect_number_reset)
 
-
-            # LEVEL-TRIGGERED behavior:
-            # While Start bit remains TRUE, keep running 10-vote analysis cycles.
-            # A new cycle starts only when the previous cycle has completed.
-            if start_bit and not vision_handshake_processing:
-                logger.info("📸 Start bit TRUE - triggering 10-vote vision processing cycle")
+            # ALWAYS RUNNING MODE:
+            # Camera continuously runs 10-vote analysis cycles without PLC start bit
+            # Uncomment the conditional below to re-enable PLC start bit control:
+            # if start_bit and not vision_handshake_processing:
+            if not vision_handshake_processing:
+                # logger.info("📸 Start bit TRUE - triggering 10-vote vision processing cycle")
                 threading.Thread(target=process_vision_handshake, daemon=True).start()
 
         except Exception as e:
