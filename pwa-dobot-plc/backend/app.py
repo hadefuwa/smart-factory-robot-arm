@@ -2286,8 +2286,8 @@ def generate_annotated_result_frames():
         except Exception as e:
             logger.debug(f"Annotated MJPEG frame generation error: {e}")
 
-        # 5 FPS is enough for cycle-result monitoring and avoids overloading HMI.
-        time.sleep(0.2)
+        # 30 FPS for smooth vision result monitoring
+        time.sleep(0.033)
 
 @app.route('/api/camera/stream')
 def camera_stream():
