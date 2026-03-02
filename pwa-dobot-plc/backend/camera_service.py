@@ -1082,14 +1082,25 @@ class CameraService:
                     mask_yellow = cv2.bitwise_and(mask_yellow, roi_mask)
                 yellow_pixels = np.sum(mask_yellow > 0)
                 logger.info(f"🔍 Yellow mask: {yellow_pixels} pixels matched (range: H[18-35], S[100-255], V[120-255])")
-                # Use the configured min/max area directly from UI/config.
-                objects_yellow = self._find_objects_from_mask(mask_yellow, min_area, max_area, 'yellow', debug_info)
+
+                # Add minimum pixel threshold to reject false positives
+                MIN_YELLOW_PIXEL_THRESHOLD = min_area * 0.25
+
+                if yellow_pixels < MIN_YELLOW_PIXEL_THRESHOLD:
+                    logger.info(f"🔍 Yellow detection rejected: only {yellow_pixels} pixels (threshold: {MIN_YELLOW_PIXEL_THRESHOLD})")
+                    objects_yellow = []
+                else:
+                    # Use the configured min/max area directly from UI/config.
+                    objects_yellow = self._find_objects_from_mask(mask_yellow, min_area, max_area, 'yellow', debug_info)
+
                 all_objects.extend(objects_yellow)
                 debug_info['yellow'] = {
                     'pixels': yellow_pixels,
                     'objects': len(objects_yellow),
                     'effective_min_area': int(min_area),
-                    'effective_max_area': int(max_area)
+                    'effective_max_area': int(max_area),
+                    'pixel_threshold': int(MIN_YELLOW_PIXEL_THRESHOLD),
+                    'passed_threshold': yellow_pixels >= MIN_YELLOW_PIXEL_THRESHOLD
                 }
 
             # White cubes - strict to avoid overexposed yellow highlights counting as white
@@ -1105,33 +1116,65 @@ class CameraService:
                     mask_white = cv2.bitwise_and(mask_white, roi_mask)
                 white_pixels = np.sum(mask_white > 0)
                 logger.info(f"🔍 White mask: {white_pixels} pixels matched (range: H[0-180], S[0-12], V[238-255], glare-suppressed)")
-                # Use the configured min/max area directly from UI/config.
-                objects_white = self._find_objects_from_mask(mask_white, min_area, max_area, 'white', debug_info)
+
+                # Add minimum pixel threshold to reject false positives
+                MIN_WHITE_PIXEL_THRESHOLD = min_area * 0.25
+
+                if white_pixels < MIN_WHITE_PIXEL_THRESHOLD:
+                    logger.info(f"🔍 White detection rejected: only {white_pixels} pixels (threshold: {MIN_WHITE_PIXEL_THRESHOLD})")
+                    objects_white = []
+                else:
+                    # Use the configured min/max area directly from UI/config.
+                    objects_white = self._find_objects_from_mask(mask_white, min_area, max_area, 'white', debug_info)
+
                 all_objects.extend(objects_white)
                 debug_info['white'] = {
                     'pixels': white_pixels,
                     'objects': len(objects_white),
                     'effective_min_area': int(min_area),
-                    'effective_max_area': int(max_area)
+                    'effective_max_area': int(max_area),
+                    'pixel_threshold': int(MIN_WHITE_PIXEL_THRESHOLD),
+                    'passed_threshold': white_pixels >= MIN_WHITE_PIXEL_THRESHOLD
                 }
 
             # Metal/Grey cubes - narrow range to avoid conveyor frame
             if detect_metal:
-                lower_metal = np.array([0, 0, 80])  # Higher V minimum
-                upper_metal = np.array([180, 40, 140])  # Narrower saturation and brightness range
+                # Tighter HSV range for metal/aluminum cubes
+                # Using slightly higher brightness range to target actual metal reflective surfaces
+                lower_metal = np.array([0, 0, 95])  # Higher V minimum to avoid dark shadows
+                upper_metal = np.array([180, 35, 135])  # Tighter saturation and brightness range
                 mask_metal = cv2.inRange(hsv, lower_metal, upper_metal)
+
+                # Additional filtering: Remove very small noise before ROI masking
+                # This helps eliminate scattered pixels from background
+                kernel_small = np.ones((3, 3), np.uint8)
+                mask_metal = cv2.morphologyEx(mask_metal, cv2.MORPH_OPEN, kernel_small)
+
                 if roi_mask is not None:
                     mask_metal = cv2.bitwise_and(mask_metal, roi_mask)
+
                 metal_pixels = np.sum(mask_metal > 0)
-                logger.info(f"🔍 Metal mask: {metal_pixels} pixels matched (range: H[0-180], S[0-40], V[80-140])")
-                # Use the configured min/max area directly from UI/config.
-                objects_metal = self._find_objects_from_mask(mask_metal, min_area, max_area, 'metal', debug_info)
+                logger.info(f"🔍 Metal mask: {metal_pixels} pixels matched (range: H[0-180], S[0-35], V[95-135])")
+
+                # IMPORTANT: Add minimum pixel threshold to reject false positives
+                # A real cube should have a substantial number of pixels, not just scattered noise
+                MIN_METAL_PIXEL_THRESHOLD = min_area * 0.3  # At least 30% of min_area in raw pixels
+
+                if metal_pixels < MIN_METAL_PIXEL_THRESHOLD:
+                    logger.info(f"🔍 Metal detection rejected: only {metal_pixels} pixels (threshold: {MIN_METAL_PIXEL_THRESHOLD})")
+                    objects_metal = []
+                else:
+                    # Use the configured min/max area directly from UI/config.
+                    objects_metal = self._find_objects_from_mask(mask_metal, min_area, max_area, 'metal', debug_info)
+
                 all_objects.extend(objects_metal)
                 debug_info['metal'] = {
                     'pixels': metal_pixels,
                     'objects': len(objects_metal),
                     'effective_min_area': int(min_area),
-                    'effective_max_area': int(max_area)
+                    'effective_max_area': int(max_area),
+                    'pixel_threshold': int(MIN_METAL_PIXEL_THRESHOLD),
+                    'passed_threshold': metal_pixels >= MIN_METAL_PIXEL_THRESHOLD
                 }
 
             logger.info(f"🔍 Color filter detected {len(all_objects)} objects (yellow: {len([o for o in all_objects if o.get('color') == 'yellow'])}, white: {len([o for o in all_objects if o.get('color') == 'white'])}, metal: {len([o for o in all_objects if o.get('color') == 'metal'])})")
@@ -1209,8 +1252,12 @@ class CameraService:
                 aspect_ratio = 0
 
             # Filter by aspect ratio - cubes should be roughly square
-            # Accept aspect ratios between 0.5 and 2.0 (not too elongated)
-            if aspect_ratio < 0.5 or aspect_ratio > 2.0:
+            # More strict for metal cubes to avoid false positives
+            # Accept aspect ratios between 0.6 and 1.7 (closer to square)
+            min_aspect = 0.6 if color_name == 'metal' else 0.5
+            max_aspect = 1.7 if color_name == 'metal' else 2.0
+
+            if aspect_ratio < min_aspect or aspect_ratio > max_aspect:
                 rejected_aspect_ratio += 1
                 logger.debug(f"🔍 Rejected {color_name} object: aspect ratio {aspect_ratio:.2f} (size: {w}x{h})")
                 continue
@@ -1224,6 +1271,14 @@ class CameraService:
                 circularity = 4 * np.pi * area / (perimeter * perimeter)
             else:
                 circularity = 0
+
+            # Reject objects with very poor circularity (likely noise or non-cube shapes)
+            # Cubes viewed from above should have decent circularity (0.4-1.0 range)
+            MIN_CIRCULARITY = 0.35  # Lower threshold to be lenient but still filter noise
+            if circularity < MIN_CIRCULARITY:
+                rejected_aspect_ratio += 1  # Count as shape rejection
+                logger.debug(f"🔍 Rejected {color_name} object: poor circularity {circularity:.2f} (size: {w}x{h})")
+                continue
             
             # Create object dictionary
             obj = {
