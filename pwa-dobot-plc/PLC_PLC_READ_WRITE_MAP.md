@@ -1,3 +1,89 @@
+## PLC Read/Write Map (Simple)
+
+### Reads
+
+- **DB123**
+  - `DB123.DBX26.0` – Start
+  - `DB123.DBX26.1` – Connected
+  - `DB123.DBX26.2` – Busy
+  - `DB123.DBX26.3` – Completed
+  - `DB123.DBX26.4` – Object_Detected
+  - `DB123.DBX26.5` – Object_OK
+  - `DB123.DBX26.6` – Defect_Detected
+  - `DB123.DBW28` – Object_Number
+  - `DB123.DBW30` – Defect_Number
+  - `DB123.DBX32.0` – yellow_cube_detected
+  - `DB123.DBX32.1` – white_cube_detected
+  - `DB123.DBX32.2` – steel_cube_detected
+  - `DB123.DBX32.3` – alluminium_cube_detected
+  - `DB123.DBX4.0` – Robot connected
+  - `DB123.DBX4.1` – Robot busy
+  - `DB123.DBX4.2` – Robot cycle_complete
+  - `DB123.DBD6` – Robot target_x
+  - `DB123.DBD10` – Robot target_y
+  - `DB123.DBD14` – Robot target_z
+  - `DB123.DBD18` – Robot current_x
+  - `DB123.DBD22` – Robot current_y
+  - `DB123.DBD26` – Robot current_z
+  - `DB123.DBW30` – Robot status_code
+  - `DB123.DBW34` – Robot error_code
+
+- **DB4**
+  - `DB4.DBD6` – Target X
+  - `DB4.DBD10` – Target Y
+  - `DB4.DBD14` – Target Z
+
+- **DB123 (Robot current pose)**
+  - `DB123.DBW10` – Current X
+  - `DB123.DBW12` – Current Y
+  - `DB123.DBW14` – Current Z
+  - `DB123.DBX4.0` – Robot connected
+  - `DB123.DBX4.1` – Robot busy
+  - `DB123.DBX4.2` – Robot cycle_complete
+  - `DB123.DBW30` – Robot status_code
+  - `DB123.DBW34` – Robot error_code
+
+- **Merker (M)**
+  - `M1000.0` – Start
+  - `M1000.1` – Stop
+  - `M1000.2` – Home
+  - `M1000.3` – E‑stop
+  - `M1000.4` – Suction
+  - `M1000.5` – Ready
+  - `M1000.6` – Busy
+  - `M1000.7` – Error
+  - `M1.0` – Vision fault flag
+
+### Writes
+
+- **DB123**
+  - `DB123.DBX26.2` – Busy
+  - `DB123.DBX26.3` – Completed
+  - `DB123.DBX26.4` – Object_Detected
+  - `DB123.DBX26.5` – Object_OK
+  - `DB123.DBX26.6` – Defect_Detected
+  - `DB123.DBX[connected_byte].[connected_bit]` – Camera connected
+  - `DB123.DBX32.0` – yellow_cube_detected
+  - `DB123.DBX32.1` – white_cube_detected
+  - `DB123.DBX32.2` – steel_cube_detected
+  - `DB123.DBX32.3` – alluminium_cube_detected
+
+- **DB123 (Robot current pose)**
+  - `DB123.DBW10` – Current X
+  - `DB123.DBW12` – Current Y
+  - `DB123.DBW14` – Current Z
+
+- **Merker (M)**
+  - `M0.0` – Start
+  - `M0.1` – Stop
+  - `M0.2` – Home
+  - `M0.3` – E‑stop
+  - `M0.4` – Suction
+  - `M0.5` – Ready
+  - `M0.6` – Busy
+  - `M0.7` – Error
+  - `M1.0` – Vision fault flag
+
 ## PLC Read/Write Map (Current Behaviour)
 
 This document lists how your app currently **reads from** and **writes to** the Siemens PLC.

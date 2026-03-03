@@ -417,7 +417,7 @@ class PLCClient:
             return {'connected': False, 'busy': False, 'cycle_complete': False, 'status_code': 0, 'error_code': 0}
 
     def read_control_bits(self) -> Dict[str, bool]:
-        """Read all control bits from M0.0 - M0.7 in one operation (thread-safe)"""
+        """Read all control bits from M1000.0 - M1000.7 in one operation (thread-safe)"""
         if not snap7_available or self.client is None:
             return {
                 'start': False, 'stop': False, 'home': False, 'estop': False,
@@ -442,8 +442,8 @@ class PLCClient:
 
             try:
                 time.sleep(0.02)  # 20ms delay to avoid flooding
-                # Read entire byte M0 at once (contains all 8 bits)
-                data = self.client.mb_read(0, 1)
+                # Read entire byte M1000 at once (contains all 8 bits)
+                data = self.client.mb_read(1000, 1)
                 byte_value = data[0]
 
                 # Extract individual bits from the byte
@@ -477,14 +477,14 @@ class PLCClient:
     def write_control_bit(self, bit_name: str, value: bool) -> bool:
         """Write a single control bit"""
         bit_map = {
-            'start': (0, 0),
-            'stop': (0, 1),
-            'home': (0, 2),
-            'estop': (0, 3),
-            'suction': (0, 4),
-            'ready': (0, 5),
-            'busy': (0, 6),
-            'error': (0, 7)
+            'start': (1000, 0),
+            'stop': (1000, 1),
+            'home': (1000, 2),
+            'estop': (1000, 3),
+            'suction': (1000, 4),
+            'ready': (1000, 5),
+            'busy': (1000, 6),
+            'error': (1000, 7)
         }
 
         if bit_name not in bit_map:
