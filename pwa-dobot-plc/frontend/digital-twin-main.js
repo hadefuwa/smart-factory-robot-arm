@@ -853,7 +853,8 @@ function initializeHopper() {
 
 let autoReleaseTimer = 0;
 const AUTO_RELEASE_INTERVAL = 3.0; // seconds between auto-releases
-let autoReleaseEnabled = false; // manual release by default
+// Enable auto-release for embed view (HMI), manual for interactive
+let autoReleaseEnabled = isEmbedView(); // Auto-release in embed mode for continuous HMI display
 
 function spawnCubeFromHopper() {
  if (hopperQueue.length === 0) {
