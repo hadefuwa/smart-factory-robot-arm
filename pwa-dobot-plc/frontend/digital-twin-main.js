@@ -325,8 +325,17 @@ const containerWidth = container.clientWidth;
 const containerHeight = container.clientHeight;
 
 const camera = new THREE.PerspectiveCamera(45, containerWidth/containerHeight, 0.1, 1000);
-camera.position.set(0, 6, 10);
-camera.lookAt(0, 0, 0);
+
+// Set camera position based on mode
+if (isEmbedView()) {
+ // Embed view: fixed overhead angle for consistent HMI display
+ camera.position.set(-2, 8, 8);
+ camera.lookAt(0, 0, 0);
+} else {
+ // Interactive view: default user-controllable position
+ camera.position.set(0, 6, 10);
+ camera.lookAt(0, 0, 0);
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(containerWidth, containerHeight);
@@ -337,6 +346,11 @@ controls.target.set(0, 0.5, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI / 2.1;
+
+// Disable controls in embed view for consistent angle
+if (isEmbedView()) {
+ controls.enabled = false;
+}
 
 // Lights
 const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1.0);
@@ -1420,6 +1434,13 @@ function loadStateFromAPI() {
  t: 0
  };
 
+ // Add question marks if identity not revealed
+ if (!boxData.identityRevealed) {
+ const questionMarkGroup = createQuestionMarks();
+ box.add(questionMarkGroup);
+ box.userData.questionMark = questionMarkGroup;
+ }
+
  scene.add(box);
  boxes.push(box);
  });
@@ -1483,11 +1504,15 @@ function animate() {
 
 animate();
 
-// Start state sync for embed view
+// State sync for both modes
 if (isEmbedView()) {
- console.log('[Digital Twin] Starting state sync - loading from API every 1s');
+ console.log('[Digital Twin] EMBED mode - loading from API every 1s');
  loadStateFromAPI(); // Initial load
  setInterval(loadStateFromAPI, 1000); // Poll every second
+} else {
+ // Interactive mode: load initial state on startup (for refresh/restore)
+ console.log('[Digital Twin] INTERACTIVE mode - loading initial state from API');
+ loadStateFromAPI();
 }
 
 // UI (buttons may not exist in embed/HMI mode - e.g. digital-twin-embed.html has no controls)
