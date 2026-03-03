@@ -931,7 +931,7 @@ function spawnCubeFromHopper() {
  log(`Released: ${cubeData.material.name}${cubeData.isDefect ? ' [DEFECT]' : ''}`);
 
  // Save state to API when new box is added
- if (!isEmbedView) saveStateToAPI();
+ if (!isEmbedView()) saveStateToAPI();
 
  return box;
 }
@@ -1351,7 +1351,12 @@ function updateBoxes(delta) {
 // STATE SYNCHRONIZATION - Share state between interactive and embed views
 //=============================================================================
 // Detect if running in embed view (no user controls) or interactive view
-const isEmbedView = !document.getElementById('release'); // Embed view has no release button
+// Check window.location to determine mode - embed page is digital-twin-embed.html
+function isEmbedView() {
+ return window.location.pathname.includes('digital-twin-embed.html');
+}
+
+console.log(`[Digital Twin] Mode: ${isEmbedView() ? 'EMBED (read-only, sync from API)' : 'INTERACTIVE (save to API)'}`);
 
 let lastStateSaveTime = 0;
 const STATE_SAVE_INTERVAL = 0.5; // Save state every 500ms when changes occur
@@ -1424,13 +1429,6 @@ function loadStateFromAPI() {
  .catch(err => console.log('[State Sync] Load failed:', err));
 }
 
-// For embed view: poll for state updates every second
-if (isEmbedView) {
- console.log('[Digital Twin] Running in EMBED mode - will sync state from API');
- loadStateFromAPI(); // Initial load
- setInterval(loadStateFromAPI, 1000); // Poll every second
-}
-
 let cycleInitialized = false;
 
 function animate() {
@@ -1474,7 +1472,7 @@ function animate() {
  update3DStatusIndicators();
 
  // Save state to API periodically (interactive view only)
- if (!isEmbedView && boxes.length > 0) {
+ if (!isEmbedView() && boxes.length > 0) {
  saveStateToAPI();
  }
  }
@@ -1484,6 +1482,13 @@ function animate() {
 }
 
 animate();
+
+// Start state sync for embed view
+if (isEmbedView()) {
+ console.log('[Digital Twin] Starting state sync - loading from API every 1s');
+ loadStateFromAPI(); // Initial load
+ setInterval(loadStateFromAPI, 1000); // Poll every second
+}
 
 // UI (buttons may not exist in embed/HMI mode - e.g. digital-twin-embed.html has no controls)
 const resetBtn = document.getElementById('reset');
