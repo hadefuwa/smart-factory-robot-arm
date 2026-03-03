@@ -77,7 +77,8 @@ class DigitalTwinStreamService:
             # Wait for Flask server to be ready
             logger.info(f"Digital twin capture loop: Waiting 10s for Flask server...")
             time.sleep(10)
-            url = f"https://127.0.0.1:{self.port}/digital-twin-embed.html"
+            # Capture the main interactive page - only ONE simulation
+            url = f"https://127.0.0.1:{self.port}/digital-twin.html"
             logger.info(f"Digital twin capture loop: Launching Playwright for {url}")
 
             with sync_playwright() as p:

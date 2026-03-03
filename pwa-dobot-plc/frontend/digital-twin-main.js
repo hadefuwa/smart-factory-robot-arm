@@ -326,16 +326,9 @@ const containerHeight = container.clientHeight;
 
 const camera = new THREE.PerspectiveCamera(45, containerWidth/containerHeight, 0.1, 1000);
 
-// Set camera position based on mode
-if (isEmbedView()) {
- // Embed view: fixed overhead angle for consistent HMI display
- camera.position.set(-2, 8, 8);
- camera.lookAt(0, 0, 0);
-} else {
- // Interactive view: default user-controllable position
- camera.position.set(0, 6, 10);
- camera.lookAt(0, 0, 0);
-}
+// Default camera position
+camera.position.set(0, 6, 10);
+camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(containerWidth, containerHeight);
@@ -346,11 +339,6 @@ controls.target.set(0, 0.5, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI / 2.1;
-
-// Disable controls in embed view for consistent angle
-if (isEmbedView()) {
- controls.enabled = false;
-}
 
 // Lights
 const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1.0);
@@ -853,8 +841,8 @@ function initializeHopper() {
 
 let autoReleaseTimer = 0;
 const AUTO_RELEASE_INTERVAL = 3.0; // seconds between auto-releases
-// Enable auto-release for embed view (HMI), manual for interactive
-let autoReleaseEnabled = isEmbedView(); // Auto-release in embed mode for continuous HMI display
+// Enable auto-release globally for continuous simulation
+let autoReleaseEnabled = true; // Auto-release enabled - HMI streams snapshots of this simulation
 
 function spawnCubeFromHopper() {
  if (hopperQueue.length === 0) {
@@ -944,9 +932,6 @@ function spawnCubeFromHopper() {
  metrics.boxStarted(box.uuid);
 
  log(`Released: ${cubeData.material.name}${cubeData.isDefect ? ' [DEFECT]' : ''}`);
-
- // Save state to API when new box is added
- if (!isEmbedView()) saveStateToAPI();
 
  return box;
 }
@@ -1362,88 +1347,6 @@ function updateBoxes(delta) {
  metrics.updateQueueStats(waiting, inTransit, onPallet);
 }
 
-//=============================================================================
-// STATE SYNCHRONIZATION - Share state between interactive and embed views
-//=============================================================================
-// Detect if running in embed view (no user controls) or interactive view
-// Check window.location to determine mode - embed page is digital-twin-embed.html
-function isEmbedView() {
- return window.location.pathname.includes('digital-twin-embed.html');
-}
-
-console.log(`[Digital Twin] Mode: ${isEmbedView() ? 'EMBED (read-only, sync from API)' : 'INTERACTIVE (save to API)'}`);
-
-let lastStateSaveTime = 0;
-const STATE_SAVE_INTERVAL = 0.5; // Save state every 500ms when changes occur
-
-function serializeBoxState() {
- return boxes.map(box => ({
- id: box.uuid,
- x: box.position.x,
- y: box.position.y,
- z: box.position.z,
- color: box.material.color.getHex(),
- state: box.userData.state,
- materialName: box.userData.material?.name || 'Unknown',
- isDefect: box.userData.isDefect || false,
- identityRevealed: box.userData.identityRevealed || false
- }));
-}
-
-function saveStateToAPI() {
- const now = Date.now() / 1000;
- if (now - lastStateSaveTime < STATE_SAVE_INTERVAL) return;
-
- const state = {
- boxes: serializeBoxState(),
- timestamp: now
- };
-
- fetch('/api/digital-twin/state', {
- method: 'POST',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify(state)
- }).catch(err => console.log('[State Sync] Save failed:', err));
-
- lastStateSaveTime = now;
-}
-
-function loadStateFromAPI() {
- fetch('/api/digital-twin/state')
- .then(res => res.json())
- .then(data => {
- if (!data.boxes || data.boxes.length === 0) return;
-
- // Clear existing boxes
- for (const b of boxes) scene.remove(b);
- boxes.length = 0;
-
- // Recreate boxes from state
- data.boxes.forEach(boxData => {
- const box = new THREE.Mesh(
- new THREE.BoxGeometry(0.35, 0.35, 0.35),
- new THREE.MeshStandardMaterial({ color: boxData.color })
- );
-
- box.position.set(boxData.x, boxData.y, boxData.z);
- box.uuid = boxData.id; // Preserve ID
- box.userData = {
- state: boxData.state,
- material: { name: boxData.materialName },
- isDefect: boxData.isDefect,
- identityRevealed: boxData.identityRevealed,
- t: 0
- };
-
- scene.add(box);
- boxes.push(box);
- });
-
- console.log(`[State Sync] Loaded ${data.boxes.length} boxes from API`);
- })
- .catch(err => console.log('[State Sync] Load failed:', err));
-}
-
 let cycleInitialized = false;
 
 function animate() {
@@ -1485,11 +1388,6 @@ function animate() {
  metrics.updateThroughput();
  updateDashboard();
  update3DStatusIndicators();
-
- // Save state to API periodically (interactive view only)
- if (!isEmbedView() && boxes.length > 0) {
- saveStateToAPI();
- }
  }
 
  controls.update();
@@ -1498,16 +1396,7 @@ function animate() {
 
 animate();
 
-// State sync disabled for embed view - it runs its own independent simulation
-// Embed view is the MASTER, HMI shows snapshots of it
-if (isEmbedView()) {
- console.log('[Digital Twin] EMBED mode - running independent simulation (MASTER)');
- // No state loading - this IS the source of truth
-} else {
- // Interactive mode: optional state restore on refresh
- console.log('[Digital Twin] INTERACTIVE mode - independent view');
- // Could load state here if we want to sync with embed, but not needed for now
-}
+console.log('[Digital Twin] Single simulation running - HMI streams snapshots of this view');
 
 // UI (buttons may not exist in embed/HMI mode - e.g. digital-twin-embed.html has no controls)
 const resetBtn = document.getElementById('reset');
