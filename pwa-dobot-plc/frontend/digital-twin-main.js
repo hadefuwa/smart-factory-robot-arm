@@ -929,6 +929,10 @@ function spawnCubeFromHopper() {
  metrics.boxStarted(box.uuid);
 
  log(`Released: ${cubeData.material.name}${cubeData.isDefect ? ' [DEFECT]' : ''}`);
+
+ // Save state to API when new box is added
+ if (!isEmbedView) saveStateToAPI();
+
  return box;
 }
 
@@ -1343,6 +1347,90 @@ function updateBoxes(delta) {
  metrics.updateQueueStats(waiting, inTransit, onPallet);
 }
 
+//=============================================================================
+// STATE SYNCHRONIZATION - Share state between interactive and embed views
+//=============================================================================
+// Detect if running in embed view (no user controls) or interactive view
+const isEmbedView = !document.getElementById('release'); // Embed view has no release button
+
+let lastStateSaveTime = 0;
+const STATE_SAVE_INTERVAL = 0.5; // Save state every 500ms when changes occur
+
+function serializeBoxState() {
+ return boxes.map(box => ({
+ id: box.uuid,
+ x: box.position.x,
+ y: box.position.y,
+ z: box.position.z,
+ color: box.material.color.getHex(),
+ state: box.userData.state,
+ materialName: box.userData.material?.name || 'Unknown',
+ isDefect: box.userData.isDefect || false,
+ identityRevealed: box.userData.identityRevealed || false
+ }));
+}
+
+function saveStateToAPI() {
+ const now = Date.now() / 1000;
+ if (now - lastStateSaveTime < STATE_SAVE_INTERVAL) return;
+
+ const state = {
+ boxes: serializeBoxState(),
+ timestamp: now
+ };
+
+ fetch('/api/digital-twin/state', {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify(state)
+ }).catch(err => console.log('[State Sync] Save failed:', err));
+
+ lastStateSaveTime = now;
+}
+
+function loadStateFromAPI() {
+ fetch('/api/digital-twin/state')
+ .then(res => res.json())
+ .then(data => {
+ if (!data.boxes || data.boxes.length === 0) return;
+
+ // Clear existing boxes
+ for (const b of boxes) scene.remove(b);
+ boxes.length = 0;
+
+ // Recreate boxes from state
+ data.boxes.forEach(boxData => {
+ const box = new THREE.Mesh(
+ new THREE.BoxGeometry(0.35, 0.35, 0.35),
+ new THREE.MeshStandardMaterial({ color: boxData.color })
+ );
+
+ box.position.set(boxData.x, boxData.y, boxData.z);
+ box.uuid = boxData.id; // Preserve ID
+ box.userData = {
+ state: boxData.state,
+ material: { name: boxData.materialName },
+ isDefect: boxData.isDefect,
+ identityRevealed: boxData.identityRevealed,
+ t: 0
+ };
+
+ scene.add(box);
+ boxes.push(box);
+ });
+
+ console.log(`[State Sync] Loaded ${data.boxes.length} boxes from API`);
+ })
+ .catch(err => console.log('[State Sync] Load failed:', err));
+}
+
+// For embed view: poll for state updates every second
+if (isEmbedView) {
+ console.log('[Digital Twin] Running in EMBED mode - will sync state from API');
+ loadStateFromAPI(); // Initial load
+ setInterval(loadStateFromAPI, 1000); // Poll every second
+}
+
 let cycleInitialized = false;
 
 function animate() {
@@ -1384,6 +1472,11 @@ function animate() {
  metrics.updateThroughput();
  updateDashboard();
  update3DStatusIndicators();
+
+ // Save state to API periodically (interactive view only)
+ if (!isEmbedView && boxes.length > 0) {
+ saveStateToAPI();
+ }
  }
 
  controls.update();

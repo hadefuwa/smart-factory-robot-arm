@@ -2367,6 +2367,31 @@ def digital_twin_stream():
     return response
 
 
+# Digital Twin State Management (shared between interactive and stream views)
+digital_twin_state = {
+    'boxes': [],  # List of boxes with {id, x, y, z, color, state}
+    'last_updated': 0
+}
+
+@app.route('/api/digital-twin/state', methods=['GET'])
+def get_digital_twin_state():
+    """Get current digital twin state (boxes, positions, etc.)"""
+    return jsonify(digital_twin_state)
+
+@app.route('/api/digital-twin/state', methods=['POST'])
+def update_digital_twin_state():
+    """Update digital twin state (called when user interacts with digital-twin.html)"""
+    global digital_twin_state
+    try:
+        data = request.json
+        digital_twin_state['boxes'] = data.get('boxes', [])
+        digital_twin_state['last_updated'] = time.time()
+        return jsonify({'success': True, 'timestamp': digital_twin_state['last_updated']})
+    except Exception as e:
+        logger.error(f"Error updating digital twin state: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 
 
 @app.route('/api/camera/status', methods=['GET'])
