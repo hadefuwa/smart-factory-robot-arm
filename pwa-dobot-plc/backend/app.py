@@ -1,4 +1,4 @@
-﻿"""
+"""
 PWA Dobot-PLC Control Backend
 Flask API with WebSocket support for real-time PLC monitoring
 """
@@ -1023,17 +1023,17 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
         snap7.util.set_bool(byte40_data, 0, 6, defect_detected)   # Defect_Detected
 
         # Prepare object_number INT (2 bytes at offset 42)
-        object_number_data = bytearray(2)
-        snap7.util.set_int(object_number_data, 0, object_count)
+        # object_number_data = bytearray(2)
+        # snap7.util.set_int(object_number_data, 0, object_count)
 
         # Prepare defect_number INT (2 bytes at offset 44)
-        defect_number_data = bytearray(2)
-        snap7.util.set_int(defect_number_data, 0, defect_count)
+        # defect_number_data = bytearray(2)
+        # snap7.util.set_int(defect_number_data, 0, defect_count)
 
         # Queue all writes - they will execute AFTER the next read in polling loop
         queue_plc_write(db_number, 40, byte40_data)           # Bool flags
-        queue_plc_write(db_number, 42, object_number_data)    # Object_Number
-        queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number
+        # queue_plc_write(db_number, 42, object_number_data)    # Object_Number (disabled)
+        # queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number (disabled)
         connected_byte, connected_bit = get_connected_bit_config()
         camera_connected = False
         if camera_service is not None:

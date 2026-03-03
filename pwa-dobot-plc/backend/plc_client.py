@@ -766,11 +766,12 @@ class PLCClient:
                 self.client.db_write(db_number, 40, current_byte)
 
                 # Write INT values (these use internal locks, so no additional delay needed)
-                if 'object_number' in tags:
-                    self.write_db_int(db_number, 42, int(tags['object_number']))
+                # Disabled: do not write Object_Number / Defect_Number to DBW42/DBW44 for now
+                # if 'object_number' in tags:
+                #     self.write_db_int(db_number, 42, int(tags['object_number']))
 
-                if 'defect_number' in tags:
-                    self.write_db_int(db_number, 44, int(tags['defect_number']))
+                # if 'defect_number' in tags:
+                #     self.write_db_int(db_number, 44, int(tags['defect_number']))
 
                 return True
 
