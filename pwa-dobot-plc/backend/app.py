@@ -1011,16 +1011,16 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
 
         db_number = db123_config.get('db_number', 123)
 
-        # Prepare byte 40 with fixed vision bool flags.
-        # Connected bit is now configurable and written separately below.
-        byte40_data = bytearray(1)
-        snap7.util.set_bool(byte40_data, 0, 0, False)              # Bit 0 unused in byte 40 now
-        snap7.util.set_bool(byte40_data, 0, 1, False)             # Connected handled by configurable bit writer
-        snap7.util.set_bool(byte40_data, 0, 2, busy)              # Busy
-        snap7.util.set_bool(byte40_data, 0, 3, completed)         # Completed
-        snap7.util.set_bool(byte40_data, 0, 4, object_count > 0)  # Object_Detected
-        snap7.util.set_bool(byte40_data, 0, 5, object_ok)         # Object_OK
-        snap7.util.set_bool(byte40_data, 0, 6, defect_detected)   # Defect_Detected
+        # Prepare status byte with vision bool flags.
+        # Connected bit is configurable and written separately below.
+        status_byte_data = bytearray(1)
+        # Bits 0 and 1 (Start, Connected) are owned by the PLC and preserved
+        # when the queued write is executed. Here we only define bits 2-6.
+        snap7.util.set_bool(status_byte_data, 0, 2, busy)              # Busy
+        snap7.util.set_bool(status_byte_data, 0, 3, completed)         # Completed
+        snap7.util.set_bool(status_byte_data, 0, 4, object_count > 0)  # Object_Detected
+        snap7.util.set_bool(status_byte_data, 0, 5, object_ok)         # Object_OK
+        snap7.util.set_bool(status_byte_data, 0, 6, defect_detected)   # Defect_Detected
 
         # Prepare object_number INT (2 bytes at offset 42)
         # object_number_data = bytearray(2)
@@ -1031,7 +1031,8 @@ def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, d
         # snap7.util.set_int(defect_number_data, 0, defect_count)
 
         # Queue all writes - they will execute AFTER the next read in polling loop
-        queue_plc_write(db_number, 40, byte40_data)           # Bool flags
+        # Status bits (Busy/Completed/Object_* flags) are in DB123.DBX26.2-26.6
+        queue_plc_write(db_number, 26, status_byte_data)      # Status bool flags
         # queue_plc_write(db_number, 42, object_number_data)    # Object_Number (disabled)
         # queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number (disabled)
         connected_byte, connected_bit = get_connected_bit_config()
@@ -1997,13 +1998,15 @@ def poll_loop():
                 # Camera tags: start bit address is configurable (default DB123.DBX26.0)
                 start_byte, start_bit = get_start_bit_config()
                 plc_cache['db123']['start'] = snap7.util.get_bool(all_data, start_byte, start_bit)
-                plc_cache['db123']['busy'] = snap7.util.get_bool(all_data, 40, 2)          # DB123.DBX40.2
-                plc_cache['db123']['complete'] = snap7.util.get_bool(all_data, 40, 3)      # DB123.DBX40.3
-                plc_cache['db123']['fault'] = snap7.util.get_bool(all_data, 40, 6)         # DB123.DBX40.6 (Defect_Detected)
+                # Camera status bits now come from byte 26 (Camera_UDT start)
+                plc_cache['db123']['busy'] = snap7.util.get_bool(all_data, 26, 2)          # DB123.DBX26.2
+                plc_cache['db123']['complete'] = snap7.util.get_bool(all_data, 26, 3)      # DB123.DBX26.3
+                plc_cache['db123']['fault'] = snap7.util.get_bool(all_data, 26, 6)         # DB123.DBX26.6 (Defect_Detected)
                 plc_cache['db123']['x_pos'] = 0.0  # Not in your layout
                 plc_cache['db123']['y_pos'] = 0.0  # Not in your layout
                 plc_cache['db123']['z_pos'] = 0.0  # Not in your layout
-                plc_cache['db123']['counter'] = snap7.util.get_int(all_data, 42)           # DB123.DBW42 (Object_Number)
+                # Object counter now read from DB123.DBW28 (Object_Number)
+                plc_cache['db123']['counter'] = snap7.util.get_int(all_data, 28)           # DB123.DBW28 (Object_Number)
 
                 # Robot tags (byte 4-32) - map to db4 cache for compatibility
                 plc_cache['db4']['connected'] = snap7.util.get_bool(all_data, 4, 0)        # DB123.DBX4.0
@@ -2074,8 +2077,30 @@ def poll_loop():
                             logger.error(f"âŒ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
                             continue  # Skip this write
 
+                        write_data = write_op['data']
+
+                        # Special handling for DB123 camera status byte at offset 26:
+                        # preserve PLC-owned Start (bit 0) and Connected (bit 1) while
+                        # applying our status bits (Busy/Completed/Object_* flags).
+                        if (
+                            write_op['db'] == 123
+                            and write_op['offset'] == 26
+                            and isinstance(write_data, (bytes, bytearray))
+                            and len(write_data) == 1
+                        ):
+                            try:
+                                current = plc_client.client.db_read(123, 26, 1)
+                                merged = bytearray(current)
+                                # Copy bits 2-6 from the queued status byte
+                                for bit in (2, 3, 4, 5, 6):
+                                    value = snap7.util.get_bool(write_data, 0, bit)
+                                    snap7.util.set_bool(merged, 0, bit, value)
+                                write_data = merged
+                            except Exception as merge_err:
+                                logger.error(f"Error merging camera status byte at DB123.DBX26.x: {merge_err}")
+
                         # Execute the write
-                        plc_client.client.db_write(write_op['db'], write_op['offset'], write_op['data'])
+                        plc_client.client.db_write(write_op['db'], write_op['offset'], write_data)
                         logger.debug(f"âœï¸ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
                 except Exception as e:
                     logger.error(f"PLC write error DB{write_op['db']}.{write_op['offset']}: {e}")

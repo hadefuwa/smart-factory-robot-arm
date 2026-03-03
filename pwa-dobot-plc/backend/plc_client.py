@@ -651,26 +651,30 @@ class PLCClient:
                 start_byte_data = self.client.db_read(db_number, start_byte, 1)
                 start_command = get_bool(start_byte_data, 0, start_bit)
                 
-                # Read other flags from byte 40 (1 byte) + padding + INT values
-                # Read from offset 40, 6 bytes total
-                all_data = self.client.db_read(db_number, 40, 6)
+                # Read camera status and counters starting at byte 26 (Camera_UDT)
+                # This block covers:
+                #  - Byte 26: Start / Connected / Busy / Completed / Object_* / Defect_* bits
+                #  - Byte 28: Object_Number (INT)
+                #  - Byte 30: Defect_Number (INT)
+                all_data = self.client.db_read(db_number, 26, 6)
                 connected_byte_data = self.client.db_read(db_number, connected_byte, 1)
                 
-                # Extract bool flags from byte 0
+                # Extract bool flags from byte 0 (original DB123 byte 26)
                 bool_data = all_data[0:1]
                 
                 # Extract INT values from bytes 2-3 (object_number) and 4-5 (defect_number)
+                # These correspond to DB123.DBW28 and DB123.DBW30.
                 object_number = get_int(all_data, 2) if len(all_data) >= 4 else 0
                 defect_number = get_int(all_data, 4) if len(all_data) >= 6 else 0
                 
                 result = {
                     'start': start_command,                      # 36.0
                     'connected': get_bool(connected_byte_data, 0, connected_bit),
-                    'busy': get_bool(bool_data, 0, 2),          # 40.2
-                    'completed': get_bool(bool_data, 0, 3),     # 40.3
-                    'object_detected': get_bool(bool_data, 0, 4),  # 40.4
-                    'object_ok': get_bool(bool_data, 0, 5),     # 40.5
-                    'defect_detected': get_bool(bool_data, 0, 6),  # 40.6
+                    'busy': get_bool(bool_data, 0, 2),          # 26.2
+                    'completed': get_bool(bool_data, 0, 3),     # 26.3
+                    'object_detected': get_bool(bool_data, 0, 4),  # 26.4
+                    'object_ok': get_bool(bool_data, 0, 5),     # 26.5
+                    'defect_detected': get_bool(bool_data, 0, 6),  # 26.6
                     'yellow_cube_detected': False,
                     'white_cube_detected': False,
                     'steel_cube_detected': False,
