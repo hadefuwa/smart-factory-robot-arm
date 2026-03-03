@@ -1434,13 +1434,6 @@ function loadStateFromAPI() {
  t: 0
  };
 
- // Add question marks if identity not revealed
- if (!boxData.identityRevealed) {
- const questionMarkGroup = createQuestionMarks();
- box.add(questionMarkGroup);
- box.userData.questionMark = questionMarkGroup;
- }
-
  scene.add(box);
  boxes.push(box);
  });
@@ -1504,15 +1497,15 @@ function animate() {
 
 animate();
 
-// State sync for both modes
+// State sync disabled for embed view - it runs its own independent simulation
+// Embed view is the MASTER, HMI shows snapshots of it
 if (isEmbedView()) {
- console.log('[Digital Twin] EMBED mode - loading from API every 1s');
- loadStateFromAPI(); // Initial load
- setInterval(loadStateFromAPI, 1000); // Poll every second
+ console.log('[Digital Twin] EMBED mode - running independent simulation (MASTER)');
+ // No state loading - this IS the source of truth
 } else {
- // Interactive mode: load initial state on startup (for refresh/restore)
- console.log('[Digital Twin] INTERACTIVE mode - loading initial state from API');
- loadStateFromAPI();
+ // Interactive mode: optional state restore on refresh
+ console.log('[Digital Twin] INTERACTIVE mode - independent view');
+ // Could load state here if we want to sync with embed, but not needed for now
 }
 
 // UI (buttons may not exist in embed/HMI mode - e.g. digital-twin-embed.html has no controls)
