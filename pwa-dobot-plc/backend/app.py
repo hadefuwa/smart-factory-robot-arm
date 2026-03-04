@@ -2474,10 +2474,9 @@ def camera_status():
             camera_opened = camera_service.camera is not None and camera_service.camera.isOpened()
         
         # Non-blocking check: do NOT read camera here (read() can block on USB timeout).
-        # Use recent frame age to infer readability.
-        now_ts = time.time()
+        # Consider camera readable once at least one frame has been captured.
         last_frame_time = float(camera_service.frame_time or 0)
-        can_read = bool(camera_service.last_frame is not None and (now_ts - last_frame_time) < 3.0)
+        can_read = bool(camera_service.last_frame is not None)
         
         # Camera is connected if it's opened (even if we can't read yet - might be warming up)
         connected = camera_opened
