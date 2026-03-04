@@ -234,6 +234,21 @@ plc_cache = {
         'robot_status_code': 0,
         'robot_error_code': 0
     },
+    # Legacy compatibility cache for code paths that still reference db4.* keys.
+    # Values are mirrored from DB123 byte ranges during unified reads.
+    'db4': {
+        'connected': False,
+        'busy': False,
+        'cycle_complete': False,
+        'target_x': 0.0,
+        'target_y': 0.0,
+        'target_z': 0.0,
+        'current_x': 0.0,
+        'current_y': 0.0,
+        'current_z': 0.0,
+        'status_code': 0,
+        'error_code': 0
+    },
     'plc_connected': False
 }
 
@@ -2032,6 +2047,19 @@ def poll_loop():
                 # DB123 byte 32 is reserved for cube color bits (DBX32.0-32.3), so avoid DBW32 here.
                 # Use DBW34 for compatibility status/error cache.
                 plc_cache['db123']['robot_error_code'] = snap7.util.get_int(all_data, 34)          # DB123.DBW34
+
+                # Mirror to legacy db4 cache for compatibility with older code paths/UI consumers.
+                plc_cache['db4']['connected'] = plc_cache['db123']['robot_connected']
+                plc_cache['db4']['busy'] = plc_cache['db123']['robot_busy']
+                plc_cache['db4']['cycle_complete'] = plc_cache['db123']['robot_cycle_complete']
+                plc_cache['db4']['target_x'] = plc_cache['db123']['robot_target_x']
+                plc_cache['db4']['target_y'] = plc_cache['db123']['robot_target_y']
+                plc_cache['db4']['target_z'] = plc_cache['db123']['robot_target_z']
+                plc_cache['db4']['current_x'] = plc_cache['db123']['robot_current_x']
+                plc_cache['db4']['current_y'] = plc_cache['db123']['robot_current_y']
+                plc_cache['db4']['current_z'] = plc_cache['db123']['robot_current_z']
+                plc_cache['db4']['status_code'] = plc_cache['db123']['robot_status_code']
+                plc_cache['db4']['error_code'] = plc_cache['db123']['robot_error_code']
 
             except Exception as e:
                 logger.error(f"DB123 read error: {e}")
