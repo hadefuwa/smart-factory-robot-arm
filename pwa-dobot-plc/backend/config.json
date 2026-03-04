@@ -38,48 +38,6 @@
     "slot": 1,
     "db_number": 4,
     "poll_interval": 2,
-    "db4": {
-      "enabled": true,
-      "db_number": 4,
-      "robot_tags": {
-        "connected": {
-          "byte": 4,
-          "bit": 0
-        },
-        "busy": {
-          "byte": 4,
-          "bit": 1
-        },
-        "cycle_complete": {
-          "byte": 4,
-          "bit": 2
-        },
-        "target_x": {
-          "byte": 6
-        },
-        "target_y": {
-          "byte": 10
-        },
-        "target_z": {
-          "byte": 14
-        },
-        "current_x": {
-          "byte": 18
-        },
-        "current_y": {
-          "byte": 22
-        },
-        "current_z": {
-          "byte": 26
-        },
-        "status_code": {
-          "byte": 30
-        },
-        "error_code": {
-          "byte": 34
-        }
-      }
-    },
     "db40": {
       "enabled": false,
       "comment": "Camera_UDT is actually in DB123 starting at byte 40, not in a separate DB40"
@@ -140,8 +98,8 @@
     "timeout_sec": 3
   },
   "enable_digital_twin_stream": true,
-  "digital_twin_width": 480,
-  "digital_twin_height": 360,
-  "digital_twin_fps": 4,
+  "digital_twin_width": 320,
+  "digital_twin_height": 240,
+  "digital_twin_fps": 2,
   "digital_twin_quality": 65
 }

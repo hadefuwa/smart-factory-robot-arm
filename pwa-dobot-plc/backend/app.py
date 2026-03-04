@@ -220,7 +220,19 @@ plc_cache = {
         'x_pos': 0.0,
         'y_pos': 0.0,
         'z_pos': 0.0,
-        'counter': 0
+        'counter': 0,
+        # Robot/Gantry tags (DB123 bytes 4-34) - legacy db4 compatibility removed
+        'robot_connected': False,
+        'robot_busy': False,
+        'robot_cycle_complete': False,
+        'robot_target_x': 0.0,
+        'robot_target_y': 0.0,
+        'robot_target_z': 0.0,
+        'robot_current_x': 0.0,
+        'robot_current_y': 0.0,
+        'robot_current_z': 0.0,
+        'robot_status_code': 0,
+        'robot_error_code': 0
     },
     'plc_connected': False
 }
@@ -2006,20 +2018,20 @@ def poll_loop():
                 # Object counter now read from DB123.DBW28 (Object_Number)
                 plc_cache['db123']['counter'] = snap7.util.get_int(all_data, 28)           # DB123.DBW28 (Object_Number)
 
-                # Robot tags (byte 4-32) - map to db4 cache for compatibility
-                plc_cache['db4']['connected'] = snap7.util.get_bool(all_data, 4, 0)        # DB123.DBX4.0
-                plc_cache['db4']['busy'] = snap7.util.get_bool(all_data, 4, 1)             # DB123.DBX4.1
-                plc_cache['db4']['cycle_complete'] = snap7.util.get_bool(all_data, 4, 2)   # DB123.DBX4.2
-                plc_cache['db4']['target_x'] = snap7.util.get_real(all_data, 6)            # DB123.DBD6
-                plc_cache['db4']['target_y'] = snap7.util.get_real(all_data, 10)           # DB123.DBD10
-                plc_cache['db4']['target_z'] = snap7.util.get_real(all_data, 14)           # DB123.DBD14
-                plc_cache['db4']['current_x'] = snap7.util.get_real(all_data, 18)          # DB123.DBD18
-                plc_cache['db4']['current_y'] = snap7.util.get_real(all_data, 22)          # DB123.DBD22
-                plc_cache['db4']['current_z'] = snap7.util.get_real(all_data, 26)          # DB123.DBD26
-                plc_cache['db4']['status_code'] = snap7.util.get_int(all_data, 30)         # DB123.DBW30
+                # Robot/Gantry tags (byte 4-34) from DB123 - DB4 removed, now using db123 keys
+                plc_cache['db123']['robot_connected'] = snap7.util.get_bool(all_data, 4, 0)        # DB123.DBX4.0
+                plc_cache['db123']['robot_busy'] = snap7.util.get_bool(all_data, 4, 1)             # DB123.DBX4.1
+                plc_cache['db123']['robot_cycle_complete'] = snap7.util.get_bool(all_data, 4, 2)   # DB123.DBX4.2
+                plc_cache['db123']['robot_target_x'] = snap7.util.get_real(all_data, 6)            # DB123.DBD6
+                plc_cache['db123']['robot_target_y'] = snap7.util.get_real(all_data, 10)           # DB123.DBD10
+                plc_cache['db123']['robot_target_z'] = snap7.util.get_real(all_data, 14)           # DB123.DBD14
+                plc_cache['db123']['robot_current_x'] = snap7.util.get_real(all_data, 18)          # DB123.DBD18
+                plc_cache['db123']['robot_current_y'] = snap7.util.get_real(all_data, 22)          # DB123.DBD22
+                plc_cache['db123']['robot_current_z'] = snap7.util.get_real(all_data, 26)          # DB123.DBD26
+                plc_cache['db123']['robot_status_code'] = snap7.util.get_int(all_data, 30)         # DB123.DBW30
                 # DB123 byte 32 is reserved for cube color bits (DBX32.0-32.3), so avoid DBW32 here.
                 # Use DBW34 for compatibility status/error cache.
-                plc_cache['db4']['error_code'] = snap7.util.get_int(all_data, 34)          # DB123.DBW34
+                plc_cache['db123']['robot_error_code'] = snap7.util.get_int(all_data, 34)          # DB123.DBW34
 
             except Exception as e:
                 logger.error(f"DB123 read error: {e}")
@@ -2110,7 +2122,7 @@ def poll_loop():
             # Uncomment below to re-enable PLC start bit control
             # start_bit = plc_cache['db123']['start']
             start_bit = True  # Force camera to always run
-            completed_command = bool(plc_cache['db4']['cycle_complete'])
+            completed_command = bool(plc_cache['db123']['robot_cycle_complete'])
 
             # When PLC sends Completed Command, clear all cube color bits (DB123.DBX32.0-32.3)
             if completed_command and not vision_last_completed_command_state:
@@ -3640,8 +3652,8 @@ def get_smart_factory_data():
         production_counter = plc_cache.get('db123', {}).get('counter', 0)
         conveyor_busy = plc_cache.get('db123', {}).get('busy', False)
         conveyor_running = conveyor_busy or plc_cache.get('db123', {}).get('start', False)
-        gantry_connected = plc_cache.get('db4', {}).get('connected', False)
-        gantry_busy = plc_cache.get('db4', {}).get('busy', False)
+        gantry_connected = plc_cache.get('db123', {}).get('robot_connected', False)
+        gantry_busy = plc_cache.get('db123', {}).get('robot_busy', False)
         gantry_running = gantry_connected and gantry_busy
         fault_detected = plc_cache.get('db123', {}).get('fault', False)
         plc_connected = plc_cache.get('plc_connected', False)

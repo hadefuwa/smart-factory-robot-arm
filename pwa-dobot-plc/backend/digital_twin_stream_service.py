@@ -13,6 +13,8 @@ import logging
 import threading
 import time
 import io
+import os
+import subprocess
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,7 @@ except ImportError:
 class DigitalTwinStreamService:
     """Captures digital twin page in headless browser and provides JPEG frames for streaming."""
 
-    def __init__(self, port: int = 8080, width: int = 480, height: int = 360, fps: int = 4, quality: int = 65):
+    def __init__(self, port: int = 8080, width: int = 320, height: int = 240, fps: int = 2, quality: int = 65):
         self.port = port
         self.width = width
         self.height = height
@@ -92,6 +94,24 @@ class DigitalTwinStreamService:
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
                 )
                 logger.info("Digital twin: Chromium browser launched")
+
+                # Lower priority of Chromium processes to prioritize vision system
+                try:
+                    result = subprocess.run(
+                        ["pgrep", "-f", "headless_shell"],
+                        capture_output=True,
+                        text=True
+                    )
+                    pids = result.stdout.strip().split('\n')
+                    for pid in pids:
+                        if pid:
+                            try:
+                                subprocess.run(["renice", "-n", "10", "-p", pid], check=False)
+                                logger.info(f"Digital twin: Reduced priority of Chromium process {pid} (nice +10)")
+                            except Exception as e:
+                                logger.debug(f"Could not renice PID {pid}: {e}")
+                except Exception as e:
+                    logger.debug(f"Could not adjust Chromium process priority: {e}")
 
                 self._page = self._browser.new_page(
                     viewport={"width": self.width, "height": self.height},

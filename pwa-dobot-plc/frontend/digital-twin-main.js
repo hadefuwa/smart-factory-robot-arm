@@ -330,7 +330,7 @@ const camera = new THREE.PerspectiveCamera(45, containerWidth/containerHeight, 0
 camera.position.set(0, 6, 10);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: false }); // Disabled for better CPU performance
 renderer.setSize(containerWidth, containerHeight);
 container.appendChild(renderer.domElement);
 
