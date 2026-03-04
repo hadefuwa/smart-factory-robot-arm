@@ -102,30 +102,52 @@ class CameraService:
                     self.camera = None
                     return False
                 
-                # Set camera properties (these may fail silently, which is okay)
-                try:
-                    # Prefer MJPEG over raw YUYV to reduce USB bandwidth and frame stalls.
-                    self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-                    self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-                    self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-                    # This USB camera is commonly stable at 5-20 FPS depending on mode.
-                    self.camera.set(cv2.CAP_PROP_FPS, 15)
-                    self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer for faster response
-                except Exception as e:
-                    logger.warning(f"Could not set some camera properties: {e}")
+                # Negotiate a stable camera mode. Some unsupported modes trigger UVC probe failures.
+                mode_candidates = []
+                requested = (int(self.width), int(self.height))
+                mode_candidates.append(requested)
+                for fallback in ((1600, 1200), (1280, 720), (640, 480)):
+                    if fallback not in mode_candidates:
+                        mode_candidates.append(fallback)
 
-                # Quick warm up camera (reduced from 5 to 2 frames)
-                # If read() fails, camera may not be ready - that's okay, we'll try again later
-                try:
-                    for _ in range(2):
-                        ret, _ = self.camera.read()
-                        if not ret:
-                            logger.warning(f"Camera read() failed during warm-up - camera may not be ready")
+                mode_ok = False
+                for mode_w, mode_h in mode_candidates:
+                    try:
+                        # Prefer MJPEG over raw YUYV to reduce USB bandwidth and stalls.
+                        self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, mode_w)
+                        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, mode_h)
+                        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+                        warm_ok = False
+                        for _ in range(3):
+                            ret, frame = self.camera.read()
+                            if ret and frame is not None:
+                                warm_ok = True
+                                break
+                            time.sleep(0.05)
+
+                        if warm_ok:
+                            actual_w = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH) or mode_w)
+                            actual_h = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT) or mode_h)
+                            self.width = actual_w
+                            self.height = actual_h
+                            logger.info(
+                                "Camera mode stabilized at %sx%s (requested %sx%s)",
+                                actual_w, actual_h, mode_w, mode_h
+                            )
+                            mode_ok = True
                             break
-                except Exception as e:
-                    logger.warning(f"Camera read() error during initialization: {e} - camera may not be ready")
-                    # Don't fail completely - camera might work later
-                    # Keep self.camera set so we can try again
+                        else:
+                            logger.warning("Camera mode %sx%s did not return frames during warm-up", mode_w, mode_h)
+                    except Exception as e:
+                        logger.warning("Camera mode negotiation failed for %sx%s: %s", mode_w, mode_h, e)
+
+                if not mode_ok:
+                    logger.error("Camera initialization failed: no stable mode produced frames")
+                    self.camera.release()
+                    self.camera = None
+                    return False
                 
                 self.read_fail_count = 0
                 logger.info(f"Camera initialized at index {self.camera_index} (may need warm-up)")
