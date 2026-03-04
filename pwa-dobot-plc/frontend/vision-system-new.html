@@ -178,7 +178,7 @@
                 <div class="card-body" style="padding-top: 14px; padding-bottom: 14px;">
                   <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                     <button class="btn btn-success" onclick="startAnalysis()" style="flex: 2; min-width: 240px; font-size: 16px; padding: 12px;">
-                      <i class="material-icons">analytics</i> START ANALYSIS (10 votes)
+                      <i class="material-icons">analytics</i> START ANALYSIS (1 vote)
                     </button>
                     <button class="btn btn-info" onclick="detectObjects()" style="flex: 1; min-width: 180px;">
                       <i class="material-icons">search</i> Quick Test
@@ -1027,7 +1027,7 @@
       const resultsContent = document.getElementById('resultsContent');
 
       // Show loading state
-      resultsContent.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #4caf50;"></i><br><br>Taking 10 snapshots and voting...<br><span style="color: #64b5f6; font-size: 12px;">This takes about 1 second</span></div>';
+      resultsContent.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #4caf50;"></i><br><br>Taking 1 snapshot...<br><span style="color: #64b5f6; font-size: 12px;">This takes about 1 second</span></div>';
       resultsDiv.style.display = 'block';
 
       try {
@@ -1035,8 +1035,8 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            num_samples: 10,
-            delay_ms: 50,
+            num_samples: 1,
+            delay_ms: 0,
             min_area: objectParams.min_area,
             max_area: objectParams.max_area
           })
@@ -1966,6 +1966,7 @@
   </script>
 </body>
 </html>
+
 
 
 

@@ -1869,7 +1869,7 @@ def process_vision_handshake():
         latest_plc_cycle_result.update({
             'timestamp': time.time(),
             'running': True,
-            'message': 'PLC start bit is TRUE - running 10-vote analysis.'
+            'message': 'PLC start bit is TRUE - running 1-sample analysis.'
         })
         logger.info("ðŸ”„ Vision handshake: Starting processing (Start command received)")
         logger.info("ðŸ”„ Vision handshake: Step 1 - Setting Busy flag")
@@ -1878,17 +1878,17 @@ def process_vision_handshake():
         write_vision_to_plc(0, 0, True, False, busy=True, completed=False, color_code=0)
         logger.info("ðŸ”„ Vision handshake: Step 2 - Busy flag set, starting color detection")
 
-        # Use majority voting to detect cube color (10 snapshots), using persisted UI params.
+        # Use fast single-sample detection, using persisted UI params.
         persisted_params = get_saved_object_params()
-        logger.info("ðŸ”„ Vision handshake: Step 3 - Running majority voting detection (10 frames)")
+        logger.info("ðŸ”„ Vision handshake: Step 3 - Running fast detection (1 frame)")
         voting_result = camera_service.detect_cube_color_with_voting(
-            num_samples=10,
-            delay_ms=50,
+            num_samples=1,
+            delay_ms=0,
             min_area=persisted_params['min_area'],
             max_area=persisted_params['max_area']
         )
 
-        # Publish the PLC-triggered 10-vote annotated frame for frontend viewers
+        # Publish the PLC-triggered annotated frame for frontend viewers
         if voting_result.get('annotated_image'):
             latest_annotated_image = voting_result['annotated_image']
             fmt = str(voting_result.get('annotated_image_format', 'jpeg')).lower()
@@ -2159,11 +2159,11 @@ def poll_loop():
 
 
             # ALWAYS RUNNING MODE:
-            # Camera continuously runs 10-vote analysis cycles without PLC start bit
+            # Camera continuously runs 1-sample analysis cycles without PLC start bit
             # Uncomment the conditional below to re-enable PLC start bit control:
             # if start_bit and not vision_handshake_processing:
             if not vision_handshake_processing:
-                # logger.info("📸 Start bit TRUE - triggering 10-vote vision processing cycle")
+                # logger.info("📸 Start bit TRUE - triggering vision processing cycle")
                 threading.Thread(target=process_vision_handshake, daemon=True).start()
 
         except Exception as e:
@@ -3164,7 +3164,7 @@ def get_annotated_result():
 
 @app.route('/api/vision/latest-cycle', methods=['GET'])
 def get_latest_vision_cycle():
-    """Return latest PLC-triggered 10-vote cycle summary for UI/debug."""
+    """Return latest PLC-triggered cycle summary for UI/debug."""
     global latest_plc_cycle_result, vision_handshake_processing
     try:
         payload = dict(latest_plc_cycle_result)
@@ -4400,3 +4400,4 @@ if __name__ == '__main__':
     # Serve with Flask threaded WSGI for robust HTTP handling of long-lived MJPEG streams.
     # Socket.IO endpoints remain defined but are not used for transport in this mode.
     app.run(threaded=True, **run_kwargs)
+
