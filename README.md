@@ -491,6 +491,31 @@ Working checkpoints were tagged in Git:
 - Enable by setting `enable_digital_twin_stream: true` in `pwa-dobot-plc/backend/config.json`, or by env var `ENABLE_DIGITAL_TWIN_STREAM=1`.
 - Current local capture target uses `digital-twin.html` (single interactive simulation source for HMI snapshot stream).
 
+### 12. Camera stability hotfix (2026-03-04)
+
+A camera disconnect issue was traced to USB/UVC transport errors on Raspberry Pi, not to frontend logic:
+
+- Kernel errors observed during failure:
+  - `uvcvideo ... Failed to set UVC probe control : -71`
+  - `usb ... Failed to suspend device, error -32`
+  - Camera node temporarily disappeared from `/dev/video0`.
+- Root effect:
+  - `/api/camera/status` reported `connected=false` / `can_read=false`.
+  - `/api/vision/annotated-result?stream=1` fell back to placeholder/no fresh image.
+- Persistent fix applied:
+  - Added `usbcore.autosuspend=-1` to `/boot/firmware/cmdline.txt`.
+  - Reboot required after editing boot cmdline.
+- Post-fix verification:
+  - `/dev/video0` and `/dev/video1` returned.
+  - `GET /api/camera/status` returned `connected=true`, `can_read=true`.
+  - `GET /api/vision/annotated-result?stream=1` served live MJPEG again.
+
+Recommended operational notes:
+
+- Keep camera on a stable USB connection (short, good-quality cable).
+- If stream stalls, first check `journalctl -k | grep -i uvc`.
+- If needed, reboot Pi to force clean UVC re-enumeration.
+
 ---
 
 ## 📚 Documentation
@@ -923,6 +948,6 @@ MIT License - Feel free to use and modify!
 
 ---
 
-**Last Updated:** 2026-02-26
-**Version:** v4.5
+**Last Updated:** 2026-03-04
+**Version:** v4.6
 **Status:** Production Ready ✅

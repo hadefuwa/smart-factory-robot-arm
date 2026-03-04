@@ -35,7 +35,8 @@
       "Bash(do echo \"Test $i:\")",
       "Bash(done)",
       "Bash(tasklist:*)",
-      "Bash(time curl -s --max-time 5 http://192.168.7.5:8080/api/camera/status)"
+      "Bash(time curl -s --max-time 5 http://192.168.7.5:8080/api/camera/status)",
+      "Bash(time curl -s --max-time 5 http://192.168.7.5:8080/digital-twin-frame)"
     ],
     "deny": [],
     "ask": []
