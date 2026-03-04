@@ -27,13 +27,20 @@ from dobot_client import DobotClient
 from camera_service import CameraService
 from digital_twin_stream_service import DigitalTwinStreamService, PLAYWRIGHT_AVAILABLE
 
-# Configure logging to both console and file
+# Configure logging to both console and file with rotation
+from logging.handlers import RotatingFileHandler
+
 log_dir = os.path.dirname(os.path.abspath(__file__))
 log_file = os.path.join(log_dir, 'debug.log')
 
-# Create file handler
-file_handler = logging.FileHandler(log_file, mode='a')
-file_handler.setLevel(logging.DEBUG)
+# Create rotating file handler (max 100MB, keep 3 backups)
+file_handler = RotatingFileHandler(
+    log_file,
+    mode='a',
+    maxBytes=100*1024*1024,  # 100MB
+    backupCount=3
+)
+file_handler.setLevel(logging.WARNING)  # Reduced from DEBUG to WARNING
 file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(file_formatter)
 
@@ -45,12 +52,18 @@ console_handler.setFormatter(console_formatter)
 
 # Configure root logger
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
+root_logger.setLevel(logging.WARNING)  # Reduced from DEBUG to WARNING
 root_logger.addHandler(file_handler)
 root_logger.addHandler(console_handler)
 
+# Silence noisy loggers
+logging.getLogger('werkzeug').setLevel(logging.WARNING)  # Flask HTTP request logging
+logging.getLogger('snap7').setLevel(logging.WARNING)  # Snap7 debug logging
+logging.getLogger('snap7.client').setLevel(logging.WARNING)  # Snap7 client debug logging
+
 logger = logging.getLogger(__name__)
-logger.info(f"Logging to file: {log_file}")
+logger.setLevel(logging.INFO)  # Keep main app logger at INFO
+logger.info(f"Logging to file: {log_file} (WARNING level, max 100MB, 3 backups)")
 
 # Directory for saving counter images
 COUNTER_IMAGES_DIR = os.path.expanduser('~/counter_images')
@@ -2274,34 +2287,58 @@ def _get_latest_annotated_result_image():
     return image_data, mime_type
 
 
+def _get_latest_annotated_result_image_with_key():
+    """Return latest annotated result bytes + mime type + stable key for caching."""
+    global latest_annotated_image, latest_annotated_mime
+
+    import base64
+
+    if latest_annotated_image is None:
+        plc_start = bool(plc_cache.get('db123', {}).get('start', False))
+        image_data, mime_type = _build_annotated_placeholder()
+        return image_data, mime_type, f"placeholder:{1 if plc_start else 0}"
+
+    image_data = base64.b64decode(latest_annotated_image)
+    mime_type = latest_annotated_mime or 'image/jpeg'
+    # Use a compact deterministic key so unchanged images are not re-encoded each frame.
+    return image_data, mime_type, f"annotated:{len(latest_annotated_image)}:{latest_annotated_image[:64]}"
+
+
 def generate_annotated_result_frames():
     """Generator for annotated voting result as MJPEG for HMI compatibility."""
     import cv2
     import numpy as np
 
+    last_key = None
+    last_jpeg = None
+
     while True:
         try:
-            image_data, mime_type = _get_latest_annotated_result_image()
+            image_data, mime_type, frame_key = _get_latest_annotated_result_image_with_key()
 
-            if mime_type != 'image/jpeg':
-                # MJPEG clients are most compatible with JPEG parts.
-                arr = np.frombuffer(image_data, dtype=np.uint8)
-                decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                if decoded is not None:
-                    ok, jpg = cv2.imencode('.jpg', decoded, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-                    if ok:
-                        image_data = jpg.tobytes()
-                        mime_type = 'image/jpeg'
+            # Re-encode only when source image changed.
+            if frame_key != last_key or last_jpeg is None:
+                if mime_type != 'image/jpeg':
+                    # MJPEG clients are most compatible with JPEG parts.
+                    arr = np.frombuffer(image_data, dtype=np.uint8)
+                    decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if decoded is not None:
+                        ok, jpg = cv2.imencode('.jpg', decoded, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                        if ok:
+                            image_data = jpg.tobytes()
+                            mime_type = 'image/jpeg'
+                last_key = frame_key
+                last_jpeg = image_data
 
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n'
-                   + f'Content-Length: {len(image_data)}\r\n\r\n'.encode('ascii')
-                   + image_data + b'\r\n')
+                   + f'Content-Length: {len(last_jpeg)}\r\n\r\n'.encode('ascii')
+                   + last_jpeg + b'\r\n')
         except Exception as e:
             logger.debug(f"Annotated MJPEG frame generation error: {e}")
 
-        # 30 FPS for smooth vision result monitoring
-        time.sleep(0.033)
+        # 10 FPS is sufficient for result monitoring and significantly reduces CPU load.
+        time.sleep(0.1)
 
 @app.route('/api/camera/stream')
 def camera_stream():
@@ -4343,9 +4380,9 @@ if __name__ == '__main__':
     # Start digital twin stream (same approach as camera: Pi renders 3D, streams MJPEG for HMI)
     # Check config file first, then environment variable, default OFF
     enable_digital_twin_stream = False
-    dt_width = 480  # Reduced from 640 to lower CPU usage
-    dt_height = 360  # Reduced from 480 to lower CPU usage
-    dt_fps = 4  # Reduced from 10 to lower CPU usage
+    dt_width = 320  # Further reduced from 480 to lower CPU usage
+    dt_height = 240  # Further reduced from 360 to lower CPU usage
+    dt_fps = 2  # Further reduced from 4 to lower CPU usage
     dt_quality = 65  # Reduced from 85 to lower CPU usage
 
     config_file = os.path.join(os.path.dirname(__file__), 'config.json')

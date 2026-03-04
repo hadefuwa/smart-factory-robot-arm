@@ -828,6 +828,8 @@ class CameraService:
 
         color_votes = []
         all_detections = []
+        last_sample_raw_frame = None
+        last_sample_detection = None
         params = {
             'min_area': min_area,
             'max_area': max_area,
@@ -847,6 +849,8 @@ class CameraService:
             # Detect color
             result = self._detect_with_color(frame, params)
             all_detections.append(result)
+            last_sample_raw_frame = raw_frame
+            last_sample_detection = result
 
             # Extract the dominant color from this detection
             objects = result.get('objects', [])
@@ -913,10 +917,21 @@ class CameraService:
 
         # Create annotated image for every cycle (even if nothing is detected).
         annotated_image_base64 = None
-        final_raw_frame = self.read_frame_raw()
+        final_raw_frame = None
+        final_result = None
+
+        # Fast path for low-latency mode: when using a single sample, reuse that
+        # detection result instead of reading and re-processing another frame.
+        if num_samples == 1 and last_sample_raw_frame is not None and last_sample_detection is not None:
+            final_raw_frame = last_sample_raw_frame.copy()
+            final_result = last_sample_detection
+        else:
+            final_raw_frame = self.read_frame_raw()
+            if final_raw_frame is not None:
+                detect_frame = self._apply_crop(final_raw_frame) if self.crop_enabled else final_raw_frame
+                final_result = self._detect_with_color(detect_frame, params)
+
         if final_raw_frame is not None:
-            detect_frame = self._apply_crop(final_raw_frame) if self.crop_enabled else final_raw_frame
-            final_result = self._detect_with_color(detect_frame, params)
             objects = final_result.get('objects', [])
 
             drew_box = False
