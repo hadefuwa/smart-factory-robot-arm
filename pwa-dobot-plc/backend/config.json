@@ -97,7 +97,7 @@
     "poll_interval_sec": 5,
     "timeout_sec": 3
   },
-  "enable_digital_twin_stream": true,
+  "enable_digital_twin_stream": false,
   "digital_twin_width": 320,
   "digital_twin_height": 240,
   "digital_twin_fps": 2,

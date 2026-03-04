@@ -25,7 +25,8 @@ import snap7.util
 from plc_client import PLCClient
 from dobot_client import DobotClient
 from camera_service import CameraService
-from digital_twin_stream_service import DigitalTwinStreamService, PLAYWRIGHT_AVAILABLE
+# DISABLED: Digital twin import commented out to reduce CPU usage
+# from digital_twin_stream_service import DigitalTwinStreamService, PLAYWRIGHT_AVAILABLE
 
 # Configure logging to both console and file with rotation
 from logging.handlers import RotatingFileHandler
@@ -2372,18 +2373,19 @@ def camera_stream():
     return response
 
 
-def generate_digital_twin_frames():
-    """Generator for digital twin MJPEG stream - same format as camera."""
-    while True:
-        if digital_twin_stream_service is None:
-            break
-        frame_bytes = digital_twin_stream_service.get_frame_jpeg(quality=70)
-        if frame_bytes is None:
-            time.sleep(0.1)
-            continue
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(0.1)  # ~10 FPS - 3D rendering is heavier than camera
+# DISABLED: Digital twin routes commented out to reduce CPU usage
+# def generate_digital_twin_frames():
+#     """Generator for digital twin MJPEG stream - same format as camera."""
+#     while True:
+#         if digital_twin_stream_service is None:
+#             break
+#         frame_bytes = digital_twin_stream_service.get_frame_jpeg(quality=70)
+#         if frame_bytes is None:
+#             time.sleep(0.1)
+#             continue
+#         yield (b'--frame\r\n'
+#                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+#         time.sleep(0.1)  # ~10 FPS - 3D rendering is heavier than camera
 
 
 @app.route('/camera-frame')
@@ -2397,58 +2399,60 @@ def camera_frame():
     return Response(frame, mimetype='image/jpeg')
 
 
-@app.route('/digital-twin-frame')
-def digital_twin_frame():
-    """Single JPEG frame from Playwright-rendered 3D - needs playwright. Prefer camera-frame instead."""
-    if digital_twin_stream_service is None:
-        return Response(b'', status=503, mimetype='image/jpeg')
-    frame = digital_twin_stream_service.get_frame_jpeg(quality=70)
-    if frame is None:
-        return Response(b'', status=503, mimetype='image/jpeg')
-    return Response(frame, mimetype='image/jpeg')
+# DISABLED: Digital twin frame endpoint commented out to reduce CPU usage
+# @app.route('/digital-twin-frame')
+# def digital_twin_frame():
+#     """Single JPEG frame from Playwright-rendered 3D - needs playwright. Prefer camera-frame instead."""
+#     if digital_twin_stream_service is None:
+#         return Response(b'', status=503, mimetype='image/jpeg')
+#     frame = digital_twin_stream_service.get_frame_jpeg(quality=70)
+#     if frame is None:
+#         return Response(b'', status=503, mimetype='image/jpeg')
+#     return Response(frame, mimetype='image/jpeg')
 
 
-@app.route('/api/digital-twin/stream')
-def digital_twin_stream():
-    """MJPEG stream of rendered digital twin - for HMI panels that cannot run WebGL.
+# DISABLED: Digital twin stream endpoint commented out to reduce CPU usage
+# @app.route('/api/digital-twin/stream')
+# def digital_twin_stream():
+#     """MJPEG stream of rendered digital twin - for HMI panels that cannot run WebGL.
+#
+#     The Pi renders the 3D view in headless Chromium and streams it.
+#     Use this URL in WinCC (same as camera stream) when the panel cannot render Three.js.
+#     """
+#     if digital_twin_stream_service is None:
+#         return jsonify({'error': 'Digital twin stream not available (Playwright not installed?)'}), 503
+#     response = Response(
+#         generate_digital_twin_frames(),
+#         mimetype='multipart/x-mixed-replace; boundary=frame'
+#     )
+#     response.headers['X-Frame-Options'] = 'ALLOWALL'
+#     response.headers['Access-Control-Allow-Origin'] = '*'
+#     return response
 
-    The Pi renders the 3D view in headless Chromium and streams it.
-    Use this URL in WinCC (same as camera stream) when the panel cannot render Three.js.
-    """
-    if digital_twin_stream_service is None:
-        return jsonify({'error': 'Digital twin stream not available (Playwright not installed?)'}), 503
-    response = Response(
-        generate_digital_twin_frames(),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
-    response.headers['X-Frame-Options'] = 'ALLOWALL'
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
 
+# DISABLED: Digital Twin State Management commented out to reduce CPU usage
+# digital_twin_state = {
+#     'boxes': [],  # List of boxes with {id, x, y, z, color, state}
+#     'last_updated': 0
+# }
 
-# Digital Twin State Management (shared between interactive and stream views)
-digital_twin_state = {
-    'boxes': [],  # List of boxes with {id, x, y, z, color, state}
-    'last_updated': 0
-}
+# @app.route('/api/digital-twin/state', methods=['GET'])
+# def get_digital_twin_state():
+#     """Get current digital twin state (boxes, positions, etc.)"""
+#     return jsonify(digital_twin_state)
 
-@app.route('/api/digital-twin/state', methods=['GET'])
-def get_digital_twin_state():
-    """Get current digital twin state (boxes, positions, etc.)"""
-    return jsonify(digital_twin_state)
-
-@app.route('/api/digital-twin/state', methods=['POST'])
-def update_digital_twin_state():
-    """Update digital twin state (called when user interacts with digital-twin.html)"""
-    global digital_twin_state
-    try:
-        data = request.json
-        digital_twin_state['boxes'] = data.get('boxes', [])
-        digital_twin_state['last_updated'] = time.time()
-        return jsonify({'success': True, 'timestamp': digital_twin_state['last_updated']})
-    except Exception as e:
-        logger.error(f"Error updating digital twin state: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+# @app.route('/api/digital-twin/state', methods=['POST'])
+# def update_digital_twin_state():
+#     """Update digital twin state (called when user interacts with digital-twin.html)"""
+#     global digital_twin_state
+#     try:
+#         data = request.json
+#         digital_twin_state['boxes'] = data.get('boxes', [])
+#         digital_twin_state['last_updated'] = time.time()
+#         return jsonify({'success': True, 'timestamp': digital_twin_state['last_updated']})
+#     except Exception as e:
+#         logger.error(f"Error updating digital twin state: {e}")
+#         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 
@@ -4389,47 +4393,49 @@ if __name__ == '__main__':
     # Start server
     port = int(os.getenv('PORT', 8080))
 
-    # Start digital twin stream (same approach as camera: Pi renders 3D, streams MJPEG for HMI)
-    # Check config file first, then environment variable, default OFF
-    enable_digital_twin_stream = False
-    dt_width = 320  # Further reduced from 480 to lower CPU usage
-    dt_height = 240  # Further reduced from 360 to lower CPU usage
-    dt_fps = 2  # Further reduced from 4 to lower CPU usage
-    dt_quality = 65  # Reduced from 85 to lower CPU usage
+    # DISABLED: Digital twin stream initialization commented out to reduce CPU usage
+    # # Start digital twin stream (same approach as camera: Pi renders 3D, streams MJPEG for HMI)
+    # # Check config file first, then environment variable, default OFF
+    # enable_digital_twin_stream = False
+    # dt_width = 320  # Further reduced from 480 to lower CPU usage
+    # dt_height = 240  # Further reduced from 360 to lower CPU usage
+    # dt_fps = 2  # Further reduced from 4 to lower CPU usage
+    # dt_quality = 65  # Reduced from 85 to lower CPU usage
 
-    config_file = os.path.join(os.path.dirname(__file__), 'config.json')
-    try:
-        if os.path.exists(config_file):
-            with open(config_file, 'r') as f:
-                config = json.load(f)
-                enable_digital_twin_stream = config.get('enable_digital_twin_stream', False)
-                dt_width = config.get('digital_twin_width', dt_width)
-                dt_height = config.get('digital_twin_height', dt_height)
-                dt_fps = config.get('digital_twin_fps', dt_fps)
-                dt_quality = config.get('digital_twin_quality', dt_quality)
-                logger.info(f"Digital twin config loaded from config.json: enabled={enable_digital_twin_stream}, {dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality}")
-    except Exception as e:
-        logger.warning(f"Could not read config.json: {e}")
+    # config_file = os.path.join(os.path.dirname(__file__), 'config.json')
+    # try:
+    #     if os.path.exists(config_file):
+    #         with open(config_file, 'r') as f:
+    #             config = json.load(f)
+    #             enable_digital_twin_stream = config.get('enable_digital_twin_stream', False)
+    #             dt_width = config.get('digital_twin_width', dt_width)
+    #             dt_height = config.get('digital_twin_height', dt_height)
+    #             dt_fps = config.get('digital_twin_fps', dt_fps)
+    #             dt_quality = config.get('digital_twin_quality', dt_quality)
+    #             logger.info(f"Digital twin config loaded from config.json: enabled={enable_digital_twin_stream}, {dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality}")
+    # except Exception as e:
+    #     logger.warning(f"Could not read config.json: {e}")
 
-    # Environment variable can override config file
-    if os.getenv('ENABLE_DIGITAL_TWIN_STREAM'):
-        enable_digital_twin_stream = str(os.getenv('ENABLE_DIGITAL_TWIN_STREAM', '0')).strip().lower() in ('1', 'true', 'yes', 'on')
-        logger.info(f"Digital twin config overridden by env var: enabled={enable_digital_twin_stream}")
+    # # Environment variable can override config file
+    # if os.getenv('ENABLE_DIGITAL_TWIN_STREAM'):
+    #     enable_digital_twin_stream = str(os.getenv('ENABLE_DIGITAL_TWIN_STREAM', '0')).strip().lower() in ('1', 'true', 'yes', 'on')
+    #     logger.info(f"Digital twin config overridden by env var: enabled={enable_digital_twin_stream}")
 
-    if PLAYWRIGHT_AVAILABLE and enable_digital_twin_stream:
-        digital_twin_stream_service = DigitalTwinStreamService(
-            port=port,
-            width=dt_width,
-            height=dt_height,
-            fps=dt_fps,
-            quality=dt_quality
-        )
-        digital_twin_stream_service.start()
-        logger.info(f"   Digital twin stream: http(s)://<pi-ip>:{port}/api/digital-twin/stream ({dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality})")
-    elif PLAYWRIGHT_AVAILABLE:
-        logger.info("   Digital twin stream: disabled (edit config.json to enable)")
-    else:
-        logger.info("   Digital twin stream: disabled (playwright not installed)")
+    # if PLAYWRIGHT_AVAILABLE and enable_digital_twin_stream:
+    #     digital_twin_stream_service = DigitalTwinStreamService(
+    #         port=port,
+    #         width=dt_width,
+    #         height=dt_height,
+    #         fps=dt_fps,
+    #         quality=dt_quality
+    #     )
+    #     digital_twin_stream_service.start()
+    #     logger.info(f"   Digital twin stream: http(s)://<pi-ip>:{port}/api/digital-twin/stream ({dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality})")
+    # elif PLAYWRIGHT_AVAILABLE:
+    #     logger.info("   Digital twin stream: disabled (edit config.json to enable)")
+    # else:
+    #     logger.info("   Digital twin stream: disabled (playwright not installed)")
+    logger.info("   Digital twin stream: DISABLED (commented out to reduce CPU usage)")
     
     # HTTPS support for WinCC Unified HMI (mixed content requires HTTPS)
     backend_dir = os.path.dirname(os.path.abspath(__file__))
