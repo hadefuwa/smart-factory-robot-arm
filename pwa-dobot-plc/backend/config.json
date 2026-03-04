@@ -138,5 +138,10 @@
     "port": 80,
     "poll_interval_sec": 5,
     "timeout_sec": 3
-  }
+  },
+  "enable_digital_twin_stream": true,
+  "digital_twin_width": 480,
+  "digital_twin_height": 360,
+  "digital_twin_fps": 4,
+  "digital_twin_quality": 65
 }

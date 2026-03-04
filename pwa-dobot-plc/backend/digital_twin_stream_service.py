@@ -29,10 +29,12 @@ except ImportError:
 class DigitalTwinStreamService:
     """Captures digital twin page in headless browser and provides JPEG frames for streaming."""
 
-    def __init__(self, port: int = 8080, width: int = 640, height: int = 480):
+    def __init__(self, port: int = 8080, width: int = 480, height: int = 360, fps: int = 4, quality: int = 65):
         self.port = port
         self.width = width
         self.height = height
+        self.fps = fps
+        self.quality = quality
         self._lock = threading.Lock()
         self._latest_frame: Optional[bytes] = None
         self._frame_time = 0.0
@@ -102,9 +104,9 @@ class DigitalTwinStreamService:
 
                 # Wait for Three.js to render - give it a moment
                 time.sleep(2)
-                logger.info("Digital twin: Starting capture loop (10 FPS target)")
+                logger.info(f"Digital twin: Starting capture loop ({self.fps} FPS target, quality={self.quality})")
 
-                capture_interval = 0.1  # ~10 FPS - 3D is heavier than camera
+                capture_interval = 1.0 / self.fps  # Calculate interval from FPS
                 last_capture = 0.0
                 frame_count = 0
 
@@ -112,7 +114,7 @@ class DigitalTwinStreamService:
                     now = time.time()
                     if now - last_capture >= capture_interval:
                         try:
-                            screenshot_bytes = self._page.screenshot(type="jpeg", quality=85)
+                            screenshot_bytes = self._page.screenshot(type="jpeg", quality=self.quality)
                             if screenshot_bytes:
                                 with self._lock:
                                     self._latest_frame = screenshot_bytes

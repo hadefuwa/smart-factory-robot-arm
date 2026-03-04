@@ -4343,13 +4343,22 @@ if __name__ == '__main__':
     # Start digital twin stream (same approach as camera: Pi renders 3D, streams MJPEG for HMI)
     # Check config file first, then environment variable, default OFF
     enable_digital_twin_stream = False
+    dt_width = 480  # Reduced from 640 to lower CPU usage
+    dt_height = 360  # Reduced from 480 to lower CPU usage
+    dt_fps = 4  # Reduced from 10 to lower CPU usage
+    dt_quality = 65  # Reduced from 85 to lower CPU usage
+
     config_file = os.path.join(os.path.dirname(__file__), 'config.json')
     try:
         if os.path.exists(config_file):
             with open(config_file, 'r') as f:
                 config = json.load(f)
                 enable_digital_twin_stream = config.get('enable_digital_twin_stream', False)
-                logger.info(f"Digital twin config loaded from config.json: enabled={enable_digital_twin_stream}")
+                dt_width = config.get('digital_twin_width', dt_width)
+                dt_height = config.get('digital_twin_height', dt_height)
+                dt_fps = config.get('digital_twin_fps', dt_fps)
+                dt_quality = config.get('digital_twin_quality', dt_quality)
+                logger.info(f"Digital twin config loaded from config.json: enabled={enable_digital_twin_stream}, {dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality}")
     except Exception as e:
         logger.warning(f"Could not read config.json: {e}")
 
@@ -4359,9 +4368,15 @@ if __name__ == '__main__':
         logger.info(f"Digital twin config overridden by env var: enabled={enable_digital_twin_stream}")
 
     if PLAYWRIGHT_AVAILABLE and enable_digital_twin_stream:
-        digital_twin_stream_service = DigitalTwinStreamService(port=port, width=640, height=480)
+        digital_twin_stream_service = DigitalTwinStreamService(
+            port=port,
+            width=dt_width,
+            height=dt_height,
+            fps=dt_fps,
+            quality=dt_quality
+        )
         digital_twin_stream_service.start()
-        logger.info(f"   Digital twin stream: http(s)://<pi-ip>:{port}/api/digital-twin/stream")
+        logger.info(f"   Digital twin stream: http(s)://<pi-ip>:{port}/api/digital-twin/stream ({dt_width}x{dt_height} @ {dt_fps}fps, quality={dt_quality})")
     elif PLAYWRIGHT_AVAILABLE:
         logger.info("   Digital twin stream: disabled (edit config.json to enable)")
     else:
