@@ -425,10 +425,10 @@
   <script>
     const API_BASE = window.location.origin;
     let streamInterval = null;
+    let streamReconnectTimer = null;
     let statusInterval = null;
     let detectionInterval = null;
     let detectionActive = false;
-    let isFetchingCamera = false;
     let objectParamsSaveTimer = null;
     let pagePrefsSaveTimer = null;
     let lastCycleTimestampSeen = 0;
@@ -785,72 +785,61 @@
       }, 4000);
     }
 
-    // Update camera frame from existing camera feed
-    async function updateCameraFrame() {
-      // Skip if previous fetch still in progress
-      if (isFetchingCamera) {
-        addDebugLog('camera fetch skipped', 'previous request still in progress', 'warn');
+    function scheduleStreamReconnect(delayMs = 1500) {
+      if (streamReconnectTimer) return;
+      streamReconnectTimer = setTimeout(() => {
+        streamReconnectTimer = null;
+        updateCameraFrame(true);
+      }, delayMs);
+    }
+
+    // Connect camera frame to MJPEG stream
+    function updateCameraFrame(forceReconnect = false) {
+      const frame = document.getElementById('cameraFrame');
+      const placeholder = document.getElementById('cameraPlaceholder');
+      if (!frame) return;
+
+      const streamUrl = `${API_BASE}/api/camera/stream?_=${Date.now()}`;
+
+      if (!forceReconnect && frame.src && frame.src.includes('/api/camera/stream')) {
         return;
       }
 
-      isFetchingCamera = true;
-      try {
-        const frame = document.getElementById('cameraFrame');
-        const placeholder = document.getElementById('cameraPlaceholder');
-        const timestamp = Date.now();
-        console.log(`🔍 Fetching camera frame at ${new Date().toLocaleTimeString()}`);
-        
-        const response = await fetch(`${API_BASE}/api/camera/capture?t=${timestamp}`, {
-          signal: AbortSignal.timeout(20000) // 20 second timeout for slower clients/networks
-        });
-        addDebugLog('camera capture response', { status: response.status, ok: response.ok });
-        
-        console.log(`🔍 Camera response status: ${response.status}`);
-        
-        if (response.ok) {
-          const blob = await response.blob();
-          addDebugLog('camera frame updated', `${blob.size} bytes`);
-          console.log(`🔍 Camera frame received: ${(blob.size / 1024).toFixed(1)} KB`);
-          const url = URL.createObjectURL(blob);
-          if (frame.src && frame.src.startsWith('blob:')) {
-            URL.revokeObjectURL(frame.src);
-          }
-          frame.onload = () => redrawPersistentOverlays();
-          frame.src = url;
-          frame.style.display = 'block';
-          if (placeholder) placeholder.style.display = 'none';
-        } else {
-          // Camera not available - show placeholder
-          const errorText = await response.text().catch(() => 'Unknown error');
-          addDebugLog('camera capture failed', `HTTP ${response.status} ${errorText}`, 'error');
-          console.error(`🔍 Camera error ${response.status}:`, errorText);
-          if (response.status === 503) {
-            frame.style.display = 'none';
-            if (placeholder) {
-              placeholder.style.display = 'flex';
-              placeholder.innerHTML = '<div style="text-align:center"><i class="material-icons" style="font-size:48px;color:#f44336;">videocam_off</i><p style="margin-top:10px;color:#fff;">Camera Not Available</p><p style="font-size:12px;color:#999;">Connect camera from main Vision System page</p></div>';
-            }
-          }
+      frame.onload = () => {
+        if (frame.naturalWidth > 0 && frame.naturalHeight > 0) {
+          frame.width = frame.naturalWidth;
+          frame.height = frame.naturalHeight;
         }
-      } catch (error) {
-        const message = String(error?.message || '');
-        const isTimeout = error?.name === 'TimeoutError' || /timeout|timed out|aborted/i.test(message);
-        addDebugLog('camera capture exception', message, isTimeout ? 'warn' : 'error');
-        if (!isTimeout) {
-          console.error('Error fetching camera frame:', error);
+        frame.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+        redrawPersistentOverlays();
+      };
+
+      frame.onerror = () => {
+        addDebugLog('camera stream error', 'MJPEG stream disconnected, reconnecting...', 'warn');
+        frame.style.display = 'none';
+        if (placeholder) {
+          placeholder.style.display = 'flex';
+          placeholder.innerHTML = '<div style="text-align:center"><i class="material-icons" style="font-size:48px;color:#f44336;">videocam_off</i><p style="margin-top:10px;color:#fff;">Camera Stream Unavailable</p><p style="font-size:12px;color:#999;">Retrying automatically...</p></div>';
         }
-      } finally {
-        isFetchingCamera = false;
-      }
+        scheduleStreamReconnect(1500);
+      };
+
+      frame.src = streamUrl;
+      addDebugLog('camera stream connected', '/api/camera/stream');
     }
 
-    // Start camera stream (uses existing camera connection)
+    // Start camera stream
     function startStream() {
       if (streamInterval) return;
-      updateCameraFrame(); // Initial update
+      updateCameraFrame(true); // Initial stream connect
       streamInterval = setInterval(() => {
-        updateCameraFrame();
-      }, 3000); // Update every 3 seconds to reduce timeout pressure
+        // Lightweight watchdog: reconnect only if stream src is unexpectedly missing.
+        const frame = document.getElementById('cameraFrame');
+        if (!frame || !frame.src || !frame.src.includes('/api/camera/stream')) {
+          updateCameraFrame(true);
+        }
+      }, 10000);
     }
 
     // Stop camera stream
@@ -858,6 +847,14 @@
       if (streamInterval) {
         clearInterval(streamInterval);
         streamInterval = null;
+      }
+      if (streamReconnectTimer) {
+        clearTimeout(streamReconnectTimer);
+        streamReconnectTimer = null;
+      }
+      const frame = document.getElementById('cameraFrame');
+      if (frame) {
+        frame.src = '';
       }
     }
 
