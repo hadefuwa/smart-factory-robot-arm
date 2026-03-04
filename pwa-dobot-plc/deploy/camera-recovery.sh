@@ -22,7 +22,9 @@ log() {
 camera_ok() {
   local payload
   payload="$(curl -sk --connect-timeout "${CONNECT_TIMEOUT}" --max-time "${CONNECT_TIMEOUT}" "${API_URL}" || true)"
-  [[ "${payload}" == *'"connected":true'* && "${payload}" == *'"can_read":true'* ]]
+  # 'can_read' can be false when no recent frame has been requested yet.
+  # For watchdog purposes, consider camera healthy when backend reports connected.
+  [[ "${payload}" == *'"connected":true'* ]]
 }
 
 restart_backend() {
