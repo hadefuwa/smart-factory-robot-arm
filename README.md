@@ -11,7 +11,7 @@ A comprehensive smart factory automation system featuring Dobot Magician robot c
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Key Features](#-key-features)
-- [Recent Vision System Work (2026-02-24)](#-recent-vision-system-work-2026-02-24)
+- [Recent Vision System Work (2026-02-26)](#-recent-vision-system-work-2026-02-26)
 - [Documentation](#-documentation)
 - [Testing](#-testing)
 - [Troubleshooting](#-troubleshooting)
@@ -378,11 +378,11 @@ python3 app.py
 - ✅ **Dobot Movement Control** - Full robot arm control via web interface
 - ✅ **Automatic Alarm Clearing** - Robot alarms are cleared automatically on startup (key fix!)
 - ✅ **PLC Integration** - Siemens S7-1200 communication for automated control
-- ✅ **Real-time Monitoring** - Live position and status updates via WebSocket
+- ✅ **Real-time Monitoring** - Live position and status updates via REST polling and stream endpoints
 - ✅ **Settings Management** - Web-based configuration interface
 - ✅ **Emergency Stop** - Safety controls for immediate shutdown
 - ✅ **Progressive Web App** - Install and use offline
-- ✅ **Vision System** - YOLO counter detection, HSV color detection (Yellow/White/Metal cubes), Override Start (bypass PLC), multiple detection methods
+- ✅ **Vision System** - YOLO counter detection, HSV color detection (Yellow/White/Metal cubes), continuous 10-vote analysis cycles, multiple detection methods
 - ✅ **Color Detection with Voting** - Majority voting system (10 snapshots) for reliable cube color detection
 - ✅ **Annotated Results** - Visual feedback with bounding boxes and color labels on detected cubes
 - ✅ **Real-time Parameter Controls** - Adjust detection confidence, IOU, cropping, edge sensitivity from the UI
@@ -392,7 +392,7 @@ python3 app.py
 
 ---
 
-## 🔧 Recent Vision System Work (2026-02-24)
+## 🔧 Recent Vision System Work (2026-02-26)
 
 This section documents the latest production changes made to the vision pipeline and UI so the current behavior is clear and repeatable.
 
@@ -413,19 +413,22 @@ The top status area now behaves like a true runtime dashboard with green/red/war
 - Backend health
 - Cube color PLC bits (DB123.DBX32.0..32.3): yellow, white, steel, alluminium
 
-### 3. PLC-driven continuous analysis logic
+### 3. Continuous analysis logic (current runtime mode)
 
-Backend behavior was changed from edge-only triggering to level behavior:
+Backend behavior is currently set to always-running cycles:
 
-- While PLC start bit is `TRUE`, backend repeatedly runs 10-vote color analysis cycles.
+- 10-vote color analysis runs continuously.
 - A new cycle starts only after the previous cycle finishes.
-- Legacy auto-analysis behavior on the old page was disabled to prevent competing loops.
+- PLC start bit is still read/shown in live status, but cycle triggering is currently forced on in backend (`start_bit = True` in poll loop).
+- Re-enable PLC start-bit gating by restoring the commented conditional in `poll_loop()`.
 
 ### 4. Results visibility and debug instrumentation
 
 - Added/expanded debug console on the vision page for API/status/error traces.
 - Added backend endpoint for latest PLC-triggered cycle summary: `GET /api/vision/latest-cycle`
-- Final annotated image retrieval hardened using: `GET /api/vision/annotated-result`
+- Final annotated image retrieval hardened using:
+  - `GET /api/vision/annotated-result` (single latest image)
+  - `GET /api/vision/annotated-result?stream=1` (MJPEG stream)
 - Frontend now uses latest-cycle + annotated-result flow so Final Result updates reliably.
 
 ### 5. Detection ROI and parameter persistence
@@ -481,6 +484,12 @@ Working checkpoints were tagged in Git:
 
 - `vision-checkpoint-2026-02-24`
 - `vision-checkpoint-2026-02-24-plc-color-latch`
+
+### 11. Digital twin stream behavior (current)
+
+- Digital twin stream startup is disabled by default.
+- Enable by setting `enable_digital_twin_stream: true` in `pwa-dobot-plc/backend/config.json`, or by env var `ENABLE_DIGITAL_TWIN_STREAM=1`.
+- Current local capture target uses `digital-twin.html` (single interactive simulation source for HMI snapshot stream).
 
 ---
 
@@ -797,14 +806,20 @@ The vision system provides multiple camera stream endpoints that can be embedded
   - Live MJPEG stream from camera
   - Unprocessed image
 
-- **Analyzed Image**: `https://192.168.7.5:8080/api/vision/analyze`
-  - Shows all detected objects with bounding boxes
-  - Updates on each detection
+- **Analyzed Image API**: `POST https://192.168.7.5:8080/api/vision/analyze`
+  - Returns detection JSON and analyzed frame payload for on-demand calls
 
-- **Annotated Result**: `https://192.168.7.5:8080/api/vision/annotated-result`
+- **Annotated Result (single image)**: `https://192.168.7.5:8080/api/vision/annotated-result`
   - Shows the final voting result with color label (e.g., "YELLOW CUBE")
   - Updates after each voting analysis
   - Displays the winning cube with colored bounding box
+
+- **Annotated Result (MJPEG stream)**: `https://192.168.7.5:8080/api/vision/annotated-result?stream=1`
+  - Continuous multipart stream for HMI image widgets
+  - Preferred endpoint when single-image caching causes stale frames
+
+- **Latest Cycle Summary**: `GET https://192.168.7.5:8080/api/vision/latest-cycle`
+  - Returns latest 10-vote result (`detected_color`, `confidence`, `object_count`, `running`, timestamp)
 
 ### Color Detection Voting
 
@@ -834,14 +849,14 @@ The system takes 10 snapshots, votes on the most common color detected, and disp
 
 ### Merkers (M Memory)
 
-- **M0.0**: Start movement
-- **M0.1**: Stop
-- **M0.2**: Home
-- **M0.3**: Emergency stop
-- **M0.4**: Suction cup control
-- **M0.5**: Ready status (read-only)
-- **M0.6**: Busy status (read-only)
-- **M0.7**: Error status (read-only)
+- **M1000.0**: Start movement
+- **M1000.1**: Stop
+- **M1000.2**: Home
+- **M1000.3**: Emergency stop
+- **M1000.4**: Suction cup control
+- **M1000.5**: Ready status (read-only)
+- **M1000.6**: Busy status (read-only)
+- **M1000.7**: Error status (read-only)
 
 ---
 
@@ -901,13 +916,13 @@ MIT License - Feel free to use and modify!
 
 ## 🙏 Credits
 
-- **Flask & Flask-SocketIO** - Web framework and real-time communication
+- **Flask** - Web framework and API/stream hosting
 - **python-snap7** - PLC communication library
 - **pydobot** - Dobot robot control library
 - **OpenCV** - Camera and vision support
 
 ---
 
-**Last Updated:** 2026-02-10
+**Last Updated:** 2026-02-26
 **Version:** v4.5
 **Status:** Production Ready ✅
