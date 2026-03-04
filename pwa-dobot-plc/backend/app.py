@@ -2225,8 +2225,8 @@ def generate_frames():
         if camera_service is None:
             break
         
-        # Prefer analyzed frames when available (within 5 seconds), fall back to raw frames
-        frame_bytes = camera_service.get_frame_jpeg(quality=90, prefer_analyzed=True, analyzed_max_age=5.0)
+        # Always use raw camera frames for the camera feed endpoint.
+        frame_bytes = camera_service.get_frame_jpeg(quality=90, prefer_analyzed=False)
         if frame_bytes is None:
             time.sleep(0.05)  # Reduced sleep time when no frame available
             continue
@@ -2473,9 +2473,11 @@ def camera_status():
         with camera_service.lock:
             camera_opened = camera_service.camera is not None and camera_service.camera.isOpened()
         
-        # Try to read a frame to confirm it's working
-        frame = camera_service.read_frame()
-        can_read = frame is not None
+        # Non-blocking check: do NOT read camera here (read() can block on USB timeout).
+        # Use recent frame age to infer readability.
+        now_ts = time.time()
+        last_frame_time = float(camera_service.frame_time or 0)
+        can_read = bool(camera_service.last_frame is not None and (now_ts - last_frame_time) < 3.0)
         
         # Camera is connected if it's opened (even if we can't read yet - might be warming up)
         connected = camera_opened
@@ -2489,7 +2491,7 @@ def camera_status():
                 'width': camera_service.width,
                 'height': camera_service.height
             },
-            'last_frame_time': camera_service.frame_time
+            'last_frame_time': last_frame_time
         })
     except Exception as e:
         logger.error(f"Error checking camera status: {e}")

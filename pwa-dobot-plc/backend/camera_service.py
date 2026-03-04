@@ -45,6 +45,9 @@ class CameraService:
         self.lock = threading.Lock()
         self.last_frame = None
         self.frame_time = 0
+        self.read_fail_count = 0
+        self.last_reinit_attempt = 0.0
+        self.reinit_cooldown_sec = 2.0
         # Analyzed frame caching for PLC HMI stream
         self.last_analyzed_frame = None
         self.analyzed_frame_time = 0
@@ -101,9 +104,12 @@ class CameraService:
                 
                 # Set camera properties (these may fail silently, which is okay)
                 try:
+                    # Prefer MJPEG over raw YUYV to reduce USB bandwidth and frame stalls.
+                    self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
                     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-                    self.camera.set(cv2.CAP_PROP_FPS, 30)
+                    # This USB camera is commonly stable at 5-20 FPS depending on mode.
+                    self.camera.set(cv2.CAP_PROP_FPS, 15)
                     self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer for faster response
                 except Exception as e:
                     logger.warning(f"Could not set some camera properties: {e}")
@@ -121,6 +127,7 @@ class CameraService:
                     # Don't fail completely - camera might work later
                     # Keep self.camera set so we can try again
                 
+                self.read_fail_count = 0
                 logger.info(f"Camera initialized at index {self.camera_index} (may need warm-up)")
                 return True
                 
@@ -152,6 +159,14 @@ class CameraService:
     def read_frame(self) -> Optional[np.ndarray]:
         """Read a frame from camera and apply crop if enabled"""
         try:
+            # Recover camera if it was dropped.
+            if self.camera is None:
+                now = time.time()
+                if now - self.last_reinit_attempt >= self.reinit_cooldown_sec:
+                    self.last_reinit_attempt = now
+                    self.initialize_camera()
+            
+            force_reinit = False
             with self.lock:
                 if self.camera is None:
                     return None
@@ -163,6 +178,7 @@ class CameraService:
                 
                 ret, frame = self.camera.read()
                 if ret and frame is not None:
+                    self.read_fail_count = 0
                     # Apply crop if enabled
                     if self.crop_enabled:
                         frame = self._apply_crop(frame)
@@ -170,7 +186,16 @@ class CameraService:
                     self.frame_time = time.time()
                     return frame
                 else:
-                    return None
+                    self.read_fail_count += 1
+                    if self.read_fail_count >= 3:
+                        force_reinit = True
+            if force_reinit:
+                now = time.time()
+                if now - self.last_reinit_attempt >= self.reinit_cooldown_sec:
+                    self.last_reinit_attempt = now
+                    logger.warning("Camera read failed repeatedly; attempting camera reinitialize")
+                    self.initialize_camera()
+            return None
         except Exception as e:
             logger.warning(f"Error reading camera frame: {e}")
             return None
