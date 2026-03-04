@@ -7,13 +7,13 @@ cd "$(dirname "$0")"
 # Set port to 8080
 export PORT=8080
 
-# Enable digital twin stream (set to 0 to disable)
-export ENABLE_DIGITAL_TWIN_STREAM=1
+# Digital twin stream disabled to reduce CPU usage
+export ENABLE_DIGITAL_TWIN_STREAM=0
 
 # Kill any existing instances
 pkill -f "python.*app.py"
 sleep 1
 
 # Start backend
-echo "Starting backend on port $PORT with Digital Twin enabled..."
+echo "Starting backend on port $PORT (Digital Twin DISABLED)..."
 python3 app.py 2>&1 | tee backend.log
