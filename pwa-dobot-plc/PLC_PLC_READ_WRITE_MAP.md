@@ -28,11 +28,6 @@
   - `DB123.DBW30` – Robot status_code
   - `DB123.DBW34` – Robot error_code
 
-- **DB4**
-  - `DB4.DBD6` – Target X
-  - `DB4.DBD10` – Target Y
-  - `DB4.DBD14` – Target Z
-
 - **DB123 (Robot current pose)**
   - `DB123.DBW10` – Current X
   - `DB123.DBW12` – Current Y
@@ -84,181 +79,104 @@
   - `M0.7` – Error
   - `M1.0` – Vision fault flag
 
-## PLC Read/Write Map (Current Behaviour)
 
-This document lists how your app currently **reads from** and **writes to** the Siemens PLC.
+### DB123 Layout Reference (current PLC)
 
-Addresses are written in standard Siemens format like `DB123.DBX40.2` (bit), `DB123.DBW42` (word), or `DB4.DBD6` (REAL).
+Static
+- HMI (`HMI_UDT`) @ 0
+- Buttons (`Struct`) @ 0
+- Start (`Bool`) @ 0
+- Stop (`Bool`) @ 0.1
+- Reset (`Bool`) @ 0.2
 
----
+Robot (`Robot_UDT`) @ 2
+- Connected (`Bool`) @ 2
+- Busy (`Bool`) @ 2.1
+- Cycle_Complete (`Bool`) @ 2.2
 
-### 1. Vision system – DB123
+Target (`Struct`) @ 4
+- X_Position target (`Int`) @ 4
+- Y_Position target (`Int`) @ 6
+- Z_Position target (`Int`) @ 8
 
-#### 1.1 Reads (from PLC)
+Current (`Struct`) @ 10
+- X_Position current (`Int`) @ 10
+- Y_Position current (`Int`) @ 12
+- Z_Position current (`Int`) @ 14
 
-- **Function**: `PLCClient.read_vision_tags` (`backend/plc_client.py`)
-  - **DB123.DBX26.0** (configurable): **Start command**
-    - Read as: `start`  
-    - Default: byte `26`, bit `0`
-  - **DB123.DBX[connected_byte].[connected_bit]** (configurable): **Camera connected**
-    - Read as: `connected`  
-    - Defaults in config to byte `26`, bit `1` unless changed.
-  - **DB123.DBX40.2**: **Busy**
-  - **DB123.DBX40.3**: **Completed**
-  - **DB123.DBX40.4**: **Object_Detected**
-  - **DB123.DBX40.5**: **Object_OK**
-  - **DB123.DBX40.6**: **Defect_Detected**
-  - **DB123.DBW42**: **Object_Number** (16‑bit INT)
-  - **DB123.DBW44**: **Defect_Number** (16‑bit INT)
-  - **DB123.DBX32.0**: **yellow_cube_detected**
-  - **DB123.DBX32.1**: **white_cube_detected**
-  - **DB123.DBX32.2**: **steel_cube_detected**
-  - **DB123.DBX32.3**: **alluminium_cube_detected**
+- Robot_Status_Code (`Int`) @ 16
+- Error_Code (`Int`) @ 18
+- Cube_Type (`Int`) @ 20   (0 None, 1 Reject, 2 Yellow, 3 White, 4 Steel, 5 Alluminium)
 
-- **Function**: `read_vision_start_command` (`backend/plc_client.py`)
-  - **DB123.DBX26.0**: Start command (simple, direct read)
+Conveyor1 (`Conveyor_UDT`) @ 22
+- Start_Command (`Bool`) @ 22
+- Stop_Command (`Bool`) @ 22.1
 
-- **Function**: `read_db40_start_bit` (`backend/plc_client.py`)
-  - **DB123.DBX26.0**: Start command (debug/diagnostics style read)
+Conveyor2 (`Conveyor_UDT`) @ 24
+- Start_Command (`Bool`) @ 24
+- Stop_Command (`Bool`) @ 24.1
 
-- **Function**: PLC polling loop (`backend/app.py`)
-  - Reads **DB123 bytes 0–46** in one block:
-    - **DB123.DBX[StartByte].[StartBit]** (configurable): cached as `plc_cache['db123']['start']`
-    - **DB123.DBX40.2**: cached as `busy`
-    - **DB123.DBX40.3**: cached as `complete`
-    - **DB123.DBX40.6**: cached as `fault`
-    - **DB123.DBW42**: cached as `plc_cache['db123']['counter']`
+Camera (`Camera_UDT`) @ 26
+- Start (`Bool`) @ 26
+- Connected (`Bool`) @ 26.1
+- Busy (`Bool`) @ 26.2
+- Completed (`Bool`) @ 26.3
+- Object_Detected (`Bool`) @ 26.4
+- Object_OK (`Bool`) @ 26.5
+- Defect_Detected (`Bool`) @ 26.6
+- Object_Number (`Int`) @ 28
+- Defect_Number (`Int`) @ 30
+- yellow_cube_detected (`Bool`) @ 32
+- white_cube_detected (`Bool`) @ 32.1
+- steel_cube_detected (`Bool`) @ 32.2
+- alluminium_cube_detected (`Bool`) @ 32.3
+- counter_type_exceeded (`Bool`) @ 32.4
 
-#### 1.2 Writes (to PLC)
+Objects (`Objects_UDT`) @ 34
+- Material (`Int`) @ 34   (0 Reject, 1 Inductive, 2 Capacitive, 3 Plastic)
 
-- **Function**: `PLCClient.write_vision_tags` (`backend/plc_client.py`)
-  - **DB123.DBX40.1**: **Connected**
-  - **DB123.DBX40.2**: **Busy**
-  - **DB123.DBX40.3**: **Completed**
-  - **DB123.DBX40.4**: **Object_Detected**
-  - **DB123.DBX40.5**: **Object_OK**
-  - **DB123.DBX40.6**: **Defect_Detected**
-  - **Note**: `Object_Number` / `Defect_Number` writes to `DB123.DBW42/DBW44` are **currently disabled** in code.
+Gantry (`Gantry_UDT`) @ 36
+- Home (`Bool`) @ 36
+- Busy (`Bool`) @ 36.1
+- Move_Done (`Bool`) @ 36.2
+- Pick_Up (`Bool`) @ 36.3
+- Place_Down (`Bool`) @ 36.4
+- Home_Command (`Bool`) @ 36.5
+- Power_OK (`Bool`) @ 36.6
+- Current_Position (`Real`) @ 38
+- Target_Position (`Real`) @ 42
+- Velocity (`Real`) @ 46
+- Position1 (`Real`) @ 50
+- Position2 (`Real`) @ 54
+- Home_Error (`Bool`) @ 58
+- Home_Error_Fix (`Bool`) @ 58.1
 
-- **Function**: `PLCClient.write_vision_detection_results` (`backend/plc_client.py`)
-  - High‑level helper that **calls `write_vision_tags`**, so it uses the same addresses as above.
+System (`System_UDT`) @ 60
+- Safety_OK (`Bool`) @ 60
+- No_Faults (`Bool`) @ 60.1
+- Active_Fault (`Bool`) @ 60.2
+- Startup_Completed (`Bool`) @ 60.3
+- State (`Int`) @ 62
 
-- **Function**: `write_vision_to_plc` (`backend/app.py`)
-  - Uses **queued writes** executed in the polling loop.
-  - Writes **only bits 2–6** of the camera status byte; Start (bit 0) and Connected (bit 1) are preserved.
-  - **DB123.DBX26.2**: Busy
-  - **DB123.DBX26.3**: Completed
-  - **DB123.DBX26.4**: Object_Detected
-  - **DB123.DBX26.5**: Object_OK
-  - **DB123.DBX26.6**: Defect_Detected
-  - **DB123.DBX[connected_byte].[connected_bit]** (configurable): Camera connected
-  - **DB123.DBX32.0–32.3**: One‑hot cube color bits (color code)
-  - **Note**: The queued writes to `DB123.DBW42` and `DB123.DBW44` (object/defect INTs) are **commented out / disabled**, so they are not active.
-
-- **Function**: PLC polling loop write queue (`backend/app.py`)
-  - Executes queued byte and bit writes using:
-    - `plc_client.client.db_write(write_op['db'], write_op['offset'], ...)`
-    - For bits: it first reads `DBx.DBXbyte` then sets a single bit and writes back.
-  - Current queued operations are:
-    - Vision status bits (DB123 byte 40)
-    - Camera connected configurable bit
-    - Cube color bits at DB123.DBX32.0–32.3
-
----
-
-### 2. Robot (Dobot) – DB4 (mapped into DB123 layout)
-
-These are **logically “DB4”** in the app, but in your newer layout they are actually **read from DB123** bytes and then mapped into a `plc_cache['db4']` structure.
-
-#### 2.1 Reads (from PLC)
-
-- **Function**: `PLCClient.read_target_pose` (`backend/plc_client.py`)
-  - Default `db_number = 4`:
-    - **DB4.DBD6**: Target X (REAL)
-    - **DB4.DBD10**: Target Y (REAL)
-    - **DB4.DBD14**: Target Z (REAL)
-
-- **Function**: `PLCClient.read_current_pose` (`backend/plc_client.py`)
-  - Default `db_number = 4`:
-    - **DB4.DBD18**: Current X (REAL)
-    - **DB4.DBD22**: Current Y (REAL)
-    - **DB4.DBD26**: Current Z (REAL)
-
-- **Function**: `PLCClient.read_robot_status` (`backend/plc_client.py`)
-  - Default `db_number = 4`:
-    - **DB4.DBX4.0**: Connected
-    - **DB4.DBX4.1**: Busy
-    - **DB4.DBX4.2**: Cycle complete
-    - **DB4.DBW30**: Status code (INT)
-    - **DB4.DBW32**: Error code (INT)
-
-- **Function**: PLC polling loop (`backend/app.py`)
-  - Reads data from **DB123** and maps into `plc_cache['db4']`:
-    - **DB123.DBX4.0** → `db4.connected`
-    - **DB123.DBX4.1** → `db4.busy`
-    - **DB123.DBX4.2** → `db4.cycle_complete`
-    - **DB123.DBD6** → `db4.target_x`
-    - **DB123.DBD10** → `db4.target_y`
-    - **DB123.DBD14** → `db4.target_z`
-    - **DB123.DBD18** → `db4.current_x`
-    - **DB123.DBD22** → `db4.current_y`
-    - **DB123.DBD26** → `db4.current_z`
-    - **DB123.DBW30** → `db4.status_code`
-    - **DB123.DBW34** → `db4.error_code` (status/error cache)
-
-#### 2.2 Writes (to PLC)
-
-- **Function**: `PLCClient.write_current_pose` (`backend/plc_client.py`)
-  - Default `db_number = 4`:
-    - **DB4.DBD18**: Current X (REAL)
-    - **DB4.DBD22**: Current Y (REAL)
-    - **DB4.DBD26**: Current Z (REAL)
-
----
-
-### 3. Control bits – Merker (M) memory
-
-#### 3.1 Reads (from PLC)
-
-- **Function**: `PLCClient.read_control_bits` (`backend/plc_client.py`)
-  - Reads **M0 byte** and breaks out bits:
-    - **M0.0**: Start
-    - **M0.1**: Stop
-    - **M0.2**: Home
-    - **M0.3**: E‑stop
-    - **M0.4**: Suction
-    - **M0.5**: Ready
-    - **M0.6**: Busy
-    - **M0.7**: Error
-
-#### 3.2 Writes (to PLC)
-
-- **Function**: `PLCClient.write_control_bit` (`backend/plc_client.py`)
-  - Uses `write_m_bit` to write individual control bits:
-    - **M0.0**: Start
-    - **M0.1**: Stop
-    - **M0.2**: Home
-    - **M0.3**: E‑stop
-    - **M0.4**: Suction
-    - **M0.5**: Ready
-    - **M0.6**: Busy
-    - **M0.7**: Error
-
-- **Function**: `write_vision_fault_bit` (`backend/plc_client.py`)
-  - Default address:
-    - **M1.0**: Vision fault flag (`defects_found`)
-
----
-
-### 4. Summary (high level)
-
-- **DB123**:
-  - Reads: Start, vision status bits, object/defect counters, color bits, robot status/pose (remapped).
-  - Writes: Vision handshake bits (busy/completed/etc.), camera connected bit, color bits.
-  - **Object_Number / Defect_Number writes to DBW42 / DBW44 are currently disabled.**
-- **DB4**:
-  - Reads: Robot pose and status (in older layout or via remap).
-  - Writes: Current pose when needed.
-- **Merker M**:
-  - Reads/Writes: Control bits on `M0.x` and a vision fault flag on `M1.0`.
-
+Sorted_Bay (`Pallet_UDT`) @ 64
+- Row_1 (`Array[0..3] of Bool`) @ 64
+  - Row_1[0] (`Bool`) @ 64
+  - Row_1[1] (`Bool`) @ 64.1
+  - Row_1[2] (`Bool`) @ 64.2
+  - Row_1[3] (`Bool`) @ 64.3
+- Row_2 (`Array[0..3] of Bool`) @ 66
+  - Row_2[0] (`Bool`) @ 66
+  - Row_2[1] (`Bool`) @ 66.1
+  - Row_2[2] (`Bool`) @ 66.2
+  - Row_2[3] (`Bool`) @ 66.3
+- Row_3 (`Array[0..3] of Bool`) @ 68
+  - Row_3[0] (`Bool`) @ 68
+  - Row_3[1] (`Bool`) @ 68.1
+  - Row_3[2] (`Bool`) @ 68.2
+  - Row_3[3] (`Bool`) @ 68.3
+- Row_4 (`Array[0..3] of Bool`) @ 70
+  - Row_4[0] (`Bool`) @ 70
+  - Row_4[1] (`Bool`) @ 70.1
+  - Row_4[2] (`Bool`) @ 70.2
+  - Row_4[3] (`Bool`) @ 70.3
+- Pallet_Full (`Bool`) @ 72

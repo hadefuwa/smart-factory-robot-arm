@@ -382,19 +382,19 @@ function makeConveyor(x, z) {
 const conveyor1 = makeConveyor(0, -3); // north/top
 const conveyor2 = makeConveyor(0, 3); // south/bottom
 
-// Defect bin + piston near end of conveyor 1 (west end)
+// Defect bin + piston near end of conveyor 1 (west end) - SWAPPED POSITIONS
 const defectBin = new THREE.Mesh(
  new THREE.BoxGeometry(0.6, 0.4, 0.6),
  new THREE.MeshStandardMaterial({ color: 0x444444 })
 );
-defectBin.position.set(-2.5, 0.25, -4.0);
+defectBin.position.set(-2.5, 0.25, -2.5);
 scene.add(defectBin);
 
 const piston = new THREE.Mesh(
  new THREE.BoxGeometry(0.2, 0.2, 1.0),
  new THREE.MeshStandardMaterial({ color: 0x888888 })
 );
-piston.position.set(-2.5, 0.6, -2.5);
+piston.position.set(-2.5, 0.6, -4.0);
 scene.add(piston);
 
 // Label for defect bin
@@ -402,20 +402,20 @@ const binLabel = new THREE.Mesh(
  new THREE.PlaneGeometry(0.9, 0.25),
  new THREE.MeshStandardMaterial({ color: 0x111111, transparent: true, opacity: 0.8 })
 );
-binLabel.position.set(-2.5, 0.9, -4.0);
+binLabel.position.set(-2.5, 0.9, -2.5);
 binLabel.rotation.y = Math.PI / 4;
 scene.add(binLabel);
 
-// Piston animation - only moves when rejecting
+// Piston animation - only moves when rejecting (swapped: now pushes from -4.0 toward bin at -2.5)
 let pistonActive = false;
 let pistonT = 0;
 function updatePiston(delta) {
  if (pistonActive) {
  pistonT += delta * 3;
  const push = Math.sin(pistonT * 4) > 0.5 ? 0.3 : 0;
- piston.position.z = -2.5 - push;
+ piston.position.z = -4.0 + push;
  } else {
- piston.position.z = -2.5;
+ piston.position.z = -4.0;
  pistonT = 0;
  }
 }
@@ -587,7 +587,7 @@ const sortingBays = [
  { name: 'Steel', position: new THREE.Vector3(1.5, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
  { name: 'Aluminum', position: new THREE.Vector3(2.0, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
  { name: 'Plastic Yellow', position: new THREE.Vector3(2.5, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 },
- { name: 'Plastic Purple', position: new THREE.Vector3(3.0, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 }
+ { name: 'Plastic White', position: new THREE.Vector3(3.0, PLATFORM_HEIGHT + 0.35, -3.0), count: 0, maxStack: 4, stackOffsetZ: 0.4 }
 ];
 
 function getSortingBayPosition(bayIndex) {
@@ -633,8 +633,8 @@ sortingBays.forEach((bay, index) => {
  bayBase.position.set(bay.position.x, PLATFORM_HEIGHT + 0.05, bay.position.z);
  scene.add(bayBase);
 
- // Bay label (tiny indicator light matching material)
- const materialColors = [0xbfbfbf, 0x999999, 0xd4b000, 0x7a4cff];
+ // Bay label (tiny indicator light matching material) - updated to white
+ const materialColors = [0xbfbfbf, 0x999999, 0xd4b000, 0xf0f0f0];
  const label = new THREE.Mesh(
  new THREE.SphereGeometry(0.08, 12, 12),
  new THREE.MeshStandardMaterial({
@@ -802,7 +802,7 @@ const MATERIALS = {
  STEEL: { color: 0xbfbfbf, name: 'Steel', isMetal: true, bay: 0 },
  ALUMINUM: { color: 0x999999, name: 'Aluminum', isMetal: true, bay: 1 },
  PLASTIC_YELLOW: { color: 0xd4b000, name: 'Plastic Yellow', isMetal: false, bay: 2 },
- PLASTIC_PURPLE: { color: 0x7a4cff, name: 'Plastic Purple', isMetal: false, bay: 3 }
+ PLASTIC_WHITE: { color: 0xf0f0f0, name: 'Plastic White', isMetal: false, bay: 3 }
 };
 
 const DEFECT_RATE = 0.15; // 15% defect rate
@@ -1213,16 +1213,16 @@ function updateBoxes(delta) {
  break;
 
  case 'rejecting':
- // Piston pushes defect off conveyor toward bin
+ // Piston pushes defect off conveyor toward bin (SWAPPED: bin now at Z=-2.5)
  box.userData.t += delta;
- const pushAmount = Math.min(box.userData.t * 2, 2.0);
- box.position.z = -3 - pushAmount; // Push from conveyor at Z=-3 toward bin at Z=-4
+ const pushAmount = Math.min(box.userData.t * 2, 0.5);
+ box.position.z = -3 + pushAmount; // Push from conveyor at Z=-3 toward bin at Z=-2.5
  box.position.x = -2.5; // Move toward bin X position (aligned with sensor)
  box.position.y = Math.max(0.2, conveyorHeight + 0.35 - box.userData.t * 0.5);
 
  if (box.userData.t > 1.5) {
- // Place box in bin at X=-2.5, Z=-4.0
- box.position.set(-2.5, 0.3, -4.0);
+ // Place box in bin at X=-2.5, Z=-2.5 (swapped position)
+ box.position.set(-2.5, 0.3, -2.5);
  box.userData.state = 'rejected';
  pistonActive = false; // Deactivate piston after rejection
  log(`Defect rejected into bin`);

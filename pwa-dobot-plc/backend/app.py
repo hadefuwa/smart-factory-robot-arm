@@ -199,30 +199,15 @@ VISION_SERVICE_TIMEOUT = 5.0  # 5 second timeout
 
 plc_cache = {
     'last_update': 0.0,
-    # DB123 Vision tags (byte 26 + 40-56)
     'db123': {
-        'start': False,           # DB123.DBX26.0
-        'busy': False,            # DB123.DBX40.1
-        'complete': False,        # DB123.DBX40.2
-        'fault': False,           # DB123.DBX40.3
-        'x_pos': 0.0,            # DB123.DBD42
-        'y_pos': 0.0,            # DB123.DBD46
-        'z_pos': 0.0,            # DB123.DBD50
-        'counter': 0             # DB123.DBW54
-    },
-    # DB4 Robot tags (byte 4-32)
-    'db4': {
-        'connected': False,       # DB4.DBX4.0
-        'busy': False,           # DB4.DBX4.1
-        'cycle_complete': False, # DB4.DBX4.2
-        'target_x': 0.0,         # DB4.DBD6
-        'target_y': 0.0,         # DB4.DBD10
-        'target_z': 0.0,         # DB4.DBD14
-        'current_x': 0.0,        # DB4.DBD18
-        'current_y': 0.0,        # DB4.DBD22
-        'current_z': 0.0,        # DB4.DBD26
-        'status_code': 0,        # DB4.DBW30
-        'error_code': 0          # DB4.DBW32
+        'start': False,
+        'busy': False,
+        'complete': False,
+        'fault': False,
+        'x_pos': 0.0,
+        'y_pos': 0.0,
+        'z_pos': 0.0,
+        'counter': 0
     },
     'plc_connected': False
 }

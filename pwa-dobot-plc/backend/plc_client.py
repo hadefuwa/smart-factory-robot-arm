@@ -271,8 +271,8 @@ class PLCClient:
 
     # High-level methods for Dobot robot control
 
-    def read_target_pose(self, db_number: int = 4) -> Dict[str, float]:
-        """Read target X, Y, Z position from PLC DB4 (offset 6, 10, 14) in one operation (thread-safe)"""
+    def read_target_pose(self, db_number: int = 123) -> Dict[str, float]:
+        """Read target X, Y, Z position from PLC DB123 (offset 6, 10, 14) in one operation (thread-safe)"""
         if not snap7_available or self.client is None:
             return {'x': 0.0, 'y': 0.0, 'z': 0.0}
         try:
@@ -290,9 +290,9 @@ class PLCClient:
                 # Read all 3 REAL values (12 bytes total) from offset 6 in one operation
                 data = self.client.db_read(db_number, 6, 12)
                 return {
-                    'x': get_real(data, 0),   # DB4.DBD6
-                    'y': get_real(data, 4),   # DB4.DBD10
-                    'z': get_real(data, 8)    # DB4.DBD14
+                    'x': get_real(data, 0),   # DB123.DBD6
+                    'y': get_real(data, 4),   # DB123.DBD10
+                    'z': get_real(data, 8)    # DB123.DBD14
                 }
             finally:
                 self.plc_lock.release()
@@ -307,8 +307,8 @@ class PLCClient:
                 pass
             return {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
-    def read_current_pose(self, db_number: int = 4) -> Dict[str, float]:
-        """Read current X, Y, Z position from PLC DB4 (offset 18, 22, 26) in one operation (thread-safe)"""
+    def read_current_pose(self, db_number: int = 123) -> Dict[str, float]:
+        """Read current X, Y, Z position from PLC DB123 (offset 18, 22, 26) in one operation (thread-safe)"""
         if not snap7_available or self.client is None:
             return {'x': 0.0, 'y': 0.0, 'z': 0.0}
         try:
@@ -326,9 +326,9 @@ class PLCClient:
                 # Read all 3 REAL values (12 bytes total) from offset 18 in one operation
                 data = self.client.db_read(db_number, 18, 12)
                 return {
-                    'x': get_real(data, 0),   # DB4.DBD18
-                    'y': get_real(data, 4),   # DB4.DBD22
-                    'z': get_real(data, 8)    # DB4.DBD26
+                    'x': get_real(data, 0),   # DB123.DBD18
+                    'y': get_real(data, 4),   # DB123.DBD22
+                    'z': get_real(data, 8)    # DB123.DBD26
                 }
             finally:
                 self.plc_lock.release()
@@ -343,8 +343,8 @@ class PLCClient:
                 pass
             return {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
-    def write_current_pose(self, pose: Dict[str, float], db_number: int = 4) -> bool:
-        """Write current X, Y, Z position to PLC DB4 (offset 18, 22, 26) in one operation (thread-safe)"""
+    def write_current_pose(self, pose: Dict[str, float], db_number: int = 123) -> bool:
+        """Write current X, Y, Z position to PLC DB123 (offset 18, 22, 26) in one operation (thread-safe)"""
         if not snap7_available or self.client is None:
             return False
         try:
@@ -356,9 +356,9 @@ class PLCClient:
                 time.sleep(0.02)  # 20ms delay to avoid flooding
                 # Write all 3 REAL values (12 bytes total) starting at offset 18
                 data = bytearray(12)
-                set_real(data, 0, pose.get('x', 0.0))  # DB4.DBD18
-                set_real(data, 4, pose.get('y', 0.0))  # DB4.DBD22
-                set_real(data, 8, pose.get('z', 0.0))  # DB4.DBD26
+                set_real(data, 0, pose.get('x', 0.0))  # DB123.DBD18
+                set_real(data, 4, pose.get('y', 0.0))  # DB123.DBD22
+                set_real(data, 8, pose.get('z', 0.0))  # DB123.DBD26
                 self.client.db_write(db_number, 18, data)
             return True
         except Exception as e:
@@ -366,16 +366,16 @@ class PLCClient:
             logger.error(self.last_error)
             return False
 
-    def read_robot_status(self, db_number: int = 4) -> Dict[str, Any]:
-        """Read robot status bits and codes from PLC DB4
+    def read_robot_status(self, db_number: int = 123) -> Dict[str, Any]:
+        """Read robot status bits and codes from PLC DB123
 
         Returns:
             Dictionary with:
-            - connected: DB4.DBX4.0 (Bool)
-            - busy: DB4.DBX4.1 (Bool)
-            - cycle_complete: DB4.DBX4.2 (Bool)
-            - status_code: DB4.DBW30 (Int)
-            - error_code: DB4.DBW32 (Int)
+            - connected: DB123.DBX4.0 (Bool)
+            - busy: DB123.DBX4.1 (Bool)
+            - cycle_complete: DB123.DBX4.2 (Bool)
+            - status_code: DB123.DBW30 (Int)
+            - error_code: DB123.DBW32 (Int)
         """
         if not snap7_available or self.client is None:
             return {'connected': False, 'busy': False, 'cycle_complete': False, 'status_code': 0, 'error_code': 0}
@@ -391,18 +391,18 @@ class PLCClient:
             try:
                 time.sleep(0.02)  # 20ms delay to avoid flooding
 
-                # Read status byte (DB4.DBB4)
+                # Read status byte (DB123.DBB4)
                 status_byte = self.client.db_read(db_number, 4, 1)
 
-                # Read status codes (DB4.DBW30 and DB4.DBW32 - 4 bytes total)
+                # Read status codes (DB123.DBW30 and DB123.DBW32 - 4 bytes total)
                 codes_data = self.client.db_read(db_number, 30, 4)
 
                 return {
-                    'connected': get_bool(status_byte, 0, 0),        # DB4.DBX4.0
-                    'busy': get_bool(status_byte, 0, 1),             # DB4.DBX4.1
-                    'cycle_complete': get_bool(status_byte, 0, 2),   # DB4.DBX4.2
-                    'status_code': get_int(codes_data, 0),           # DB4.DBW30
-                    'error_code': get_int(codes_data, 2)             # DB4.DBW32
+                    'connected': get_bool(status_byte, 0, 0),        # DB123.DBX4.0
+                    'busy': get_bool(status_byte, 0, 1),             # DB123.DBX4.1
+                    'cycle_complete': get_bool(status_byte, 0, 2),   # DB123.DBX4.2
+                    'status_code': get_int(codes_data, 0),           # DB123.DBW30
+                    'error_code': get_int(codes_data, 2)             # DB123.DBW32
                 }
             finally:
                 self.plc_lock.release()
