@@ -1,0 +1,12 @@
+[Unit]
+Description=Camera Auto-Recovery Watchdog
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=API_URL=https://127.0.0.1:8080/api/camera/status
+Environment=SERVICE_NAME=smart-factory.service
+Environment=USB_PORT=3-1
+Environment=ALLOW_REBOOT_ON_FAILURE=0
+ExecStart=/home/pi/sf2/pwa-dobot-plc/deploy/camera-recovery.sh
