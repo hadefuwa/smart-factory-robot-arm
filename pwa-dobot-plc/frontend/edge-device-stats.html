@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edge Device Stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0b1020;
+      color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #161b30;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .label {
+      font-weight: bold;
+      color: #a0b4ff;
+    }
+
+    .value {
+      font-family: monospace;
+    }
+
+    .error {
+      color: #ff7070;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .timestamp {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #c0c0c0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Edge Device Stats</h1>
+
+  <div class="container">
+    <div class="stat-row">
+      <div class="label">CPU Load (1 min):</div>
+      <div class="value" id="cpuLoad1">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">CPU Load (5 min):</div>
+      <div class="value" id="cpuLoad5">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">CPU Load (15 min):</div>
+      <div class="value" id="cpuLoad15">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">CPU Cores:</div>
+      <div class="value" id="cpuCores">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">Memory Used:</div>
+      <div class="value" id="memoryUsed">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">Memory Total:</div>
+      <div class="value" id="memoryTotal">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">CPU Temperature:</div>
+      <div class="value" id="cpuTemp">-</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="label">Uptime:</div>
+      <div class="value" id="uptime">-</div>
+    </div>
+
+    <div class="timestamp" id="lastUpdated">Last updated: -</div>
+    <div class="error" id="errorMessage"></div>
+  </div>
+
+  <script>
+    // If you open this page on the Pi: keep localhost
+    // If you open on another PC: change to http://PI_IP_ADDRESS:3000/stats
+    var STATS_URL = 'http://localhost:3000/stats';
+
+    function formatSecondsToHMS(seconds) {
+      var hours = Math.floor(seconds / 3600);
+      var minutes = Math.floor((seconds % 3600) / 60);
+      var secs = Math.floor(seconds % 60);
+
+      return hours + 'h ' + minutes + 'm ' + secs + 's';
+    }
+
+    function fetchStats() {
+      var errorMessageElement = document.getElementById('errorMessage');
+      errorMessageElement.textContent = '';
+
+      fetch(STATS_URL)
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error('Network response was not ok: ' + response.status);
+          }
+          return response.json();
+        })
+        .then(function (data) {
+          if (!data || !data.cpu || !data.memory) {
+            throw new Error('Stats format is invalid');
+          }
+
+          document.getElementById('cpuLoad1').textContent =
+            data.cpu.load1.toFixed(2) + ' (load)';
+
+          document.getElementById('cpuLoad5').textContent =
+            data.cpu.load5.toFixed(2) + ' (load)';
+
+          document.getElementById('cpuLoad15').textContent =
+            data.cpu.load15.toFixed(2) + ' (load)';
+
+          document.getElementById('cpuCores').textContent =
+            data.cpu.coreCount;
+
+          document.getElementById('memoryUsed').textContent =
+            data.memory.usedMB + ' MB';
+
+          document.getElementById('memoryTotal').textContent =
+            data.memory.totalMB + ' MB';
+
+          if (data.temperatureCelsius !== null && data.temperatureCelsius !== undefined) {
+            document.getElementById('cpuTemp').textContent =
+              data.temperatureCelsius.toFixed(1) + ' °C';
+          } else {
+            document.getElementById('cpuTemp').textContent = 'N/A';
+          }
+
+          document.getElementById('uptime').textContent =
+            formatSecondsToHMS(data.uptimeSeconds);
+
+          var now = new Date();
+          document.getElementById('lastUpdated').textContent =
+            'Last updated: ' + now.toLocaleTimeString();
+        })
+        .catch(function (error) {
+          console.error('Error fetching stats:', error);
+          errorMessageElement.textContent =
+            'Error fetching stats: ' + error.message;
+        });
+    }
+
+    fetchStats();
+    setInterval(fetchStats, 2000);
+  </script>
+</body>
+</html>
+
