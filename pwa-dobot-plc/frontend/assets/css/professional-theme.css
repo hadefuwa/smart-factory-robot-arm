@@ -2512,7 +2512,7 @@ body.dashboard-v2.sf-subpage-v2 .sidebar .logo .simple-text {
 }
 
 body.dashboard-v2.sf-subpage-v2 .content {
-  padding-top: 94px;
+  padding-top: 30px;
 }
 
 body.dashboard-v2.sf-subpage-v2 .content .container-fluid > .row {
@@ -2626,13 +2626,13 @@ body.dashboard-v2.sf-subpage-v2 .footer {
 
 @media (max-width: 1199px) {
   body.dashboard-v2.sf-subpage-v2 .content {
-    padding-top: 84px;
+    padding-top: 30px;
   }
 }
 
 @media (max-width: 767px) {
   body.dashboard-v2.sf-subpage-v2 .content {
-    padding-top: 74px;
+    padding-top: 30px;
   }
 }
 
