@@ -116,7 +116,7 @@
             </div>
             <div class="sf-page-hero-chips">
               <div><span>Controller</span><strong>S7-1200</strong></div>
-              <div><span>Focus</span><strong>DB123 Signals</strong></div>
+              <div><span>Focus</span><strong>DB124 Signals</strong></div>
               <div><span>Monitoring</span><strong>Real-time Tags</strong></div>
             </div>
           </section>
@@ -125,35 +125,57 @@
               <div class="card">
                 <div class="card-header card-header-purple">
                   <h4 class="card-title">PLC Tag Diagnostics - S7-1200</h4>
-                  <p class="card-category">Real-time monitoring of Siemens PLC data blocks - Start <span id="headerStartAddress">DB123.DBX26.0</span> | Connected <span id="headerConnectedAddress">DB123.DBX26.1</span></p>
+                  <p class="card-category">Real-time monitoring of Siemens PLC data blocks - Start <span id="headerStartAddress">DB124.DBX0.0</span> | Connected <span id="headerConnectedAddress">DB124.DBX0.1</span></p>
                 </div>
                 <div class="card-body">
-                  <!-- PLC Start Bit Configuration -->
+                  <!-- DB124 Configuration -->
                   <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                    <h5 style="margin: 0 0 12px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">PLC Vision Bit Addresses</h5>
-                    <p style="color: var(--text-muted, #888); font-size: 11px; margin-bottom: 12px;">Configure DB123 byte/bit addresses for Start and Camera Connected. Changes take effect on the next poll cycle.</p>
-                    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+                    <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px;">
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Start Byte</label>
-                        <input type="number" id="startBitByte" min="0" max="255" value="26" style="width: 70px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <h5 style="margin: 0 0 8px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">DB124 Camera Mapping Editor</h5>
+                        <p style="color: var(--text-muted, #888); font-size: 11px; margin: 0;">Edit the Pi-side DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
+                      </div>
+                      <div id="cameraDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">DB Number</label>
+                        <input type="number" id="cameraDbNumber" min="1" max="999" value="124" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Start Bit (0-7)</label>
-                        <input type="number" id="startBitBit" min="0" max="7" value="0" style="width: 60px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Total Size</label>
+                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="8" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Connected Byte</label>
-                        <input type="number" id="connectedBitByte" min="0" max="255" value="26" style="width: 70px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
-                      </div>
-                      <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Connected Bit (0-7)</label>
-                        <input type="number" id="connectedBitBit" min="0" max="7" value="1" style="width: 60px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
-                      </div>
-                      <div style="align-self: flex-end;">
-                        <button type="button" class="btn btn-sm btn-primary" id="saveStartBitBtn" style="padding: 8px 16px;">Save Bit Addresses</button>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Enabled</label>
+                        <select id="cameraDbEnabled" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                          <option value="true">True</option>
+                          <option value="false">False</option>
+                        </select>
                       </div>
                     </div>
-                    <div id="startBitSaveMessage" style="font-size: 11px; margin-top: 10px; min-height: 18px;"></div>
+
+                    <div style="overflow-x: auto;">
+                      <table style="width: 100%; border-collapse: collapse; min-width: 700px;">
+                        <thead>
+                          <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Tag</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Type</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Byte</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Bit</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Address Preview</th>
+                          </tr>
+                        </thead>
+                        <tbody id="cameraDbEditorBody"></tbody>
+                      </table>
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;">
+                      <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn" style="padding: 8px 16px;">Save DB124 Mapping</button>
+                      <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn" style="padding: 8px 16px;">Reload Saved Values</button>
+                      <button type="button" class="btn btn-sm btn-default" id="resetDb123DefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
+                    </div>
                   </div>
 
                   <!-- Status Panel -->
@@ -163,7 +185,7 @@
                       <div class="status-value" id="plcConnected">-</div>
                     </div>
                     <div class="status-row">
-                      <div class="status-label" id="startBitAddressLabel">DB123.DBX26.0:</div>
+                      <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
                       <div class="status-value" id="startBitValue">-</div>
                     </div>
                     <div class="status-row">
@@ -241,6 +263,22 @@
     let pollTimer = null;
     let paused = false;
     let startTime = Date.now();
+    const CAMERA_DB_TAG_FIELDS = [
+      { key: 'start', label: 'Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
+      { key: 'connected', label: 'Connected', type: 'bool', defaultByte: 0, defaultBit: 1 },
+      { key: 'busy', label: 'Busy', type: 'bool', defaultByte: 0, defaultBit: 2 },
+      { key: 'completed', label: 'Completed', type: 'bool', defaultByte: 0, defaultBit: 3 },
+      { key: 'object_detected', label: 'Object Detected', type: 'bool', defaultByte: 0, defaultBit: 4 },
+      { key: 'object_ok', label: 'Object OK', type: 'bool', defaultByte: 0, defaultBit: 5 },
+      { key: 'defect_detected', label: 'Defect Detected', type: 'bool', defaultByte: 0, defaultBit: 6 },
+      { key: 'object_number', label: 'Object Number', type: 'int', defaultByte: 2 },
+      { key: 'defect_number', label: 'Defect Number', type: 'int', defaultByte: 4 },
+      { key: 'yellow_cube', label: 'Yellow Cube', type: 'bool', defaultByte: 6, defaultBit: 0 },
+      { key: 'white_cube', label: 'White Cube', type: 'bool', defaultByte: 6, defaultBit: 1 },
+      { key: 'steel_cube', label: 'Steel Cube', type: 'bool', defaultByte: 6, defaultBit: 2 },
+      { key: 'aluminum_cube', label: 'Aluminum Cube', type: 'bool', defaultByte: 6, defaultBit: 3 },
+      { key: 'counter_exceeded', label: 'Counter Exceeded', type: 'bool', defaultByte: 6, defaultBit: 4 }
+    ];
 
     let stats = {
       total: 0,
@@ -250,8 +288,13 @@
     };
 
     // Update displayed bit addresses in header/status rows.
+    function getCurrentDbNumber() {
+      const dbInput = document.getElementById('cameraDbNumber');
+      return Math.max(1, Math.min(999, parseInt(dbInput && dbInput.value, 10) || 124));
+    }
+
     function setStartBitAddressDisplay(byte, bit) {
-      const addr = 'DB123.DBX' + byte + '.' + bit;
+      const addr = 'DB' + getCurrentDbNumber() + '.DBX' + byte + '.' + bit;
       const headerEl = document.getElementById('headerStartAddress');
       const labelEl = document.getElementById('startBitAddressLabel');
       if (headerEl) headerEl.textContent = addr;
@@ -259,52 +302,149 @@
     }
 
     function setConnectedBitAddressDisplay(byte, bit) {
-      const addr = 'DB123.DBX' + byte + '.' + bit;
+      const addr = 'DB' + getCurrentDbNumber() + '.DBX' + byte + '.' + bit;
       const headerEl = document.getElementById('headerConnectedAddress');
       if (headerEl) headerEl.textContent = addr;
     }
 
-    // Load config and fill Start/Connected Bit form
-    async function loadStartBitConfig() {
+    function getDefaultCameraDbConfig() {
+      const tags = {};
+      CAMERA_DB_TAG_FIELDS.forEach((field) => {
+        tags[field.key] = { byte: field.defaultByte };
+        if (field.type === 'bool') {
+          tags[field.key].bit = field.defaultBit;
+        }
+      });
+      return {
+        enabled: true,
+        db_number: 124,
+        total_size: 8,
+        tags
+      };
+    }
+
+    function renderCameraDbEditor(cameraDbConfig) {
+      const tbody = document.getElementById('cameraDbEditorBody');
+      const tags = (cameraDbConfig && cameraDbConfig.tags) || {};
+
+      document.getElementById('cameraDbNumber').value = parseInt(cameraDbConfig.db_number, 10) || 124;
+      document.getElementById('cameraDbTotalSize').value = parseInt(cameraDbConfig.total_size, 10) || 8;
+      document.getElementById('cameraDbEnabled').value = cameraDbConfig.enabled === false ? 'false' : 'true';
+
+      tbody.innerHTML = CAMERA_DB_TAG_FIELDS.map((field) => {
+        const saved = tags[field.key] || {};
+        const byteValue = parseInt(saved.byte, 10);
+        const bitValue = parseInt(saved.bit, 10);
+        const safeByte = Number.isFinite(byteValue) ? byteValue : field.defaultByte;
+        const safeBit = Number.isFinite(bitValue) ? bitValue : field.defaultBit;
+        const address = field.type === 'bool'
+          ? `DB${getCurrentDbNumber()}.DBX${safeByte}.${safeBit}`
+          : `DB${getCurrentDbNumber()}.DBW${safeByte}`;
+
+        return `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px 8px; color: #fff;">${field.label}</td>
+            <td style="padding: 10px 8px; color: var(--text-muted, #888); text-transform: uppercase; font-size: 11px;">${field.type}</td>
+            <td style="padding: 10px 8px;">
+              <input
+                type="number"
+                min="0"
+                max="255"
+                value="${safeByte}"
+                data-tag="${field.key}"
+                data-part="byte"
+                style="width: 84px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
+              >
+            </td>
+            <td style="padding: 10px 8px;">
+              ${field.type === 'bool' ? `
+                <input
+                  type="number"
+                  min="0"
+                  max="7"
+                  value="${safeBit}"
+                  data-tag="${field.key}"
+                  data-part="bit"
+                  style="width: 72px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
+                >
+              ` : '<span style="color: var(--text-muted, #888); font-size: 12px;">N/A</span>'}
+            </td>
+            <td style="padding: 10px 8px; color: #9fe8dc;" id="preview-${field.key}">${address}</td>
+          </tr>
+        `;
+      }).join('');
+
+      updateCameraDbPreviews();
+    }
+
+    function updateCameraDbPreviews() {
+      CAMERA_DB_TAG_FIELDS.forEach((field) => {
+        const byteInput = document.querySelector(`[data-tag="${field.key}"][data-part="byte"]`);
+        const bitInput = document.querySelector(`[data-tag="${field.key}"][data-part="bit"]`);
+        if (!byteInput) return;
+        const byteValue = Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte));
+        byteInput.value = byteValue;
+        let preview = `DB${getCurrentDbNumber()}.DBW${byteValue}`;
+        if (field.type === 'bool') {
+          const bitValue = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || field.defaultBit));
+          bitInput.value = bitValue;
+          preview = `DB${getCurrentDbNumber()}.DBX${byteValue}.${bitValue}`;
+        }
+        const previewEl = document.getElementById(`preview-${field.key}`);
+        if (previewEl) previewEl.textContent = preview;
+
+        if (field.key === 'start') {
+          setStartBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
+        }
+        if (field.key === 'connected') {
+          setConnectedBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
+        }
+      });
+    }
+
+    function collectCameraDbConfigFromEditor() {
+      const tags = {};
+      CAMERA_DB_TAG_FIELDS.forEach((field) => {
+        const byteInput = document.querySelector(`[data-tag="${field.key}"][data-part="byte"]`);
+        const bitInput = document.querySelector(`[data-tag="${field.key}"][data-part="bit"]`);
+        const entry = {
+          byte: Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte))
+        };
+        if (field.type === 'bool') {
+          entry.bit = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || field.defaultBit));
+        }
+        tags[field.key] = entry;
+      });
+
+      return {
+        enabled: document.getElementById('cameraDbEnabled').value === 'true',
+        db_number: Math.max(1, Math.min(999, parseInt(document.getElementById('cameraDbNumber').value, 10) || 124)),
+        total_size: Math.max(1, Math.min(512, parseInt(document.getElementById('cameraDbTotalSize').value, 10) || 8)),
+        tags
+      };
+    }
+
+    async function loadCameraDbConfig() {
       try {
         const response = await fetch(API_BASE + '/api/config', { signal: AbortSignal.timeout(5000) });
         const config = await response.json();
-        const tags = ((config.plc || {}).db123 || {}).tags || {};
-        const start = tags.start || { byte: 26, bit: 0 };
-        const connected = tags.connected || { byte: 26, bit: 1 };
-        const byte = parseInt(start.byte, 10) || 26;
-        const bit = parseInt(start.bit, 10) || 0;
-        const connectedByte = parseInt(connected.byte, 10) || 26;
-        const connectedBit = parseInt(connected.bit, 10) || 1;
-        document.getElementById('startBitByte').value = byte;
-        document.getElementById('startBitBit').value = bit;
-        document.getElementById('connectedBitByte').value = connectedByte;
-        document.getElementById('connectedBitBit').value = connectedBit;
-        setStartBitAddressDisplay(byte, bit);
-        setConnectedBitAddressDisplay(connectedByte, connectedBit);
+        const cameraDbConfig = ((config.plc || {}).db124) || getDefaultCameraDbConfig();
+        renderCameraDbEditor({
+          ...getDefaultCameraDbConfig(),
+          ...cameraDbConfig,
+          tags: { ...getDefaultCameraDbConfig().tags, ...(cameraDbConfig.tags || {}) }
+        });
       } catch (e) {
-        console.error('Load start bit config failed:', e);
-        setStartBitAddressDisplay(26, 0);
-        setConnectedBitAddressDisplay(26, 1);
+        console.error('Load DB124 config failed:', e);
+        renderCameraDbEditor(getDefaultCameraDbConfig());
       }
     }
 
-    // Save Start/Connected bit config to backend
-    async function saveStartBitConfig() {
-      const byteInput = document.getElementById('startBitByte');
-      const bitInput = document.getElementById('startBitBit');
-      const connectedByteInput = document.getElementById('connectedBitByte');
-      const connectedBitInput = document.getElementById('connectedBitBit');
-      const msgEl = document.getElementById('startBitSaveMessage');
-      const btn = document.getElementById('saveStartBitBtn');
-      const byte = Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || 26));
-      const bit = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || 0));
-      const connectedByte = Math.max(0, Math.min(255, parseInt(connectedByteInput.value, 10) || 26));
-      const connectedBit = Math.max(0, Math.min(7, parseInt(connectedBitInput.value, 10) || 1));
-      byteInput.value = byte;
-      bitInput.value = bit;
-      connectedByteInput.value = connectedByte;
-      connectedBitInput.value = connectedBit;
+    async function saveCameraDbConfig() {
+      updateCameraDbPreviews();
+      const msgEl = document.getElementById('cameraDbSaveMessage');
+      const btn = document.getElementById('saveCameraDbConfigBtn');
+      const cameraDbConfig = collectCameraDbConfigFromEditor();
       btn.disabled = true;
       msgEl.textContent = 'Saving...';
       msgEl.style.color = '';
@@ -314,22 +454,15 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             plc: {
-              db123: {
-                tags: {
-                  start: { byte: byte, bit: bit },
-                  connected: { byte: connectedByte, bit: connectedBit }
-                }
-              }
+              db124: cameraDbConfig
             }
           }),
           signal: AbortSignal.timeout(5000)
         });
         const data = await response.json();
         if (data.success) {
-          msgEl.textContent = 'Saved. Start=DB123.DBX' + byte + '.' + bit + ', Connected=DB123.DBX' + connectedByte + '.' + connectedBit;
+          msgEl.textContent = `Saved camera mapping for DB${cameraDbConfig.db_number}. Live worker updated.`;
           msgEl.style.color = 'var(--accent-green, #4caf50)';
-          setStartBitAddressDisplay(byte, bit);
-          setConnectedBitAddressDisplay(connectedByte, connectedBit);
         } else {
           msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
           msgEl.style.color = 'var(--accent-red, #f44336)';
@@ -342,9 +475,13 @@
     }
 
     // Run on page load
-    document.addEventListener('DOMContentLoaded', function() {
-      loadStartBitConfig();
-      document.getElementById('saveStartBitBtn').addEventListener('click', saveStartBitConfig);
+      document.addEventListener('DOMContentLoaded', function() {
+      loadCameraDbConfig();
+      document.getElementById('saveCameraDbConfigBtn').addEventListener('click', saveCameraDbConfig);
+      document.getElementById('reloadCameraDbConfigBtn').addEventListener('click', loadCameraDbConfig);
+      document.getElementById('resetDb123DefaultsBtn').addEventListener('click', () => renderCameraDbEditor(getDefaultCameraDbConfig()));
+      document.getElementById('cameraDbEditorBody').addEventListener('input', updateCameraDbPreviews);
+      document.getElementById('cameraDbNumber').addEventListener('input', updateCameraDbPreviews);
     });
 
     function addLog(message, isTrue = null) {
@@ -388,7 +525,7 @@
       if (paused) return;
 
       try {
-        const response = await fetch(`${API_BASE}/api/plc/db40/start`, {
+        const response = await fetch(`${API_BASE}/api/plc/camera/start`, {
           signal: AbortSignal.timeout(5000)
         });
 
@@ -517,4 +654,6 @@
   </script>
 </body>
 </html>
+
+
 

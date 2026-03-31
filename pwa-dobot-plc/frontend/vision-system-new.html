@@ -303,12 +303,12 @@
                       More Info: PLC Cube Color Bits
                     </summary>
                     <div style="margin-top: 10px; color: #cfd8dc; font-size: 12px; line-height: 1.45;">
-                      <div>When a cube is detected, the system clears DB123.DBX32.0 to DB123.DBX32.3, then sets one bit for the detected cube:</div>
-                      <div style="margin-top: 8px;">`yellow_cube_detected` -> DB123.DBX32.0</div>
-                      <div>`white_cube_detected` -> DB123.DBX32.1</div>
-                      <div>`steel_cube_detected` -> DB123.DBX32.2</div>
-                      <div>`alluminium_cube_detected` -> DB123.DBX32.3</div>
-                      <div style="margin-top: 8px;">When the PLC Completed Command is received, DB123.DBX32.0 to DB123.DBX32.3 are cleared again, ready for the next cube.</div>
+                      <div>When a cube is detected, the system clears DB124.DBX6.0 to DB124.DBX6.3, then sets one bit for the detected cube:</div>
+                      <div style="margin-top: 8px;">`yellow_cube_detected` -> DB124.DBX6.0</div>
+                      <div>`white_cube_detected` -> DB124.DBX6.1</div>
+                      <div>`steel_cube_detected` -> DB124.DBX6.2</div>
+                      <div>`alluminium_cube_detected` -> DB124.DBX6.3</div>
+                      <div style="margin-top: 8px;">When the PLC Completed Command is received, DB124.DBX6.0 to DB124.DBX6.3 are cleared again, ready for the next cube.</div>
                     </div>
                   </details>
 
@@ -483,8 +483,8 @@
       const endpoints = [
         '/api/health',
         '/api/camera/status',
-        '/api/plc/db40/start',
-        '/api/plc/db123/read',
+        '/api/plc/camera/start',
+        '/api/plc/camera/read',
         '/api/vision/annotated-result'
       ];
       addDebugLog('Running manual debug checks...');
@@ -596,10 +596,10 @@
     async function updateLiveStatus() {
       const refreshEl = document.getElementById('statusLastRefresh');
 
-      const [plcResult, cameraResult, db123Result, smartFactoryResult, healthResult, cycleResult] = await Promise.allSettled([
-        fetchJsonWithTimeout(`${API_BASE}/api/plc/db40/start`),
+      const [plcResult, cameraResult, cameraDbResult, smartFactoryResult, healthResult, cycleResult] = await Promise.allSettled([
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/start`),
         fetchJsonWithTimeout(`${API_BASE}/api/camera/status`),
-        fetchJsonWithTimeout(`${API_BASE}/api/plc/db123/read`),
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/read`),
         fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
         fetchJsonWithTimeout(`${API_BASE}/api/health`),
         fetchJsonWithTimeout(`${API_BASE}/api/vision/latest-cycle`)
@@ -649,8 +649,8 @@
         setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status', 'bad');
       }
 
-      if (db123Result.status === 'fulfilled' && db123Result.value.success) {
-        const tags = db123Result.value.tags || {};
+      if (cameraDbResult.status === 'fulfilled' && cameraDbResult.value.success) {
+        const tags = cameraDbResult.value.tags || {};
         const busy = Boolean(tags.busy);
         const completed = Boolean(tags.completed);
         const objectDetected = Boolean(tags.object_detected);
@@ -694,11 +694,11 @@
           refreshAnnotatedResultImage('status-completed');
         }
       } else {
-        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read DB123 vision tags', 'bad');
-        setLiveStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
-        setLiveStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
-        setLiveStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
-        setLiveStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', 'UNAVAILABLE', '#f44336', 'DB123 read unavailable', 'bad');
+        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera DB tags', 'bad');
+        setLiveStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
       }
 
       if (cycleResult.status === 'fulfilled' && cycleResult.value.success) {
@@ -1969,6 +1969,7 @@
   </script>
 </body>
 </html>
+
 
 
 

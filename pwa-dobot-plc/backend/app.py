@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
-from plc_client import PLCClient
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result
 from dobot_client import DobotClient
 from camera_service import CameraService
 # DISABLED: Digital twin import commented out to reduce CPU usage
@@ -206,274 +206,83 @@ VISION_SERVICE_URL = os.getenv('VISION_SERVICE_URL', 'http://127.0.0.1:5001')
 VISION_SERVICE_TIMEOUT = 5.0  # 5 second timeout
 
 # ==================================================
-# UNIFIED PLC CACHE - Single Source of Truth
+# PLC Cache Adapter
 # ==================================================
-# All PLC data cached here, updated by ONE polling thread
-# All API endpoints read from cache (zero lock contention)
 
-plc_cache = {
-    'last_update': 0.0,
-    'db123': {
-        'start': False,
-        'busy': False,
-        'complete': False,
-        'fault': False,
-        'x_pos': 0.0,
-        'y_pos': 0.0,
-        'z_pos': 0.0,
-        'counter': 0,
-        # Robot/Gantry tags (DB123 bytes 4-34) - legacy db4 compatibility removed
-        'robot_connected': False,
-        'robot_busy': False,
-        'robot_cycle_complete': False,
-        'robot_target_x': 0.0,
-        'robot_target_y': 0.0,
-        'robot_target_z': 0.0,
-        'robot_current_x': 0.0,
-        'robot_current_y': 0.0,
-        'robot_current_z': 0.0,
-        'robot_status_code': 0,
-        'robot_error_code': 0
-    },
-    'plc_connected': False
-}
-
-# Polling thread state
-poll_thread = None
-poll_running = False
-
-# PLC Write Queue - all writes go through polling loop
-# Format: {'db': 123, 'offset': 40, 'data': bytearray}
-plc_write_queue = []
-plc_write_lock = threading.Lock()
-
-# ==================================================
-# READ-ONLY TAG PROTECTION
-# ==================================================
-# Define tags that are read-only (PLC controlled, not writable by this app)
-# 
-# HOW TO ADD READ-ONLY TAGS:
-# Format: (db_number, offset, bit_offset)
-# - If bit_offset is None, the entire byte/word at that offset is read-only
-# - If bit_offset is specified (0-7), only that specific bit is read-only
-#
-# Examples:
-#   (123, 26, 0)     - DB123.DBX26.0 (bit 0 of byte 26) is read-only
-#   (123, 40, None)   - Entire byte 40 in DB123 is read-only
-#   (4, 4, 1)        - DB4.DBX4.1 (bit 1 of byte 4) is read-only
-#
-# Start bit is configurable via config.json plc.db123.tags.start (byte, bit)
-READ_ONLY_TAGS = [
-    # Add more fixed read-only tags here; start bit is added from config in get_read_only_tags / is_tag_read_only
-]
-
-def get_start_bit_config():
-    """Get PLC start bit byte and bit from config (used for vision start command)."""
-    config = load_config()
-    tags = config.get('plc', {}).get('db123', {}).get('tags', {})
-    start = tags.get('start', {})
-    byte_val = start.get('byte', 26)
-    bit_val = start.get('bit', 0)
-    return (byte_val, bit_val)
-
-def get_connected_bit_config():
-    """Get PLC connected bit byte and bit from config."""
-    config = load_config()
-    tags = config.get('plc', {}).get('db123', {}).get('tags', {})
-    connected = tags.get('connected', {})
-    byte_val = connected.get('byte', 26)
-    bit_val = connected.get('bit', 1)
-    return (byte_val, bit_val)
-
-def get_read_only_tags() -> List[Dict[str, Any]]:
-    """Get a list of all read-only tags in a readable format
-    
-    Returns:
-        List of dictionaries with 'db', 'offset', 'bit', and 'description' keys
-    """
-    result = []
-    # Add configurable PLC start bit (DB123)
-    start_byte, start_bit = get_start_bit_config()
-    result.append({
-        'db': 123,
-        'offset': start_byte,
-        'bit': start_bit,
-        'tag': f"DB123.DBX{start_byte}.{start_bit}",
-        'description': 'Read-only (PLC start bit, configurable)'
-    })
-    for db_number, offset, bit_offset in READ_ONLY_TAGS:
-        if bit_offset is None:
-            tag_name = f"DB{db_number}.DBB{offset} (entire byte)"
-        else:
-            tag_name = f"DB{db_number}.DBX{offset}.{bit_offset}"
-        
-        result.append({
-            'db': db_number,
-            'offset': offset,
-            'bit': bit_offset,
-            'tag': tag_name,
-            'description': 'Read-only (PLC controlled)'
-        })
-    return result
-
-def is_tag_read_only(db_number: int, offset: int, bit_offset: Optional[int] = None) -> bool:
-    """Check if a tag is read-only
-    
-    Args:
-        db_number: Data block number
-        offset: Byte offset
-        bit_offset: Bit offset (None means check entire byte/word)
-    
-    Returns:
-        True if the tag is read-only, False otherwise
-    """
-    # Configurable PLC start bit (DB123)
-    start_byte, start_bit = get_start_bit_config()
-    if db_number == 123 and offset == start_byte and (bit_offset is None or bit_offset == start_bit):
-        return True
-
-    for read_only_db, read_only_offset, read_only_bit in READ_ONLY_TAGS:
-        # Check if DB and offset match
-        if db_number == read_only_db and offset == read_only_offset:
-            # If bit_offset is None in read-only list, entire byte is read-only
-            if read_only_bit is None:
-                return True
-            # If bit_offset matches, this specific bit is read-only
-            if bit_offset == read_only_bit:
-                return True
-            # If we're writing a byte that contains a read-only bit, we need to preserve it
-            # (This is handled separately in the write execution)
-    return False
-
-def check_write_permission(db_number: int, offset: int, data_length: int = 1) -> tuple[bool, str]:
-    """Check if a write operation is allowed
-    
-    Args:
-        db_number: Data block number
-        offset: Byte offset
-        data_length: Length of data being written (in bytes)
-    
-    Returns:
-        Tuple of (is_allowed, reason_message)
-    """
-    # Check each byte in the write range
-    for byte_offset in range(offset, offset + data_length):
-        # Check if entire byte is read-only
-        if is_tag_read_only(db_number, byte_offset, None):
-            return False, f"DB{db_number}.{byte_offset} is read-only (entire byte)"
-        
-        # Check configurable start bit byte: do not allow writing to that byte
-        start_byte, start_bit = get_start_bit_config()
-        if db_number == 123 and byte_offset == start_byte:
-            return False, f"DB{db_number}.DBX{start_byte}.{start_bit} is read-only (PLC start bit)"
-    
-    return True, "Write allowed"
-
-# Vision handshaking state
-vision_handshake_processing = False
-vision_handshake_last_start_state = False
-vision_last_completed_command_state = False
-camera_connected_last_written_state = None
-camera_connected_last_written_address = None
-cube_color_hold_seconds = 3.0
-cube_color_latched_until = 0.0
-cube_color_pending_clear = False
-
-def queue_cube_color_bits(color_code: int, force_clear: bool = False) -> bool:
-    """Write one-hot cube color bits to DB123 byte 32.
-
-    Mapping:
-      32.0 yellow_cube_detected
-      32.1 white_cube_detected
-      32.2 steel_cube_detected
-      32.3 alluminium_cube_detected
-    """
-    global cube_color_latched_until, cube_color_pending_clear
-
-    now = time.time()
-    # Keep color bits latched briefly so PLC/HMI can reliably read them.
-    if color_code == 0 and not force_clear and now < cube_color_latched_until:
-        cube_color_pending_clear = True
-        return True
-
-    # Step 1: clear all color bits
-    clear_bits = bytearray(1)
-    snap7.util.set_bool(clear_bits, 0, 0, False)
-    snap7.util.set_bool(clear_bits, 0, 1, False)
-    snap7.util.set_bool(clear_bits, 0, 2, False)
-    snap7.util.set_bool(clear_bits, 0, 3, False)
-    ok = queue_plc_write(123, 32, clear_bits)
-    cube_color_pending_clear = False
-
-    # Step 2: set selected color bit (if any)
-    if color_code in (1, 2, 3, 4):
-        set_bits = bytearray(1)
-        bit_map = {
-            1: 0,  # yellow
-            2: 1,  # white
-            3: 2,  # steel (mapped from metal detection)
-            4: 3   # alluminium
+def get_legacy_plc_cache() -> Dict[str, Any]:
+    """Map the worker cache into the smaller legacy shape used by some endpoints."""
+    cache = get_plc_cache() or {}
+    return {
+        'last_update': cache.get('last_update', 0.0),
+        'plc_connected': cache.get('connected', False),
+        'db123': {
+            'start': cache.get('camera_start', False),
+            'busy': cache.get('camera_busy', False),
+            'complete': cache.get('camera_completed', False),
+            'fault': cache.get('defect_detected', False),
+            'x_pos': 0.0,
+            'y_pos': 0.0,
+            'z_pos': 0.0,
+            'counter': cache.get('object_number', 0),
+            'robot_connected': cache.get('robot_connected', False),
+            'robot_busy': cache.get('robot_busy', False),
+            'robot_cycle_complete': cache.get('robot_cycle_complete', False),
+            'robot_target_x': cache.get('robot_target_x', 0),
+            'robot_target_y': cache.get('robot_target_y', 0),
+            'robot_target_z': cache.get('robot_target_z', 0),
+            'robot_current_x': cache.get('robot_current_x', 0),
+            'robot_current_y': cache.get('robot_current_y', 0),
+            'robot_current_z': cache.get('robot_current_z', 0),
+            'robot_status_code': cache.get('robot_status_code', 0),
+            'robot_error_code': cache.get('robot_error_code', 0),
         }
-        snap7.util.set_bool(set_bits, 0, bit_map[color_code], True)
-        ok = queue_plc_write(123, 32, set_bits) and ok
-        cube_color_latched_until = now + cube_color_hold_seconds
-    else:
-        cube_color_latched_until = 0.0
+    }
 
-    return ok
 
-def queue_plc_write(db_number: int, offset: int, data: bytearray):
-    """Queue a PLC write operation to be executed in the next polling cycle
+def get_camera_db_config(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return the configured camera DB section, preferring DB124 and falling back to DB123."""
+    if config is None:
+        config = load_config()
+    plc_config = config.get('plc', {})
+    return plc_config.get('db124') or plc_config.get('db123', {})
 
-    This prevents write/read conflicts by ensuring all writes happen AFTER reads
-    in the unified polling loop.
-    
-    Automatically validates read-only tags and logs warnings if attempting to write
-    to read-only tags.
-    """
-    global plc_write_queue, plc_write_lock
 
-    # Check if this write is to a read-only tag
-    is_allowed, reason = check_write_permission(db_number, offset, len(data))
-    
-    if not is_allowed:
-        logger.warning(f"âš ï¸ Attempted to write to read-only tag: DB{db_number}.{offset} - {reason}")
-        logger.warning(f"âš ï¸ Write operation blocked to protect read-only tag")
-        return False
-    
-    with plc_write_lock:
-        plc_write_queue.append({
-            'db': db_number,
-            'offset': offset,
-            'data': data,
-            'type': 'bytes'
-        })
-        logger.debug(f"Queued PLC write: DB{db_number}.{offset} ({len(data)} bytes)")
-    return True
+def get_camera_tag_config(tag_name: str, default_byte: int, default_bit: Optional[int] = None) -> tuple:
+    """Read a camera DB tag location from merged runtime config."""
+    config = load_config()
+    tags = get_camera_db_config(config).get('tags', {})
+    tag = tags.get(tag_name, {}) if isinstance(tags.get(tag_name, {}), dict) else {}
+    byte = int(tag.get('byte', default_byte))
+    if default_bit is None:
+        return (byte, None)
+    bit = int(tag.get('bit', default_bit))
+    return (byte, bit)
 
-def queue_plc_bit_write(db_number: int, offset: int, bit: int, value: bool):
-    """Queue a single-bit PLC write (applied as read-modify-write in poll loop)."""
-    global plc_write_queue, plc_write_lock
 
-    if bit < 0 or bit > 7:
-        logger.warning(f"Invalid bit offset for queued bit write: DB{db_number}.DBX{offset}.{bit}")
-        return False
+def get_start_bit_config() -> tuple:
+    return get_camera_tag_config('start', 0, 0)
 
-    if is_tag_read_only(db_number, offset, bit):
-        logger.warning(f"⚠️ Attempted to write to read-only bit: DB{db_number}.DBX{offset}.{bit}")
-        logger.warning("⚠️ Bit write operation blocked to protect read-only tag")
-        return False
 
-    with plc_write_lock:
-        plc_write_queue.append({
-            'db': db_number,
-            'offset': offset,
-            'bit': bit,
-            'value': bool(value),
-            'type': 'bit'
-        })
-        logger.debug(f"Queued PLC bit write: DB{db_number}.DBX{offset}.{bit}={bool(value)}")
-    return True
+def get_connected_bit_config() -> tuple:
+    return get_camera_tag_config('connected', 0, 1)
+
+
+def get_camera_db_number(config: Optional[Dict[str, Any]] = None) -> int:
+    return int(get_camera_db_config(config).get('db_number', 124))
+
+
+def apply_runtime_plc_config(config: Dict[str, Any]) -> None:
+    """Push updated PLC DB mappings into the running PLC worker."""
+    worker = getattr(plc_client, 'worker', None) if plc_client else None
+    if worker is None:
+        return
+    plc_config = config.get('plc', {})
+    worker.update_db_configs(
+        plc_config.get('db123', {}),
+        get_camera_db_config(config)
+    )
+
+vision_handshake_processing = False
 
 def call_vision_service(frame: np.ndarray, params: Dict) -> Dict:
     """
@@ -590,7 +399,8 @@ def load_config():
                 "ip": "192.168.7.2",
                 "rack": 0,
                 "slot": 1,
-                "db_number": 123,
+                "db123": {"db_number": 123, "total_size": 80, "tags": {}},
+                "db124": {"db_number": 124, "total_size": 8, "tags": {}},
                 "poll_interval": 2.0
             },
             "server": {"port": 8080}
@@ -993,76 +803,6 @@ def get_saved_object_params() -> Dict[str, int]:
         'max_area': max_area
     }
 
-def write_vision_to_plc(object_count: int, defect_count: int, object_ok: bool, defect_detected: bool,
-                       busy: bool = False, completed: bool = False, color_code: int = 0):
-    """Write vision detection results to PLC DB123 tags
-
-    This function queues writes to be executed AFTER reads in the polling loop,
-    preventing write/read conflicts.
-
-    Args:
-        object_count: Number of objects detected
-        defect_count: Number of defects found
-        object_ok: Whether objects are OK (no defects)
-        defect_detected: Whether any defects were detected
-        busy: Whether vision system is currently processing (default: False)
-        completed: Whether vision processing is completed (default: False)
-        color_code: Detected cube color (0=none, 1=yellow, 2=white, 3=metal/grey)
-    """
-    if plc_client is None:
-        return False
-
-    try:
-        config = load_config()
-        db123_config = config.get('plc', {}).get('db123', {})
-
-        # Check if DB123 communication is enabled
-        if not db123_config.get('enabled', False):
-            return False
-
-        db_number = db123_config.get('db_number', 123)
-
-        # Prepare status byte with vision bool flags.
-        # Connected bit is configurable and written separately below.
-        status_byte_data = bytearray(1)
-        # Bits 0 and 1 (Start, Connected) are owned by the PLC and preserved
-        # when the queued write is executed. Here we only define bits 2-6.
-        snap7.util.set_bool(status_byte_data, 0, 2, busy)              # Busy
-        snap7.util.set_bool(status_byte_data, 0, 3, completed)         # Completed
-        snap7.util.set_bool(status_byte_data, 0, 4, object_count > 0)  # Object_Detected
-        snap7.util.set_bool(status_byte_data, 0, 5, object_ok)         # Object_OK
-        snap7.util.set_bool(status_byte_data, 0, 6, defect_detected)   # Defect_Detected
-
-        # Prepare object_number INT (2 bytes at offset 42)
-        # object_number_data = bytearray(2)
-        # snap7.util.set_int(object_number_data, 0, object_count)
-
-        # Prepare defect_number INT (2 bytes at offset 44)
-        # defect_number_data = bytearray(2)
-        # snap7.util.set_int(defect_number_data, 0, defect_count)
-
-        # Queue all writes - they will execute AFTER the next read in polling loop
-        # Status bits (Busy/Completed/Object_* flags) are in DB123.DBX26.2-26.6
-        queue_plc_write(db_number, 26, status_byte_data)      # Status bool flags
-        # queue_plc_write(db_number, 42, object_number_data)    # Object_Number (disabled)
-        # queue_plc_write(db_number, 44, defect_number_data)    # Defect_Number (disabled)
-        connected_byte, connected_bit = get_connected_bit_config()
-        camera_connected = False
-        if camera_service is not None:
-            try:
-                with camera_service.lock:
-                    camera_connected = camera_service.camera is not None and camera_service.camera.isOpened()
-            except Exception:
-                camera_connected = False
-        queue_plc_bit_write(db_number, connected_byte, connected_bit, camera_connected)
-        queue_cube_color_bits(color_code)                     # DB123.DBX32.0-32.3 one-hot color bits
-
-        logger.debug(f"Queued vision writes: busy={busy}, completed={completed}, objects={object_count}, defects={defect_count}, color={color_code} (DBX32 bits)")
-        return True
-
-    except Exception as e:
-        logger.error(f"Error queuing vision tags to PLC: {e}")
-        return False
 
 def init_clients():
     """Initialize PLC and Dobot clients from config"""
@@ -1070,19 +810,17 @@ def init_clients():
 
     config = load_config()
 
-    # PLC settings - only create if snap7 is available (gracefully handle if not)
+    # PLC settings - NEW WORKER ARCHITECTURE
     plc_config = config['plc']
+    plc_worker = None
+    plc_client = None
     try:
-        plc_client = PLCClient(
-            plc_config['ip'],
-            plc_config['rack'],
-            plc_config['slot']
-        )
-        # Check if snap7 client was actually created
-        if plc_client.client is None:
-            logger.warning("PLC client created but snap7 not available - PLC features disabled")
+        # Initialize new PLC worker (will be started after camera_service is ready)
+        # Worker initialization deferred until after camera_service creation
+        logger.info("PLC worker initialization deferred until camera service ready")
     except Exception as e:
-        logger.error(f"Failed to initialize PLC client: {e} - PLC features will be disabled")
+        logger.error(f"Failed to prepare PLC worker: {e} - PLC features will be disabled")
+        plc_worker = None
         plc_client = None
 
     # Dobot settings
@@ -1162,6 +900,25 @@ def init_clients():
     # No need to load it here - all YOLO calls go through vision service
     logger.info("YOLO detection will be handled by vision-service (separate process)")
 
+    # Initialize NEW PLC worker (now that camera_service is ready)
+    try:
+        logger.info("🔧 Initializing NEW PLC worker architecture...")
+        plc_worker = init_plc_worker(
+            plc_ip=plc_config['ip'],
+            camera_service=camera_service,
+            vision_callback=process_vision_cycle_new,  # New callback for worker
+            cycle_time_ms=plc_config.get('cycle_time_ms', 100),
+            db123_config=plc_config.get('db123', {}),
+            db124_config=get_camera_db_config(config)
+        )
+        # Create compatibility wrapper for gradual migration
+        plc_client = PLCClientCompatWrapper(plc_worker)
+        logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
+    except Exception as e:
+        logger.error(f"Failed to initialize PLC worker: {e}")
+        plc_worker = None
+        plc_client = None
+
     logger.info(f"Clients initialized - PLC: {plc_config['ip']}, Dobot USB: {dobot_config.get('usb_path', 'auto-detect')}")
 
 # ==================================================
@@ -1199,18 +956,12 @@ def get_all_data():
         plc_ip = plc_client.ip
     plc_status = {'connected': False, 'ip': plc_ip, 'last_error': 'PLC not available'}
     
-    # Only try PLC operations if snap7 is available and client exists
-    if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+    if plc_client:
         try:
             plc_status = plc_client.get_status()
-            # Only read if already connected - don't try to connect
             if plc_status.get('connected', False):
                 try:
-                    # Read from configured DB number
-                    config = load_config()
-                    db_number = config.get('plc', {}).get('db_number', 123)
-                    target_pose = plc_client.read_target_pose(db_number)
-                    time.sleep(0.15)  # 150ms delay to avoid job pending with S7-1200
+                    target_pose = plc_client.read_target_pose()
                     control_bits = plc_client.read_control_bits()
                 except Exception as e:
                     logger.debug(f"PLC read error: {e}")
@@ -1291,11 +1042,9 @@ def get_plc_pose():
     """Get target pose from PLC"""
     # Don't try to connect - just return default if not connected
     try:
-        if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+        if plc_client:
             if plc_client.is_connected():
-                config = load_config()
-                db_number = config.get('plc', {}).get('db_number', 123)
-                pose = plc_client.read_target_pose(db_number)
+                pose = plc_client.read_target_pose()
                 return jsonify(pose)
         return jsonify({'x': 0.0, 'y': 0.0, 'z': 0.0})
     except Exception as e:
@@ -1311,11 +1060,9 @@ def set_plc_pose():
             return jsonify({'error': 'Missing x, y, or z'}), 400
 
         # Don't try to connect - only write if already connected
-        if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+        if plc_client:
             if plc_client.is_connected():
-                config = load_config()
-                db_number = config.get('plc', {}).get('db_number', 123)
-                success = plc_client.write_current_pose(data, db_number)
+                success = plc_client.write_current_pose(data)
                 return jsonify({'success': success})
         return jsonify({'success': False, 'error': 'PLC not available'})
     except Exception as e:
@@ -1331,7 +1078,7 @@ def get_control_bits():
         'suction': False, 'ready': False, 'busy': False, 'error': False
     }
     try:
-        if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+        if plc_client:
             if plc_client.is_connected():
                 bits = plc_client.read_control_bits()
                 return jsonify(bits)
@@ -1348,7 +1095,7 @@ def set_control_bit(bit_name):
         value = data.get('value', False)
 
         # Don't try to connect - only write if already connected
-        if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+        if plc_client:
             if plc_client.is_connected():
                 success = plc_client.write_control_bit(bit_name, value)
                 return jsonify({'success': success})
@@ -1552,7 +1299,7 @@ def emergency_stop():
 
     # Signal PLC (gracefully handle if PLC is offline)
     try:
-        if plc_client and hasattr(plc_client, 'client') and plc_client.client is not None:
+        if plc_client:
             if plc_client.is_connected():
                 plc_client.write_control_bit('estop', True)
                 results['plc'] = 'signaled'
@@ -1682,7 +1429,7 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    """Update configuration (for vision config and DB123)"""
+    """Update configuration, including PLC DB123/DB124 and vision settings."""
     try:
         new_config = request.json
         current_config = load_config()
@@ -1692,18 +1439,20 @@ def update_config():
             current_config.setdefault('vision', {})
             current_config['vision'].update(new_config['vision'])
         
-        # Update DB123 config if provided (deep-merge tags so we don't wipe other tag definitions)
-        if 'plc' in new_config and 'db123' in new_config['plc']:
+        # Update PLC DB configs if provided (deep-merge tags so we don't wipe other tag definitions)
+        if 'plc' in new_config:
             current_config.setdefault('plc', {})
-            current_config['plc'].setdefault('db123', {})
-            new_db123 = new_config['plc']['db123']
-            if 'tags' in new_db123:
-                current_config['plc']['db123'].setdefault('tags', {})
-                for tag_name, tag_val in new_db123['tags'].items():
-                    current_config['plc']['db123']['tags'][tag_name] = tag_val
-            # Merge the rest of db123 (enabled, db_number, etc.)
-            rest = {k: v for k, v in new_db123.items() if k != 'tags'}
-            current_config['plc']['db123'].update(rest)
+            for db_key in ('db123', 'db124'):
+                if db_key not in new_config['plc']:
+                    continue
+                current_config['plc'].setdefault(db_key, {})
+                new_db_config = new_config['plc'][db_key]
+                if 'tags' in new_db_config:
+                    current_config['plc'][db_key].setdefault('tags', {})
+                    for tag_name, tag_val in new_db_config['tags'].items():
+                        current_config['plc'][db_key]['tags'][tag_name] = tag_val
+                rest = {k: v for k, v in new_db_config.items() if k != 'tags'}
+                current_config['plc'][db_key].update(rest)
 
         # Update camera config if provided (deep merge object params / crop / roi)
         if 'camera' in new_config:
@@ -1717,6 +1466,7 @@ def update_config():
                     current_config['camera'][key] = value
         
         save_config(current_config)
+        apply_runtime_plc_config(current_config)
         return jsonify({'success': True, 'message': 'Configuration saved'})
     except Exception as e:
         logger.error(f"Error saving config: {e}")
@@ -1759,6 +1509,7 @@ def update_settings():
         
         # Save to file
         save_config(current_config)
+        apply_runtime_plc_config(current_config)
         
         logger.info("âš™ï¸ Settings updated - restart required to apply changes")
         return jsonify({
@@ -1830,49 +1581,35 @@ def handle_disconnect():
 
 @socketio.on('start_polling')
 def handle_start_polling():
-    """Start real-time polling"""
-    global poll_running
-    if not poll_running:
-        start_polling_thread()
-    emit('polling_status', {'running': True})
+    """Start real-time polling - DISABLED (new worker always runs)"""
+    # NEW: Worker is always running, no manual start needed
+    emit('polling_status', {'running': True, 'worker': 'always_running'})
 
 @socketio.on('stop_polling')
 def handle_stop_polling():
-    """Stop real-time polling"""
-    global poll_running
-    poll_running = False
-    emit('polling_status', {'running': False})
+    """Stop real-time polling - DISABLED (new worker always runs)"""
+    # NEW: Worker always runs, no manual stop
+    emit('polling_status', {'running': True, 'worker': 'cannot_stop'})
 
 # ==================================================
 # Background Polling Thread
 # ==================================================
 
-def start_polling_thread():
-    """Start background polling thread"""
-    global poll_thread, poll_running
 
-    if poll_thread and poll_thread.is_alive():
-        return
+def process_vision_cycle_new(cache_snapshot: dict, worker):
+    """NEW vision processing callback for plc_worker
 
-    poll_running = True
-    poll_thread = threading.Thread(target=poll_loop, daemon=True)
-    poll_thread.start()
-    logger.info("Polling thread started")
+    Called by PLC worker when handshake triggers (start bit rises).
+    Uses the new architecture with queue_vision_result().
 
-def process_vision_handshake():
-    """Process vision detection when Start command is received from PLC
-
-    This function:
-    1. Uses MAJORITY VOTING to detect cube color (takes 10 snapshots)
-    2. Saves images
-    3. Checks for defects
-    4. Writes results to PLC including color code
-    5. Sets Completed flag when done
+    Args:
+        cache_snapshot: Snapshot of PLC cache at trigger time
+        worker: PLCWorker instance
     """
     global vision_handshake_processing, latest_annotated_image, latest_annotated_mime, latest_plc_cycle_result
 
     if camera_service is None:
-        logger.warning("Camera service not available for handshake processing")
+        logger.warning("Camera service not available for vision processing")
         return False
 
     try:
@@ -1880,18 +1617,14 @@ def process_vision_handshake():
         latest_plc_cycle_result.update({
             'timestamp': time.time(),
             'running': True,
-            'message': 'PLC start bit is TRUE - running 1-sample analysis.'
+            'message': 'PLC start bit is TRUE - running 1-sample analysis (NEW WORKER).'
         })
-        logger.info("ðŸ”„ Vision handshake: Starting processing (Start command received)")
-        logger.info("ðŸ”„ Vision handshake: Step 1 - Setting Busy flag")
+        logger.info("🔄 Vision cycle (NEW): Starting processing")
 
-        # Set busy flag
-        write_vision_to_plc(0, 0, True, False, busy=True, completed=False, color_code=0)
-        logger.info("ðŸ”„ Vision handshake: Step 2 - Busy flag set, starting color detection")
-
-        # Use fast single-sample detection, using persisted UI params.
+        # Get persisted params
         persisted_params = get_saved_object_params()
-        logger.info("ðŸ”„ Vision handshake: Step 3 - Running fast detection (1 frame)")
+
+        # Run fast single-sample detection
         voting_result = camera_service.detect_cube_color_with_voting(
             num_samples=1,
             delay_ms=0,
@@ -1899,48 +1632,45 @@ def process_vision_handshake():
             max_area=persisted_params['max_area']
         )
 
-        # Publish the PLC-triggered annotated frame for frontend viewers
+        # Update annotated image for frontend
         if voting_result.get('annotated_image'):
             latest_annotated_image = voting_result['annotated_image']
             fmt = str(voting_result.get('annotated_image_format', 'jpeg')).lower()
             latest_annotated_mime = 'image/png' if fmt == 'png' else 'image/jpeg'
 
+        # Extract results
         detected_color = voting_result.get('color')
         color_code = voting_result.get('color_code', 0)
         confidence = voting_result.get('confidence', 0)
         vote_counts = voting_result.get('vote_counts', {})
 
-        logger.info(f"ðŸ”„ Vision handshake: Step 4 - Voting complete")
-        logger.info(f"   Detected color: {detected_color}")
-        logger.info(f"   Color code: {color_code} (1=yellow, 2=white, 3=metal)")
-        logger.info(f"   Confidence: {confidence}%")
-        logger.info(f"   Vote counts: {vote_counts}")
-        
-        # Determine if we successfully detected a cube
-        if detected_color is not None:
-            object_count = 1
-            logger.info(f"âœ… Successfully detected {detected_color} cube with {confidence}% confidence")
-        else:
-            object_count = 0
-            logger.info("âš ï¸ No cube detected in majority voting")
-
-        # For now, we're not doing defect detection - focus on color only
-        defect_count = 0
-        defect_detected = False
+        object_detected = (detected_color is not None)
+        defect_detected = False  # Not doing defect detection for now
         object_ok = True
 
-        # Write final results to PLC (busy=False, completed=True, with color_code)
-        write_vision_to_plc(
-            object_count=object_count,
-            defect_count=defect_count,
+        # Map color to cube type flags
+        yellow = (detected_color == 'yellow')
+        white = (detected_color == 'white')
+        steel = (detected_color == 'steel')
+        aluminum = (detected_color == 'aluminum')
+
+        logger.info(f"🔍 Detection: {detected_color}, code={color_code}, conf={confidence}%")
+
+        # Queue results via NEW worker helper (handles all PLC writes)
+        worker.queue_vision_result(
+            object_detected=object_detected,
             object_ok=object_ok,
             defect_detected=defect_detected,
-            busy=False,
-            completed=True,
-            color_code=color_code
+            yellow=yellow,
+            white=white,
+            steel=steel,
+            aluminum=aluminum,
+            object_number=None,  # Auto-increment
+            defect_number=None   # Auto-increment
         )
 
-        logger.info(f"âœ… Vision handshake: Completed - {object_count} objects, color_code={color_code} ({detected_color}), confidence={confidence}%")
+        logger.info(f"✅ Vision cycle (NEW): Completed - {detected_color or 'none'} ({confidence}%)")
+
         latest_plc_cycle_result.update({
             'timestamp': time.time(),
             'running': False,
@@ -1948,15 +1678,14 @@ def process_vision_handshake():
             'detected_color': detected_color,
             'color_code': color_code,
             'confidence': float(confidence),
-            'object_count': object_count,
+            'object_count': 1 if object_detected else 0,
             'vote_counts': vote_counts,
-            'message': f"Completed: {detected_color or 'none'} ({confidence}%)"
+            'message': f"Completed (NEW): {detected_color or 'none'} ({confidence}%)"
         })
         return True
-        
+
     except Exception as e:
-        logger.error(f"Error in vision handshake processing: {e}", exc_info=True)
-        write_vision_to_plc(0, 0, True, False, busy=False, completed=True, color_code=0)
+        logger.error(f"Error in vision cycle (NEW): {e}", exc_info=True)
         latest_plc_cycle_result.update({
             'timestamp': time.time(),
             'running': False,
@@ -1966,228 +1695,15 @@ def process_vision_handshake():
             'confidence': 0.0,
             'object_count': 0,
             'vote_counts': {},
-            'message': f'Cycle failed: {str(e)}'
+            'message': f'Cycle failed (NEW): {str(e)}'
         })
         return False
     finally:
         vision_handshake_processing = False
 
-def poll_loop():
-    """UNIFIED PLC POLLING LOOP - Single source of truth for all PLC data
-
-    Reads ALL PLC tags once per second and updates plc_cache
-    All API endpoints read from cache (zero lock contention)
-    """
-    global vision_handshake_last_start_state, vision_handshake_processing, vision_last_completed_command_state
-    global cube_color_latched_until, cube_color_pending_clear, plc_cache
-    global camera_connected_last_written_state, camera_connected_last_written_address
-
-    logger.info("ðŸ”„ Unified PLC polling loop started (1 second intervals)")
-
-    while True:
-        cycle_start = time.time()
-
-        try:
-            # Check PLC connection
-            if not plc_client or not hasattr(plc_client, 'client') or not plc_client.is_connected():
-                plc_cache['plc_connected'] = False
-                time.sleep(1.0)
-                continue
-
-            plc_cache['plc_connected'] = True
-
-            # ==================================================
-            # READ ALL PLC TAGS IN ONE BATCH (minimize lock time)
-            # ALL TAGS ARE IN DB123 - Single unified read
-            # ==================================================
-
-            try:
-                # Read ALL tags from DB123 in ONE operation (bytes 0-46 = 47 bytes)
-                # This includes: System, Robot, Conveyors, Gantry, Camera, Objects
-                all_data = plc_client.client.db_read(123, 0, 47)
-
-                # Camera tags: start bit address is configurable (default DB123.DBX26.0)
-                start_byte, start_bit = get_start_bit_config()
-                plc_cache['db123']['start'] = snap7.util.get_bool(all_data, start_byte, start_bit)
-                # Camera status bits now come from byte 26 (Camera_UDT start)
-                plc_cache['db123']['busy'] = snap7.util.get_bool(all_data, 26, 2)          # DB123.DBX26.2
-                plc_cache['db123']['complete'] = snap7.util.get_bool(all_data, 26, 3)      # DB123.DBX26.3
-                plc_cache['db123']['fault'] = snap7.util.get_bool(all_data, 26, 6)         # DB123.DBX26.6 (Defect_Detected)
-                plc_cache['db123']['x_pos'] = 0.0  # Not in your layout
-                plc_cache['db123']['y_pos'] = 0.0  # Not in your layout
-                plc_cache['db123']['z_pos'] = 0.0  # Not in your layout
-                # Object counter now read from DB123.DBW28 (Object_Number)
-                plc_cache['db123']['counter'] = snap7.util.get_int(all_data, 28)           # DB123.DBW28 (Object_Number)
-
-                # Robot/Gantry tags (byte 4-34) from DB123 - DB4 removed, now using db123 keys
-                plc_cache['db123']['robot_connected'] = snap7.util.get_bool(all_data, 4, 0)        # DB123.DBX4.0
-                plc_cache['db123']['robot_busy'] = snap7.util.get_bool(all_data, 4, 1)             # DB123.DBX4.1
-                plc_cache['db123']['robot_cycle_complete'] = snap7.util.get_bool(all_data, 4, 2)   # DB123.DBX4.2
-                plc_cache['db123']['robot_target_x'] = snap7.util.get_real(all_data, 6)            # DB123.DBD6
-                plc_cache['db123']['robot_target_y'] = snap7.util.get_real(all_data, 10)           # DB123.DBD10
-                plc_cache['db123']['robot_target_z'] = snap7.util.get_real(all_data, 14)           # DB123.DBD14
-                plc_cache['db123']['robot_current_x'] = snap7.util.get_real(all_data, 18)          # DB123.DBD18
-                plc_cache['db123']['robot_current_y'] = snap7.util.get_real(all_data, 22)          # DB123.DBD22
-                plc_cache['db123']['robot_current_z'] = snap7.util.get_real(all_data, 26)          # DB123.DBD26
-                plc_cache['db123']['robot_status_code'] = snap7.util.get_int(all_data, 30)         # DB123.DBW30
-                # DB123 byte 32 is reserved for cube color bits (DBX32.0-32.3), so avoid DBW32 here.
-                # Use DBW34 for compatibility status/error cache.
-                plc_cache['db123']['robot_error_code'] = snap7.util.get_int(all_data, 34)          # DB123.DBW34
-
-            except Exception as e:
-                logger.error(f"DB123 read error: {e}")
-
-            plc_cache['last_update'] = time.time()
-
-            # Keep PLC camera connected bit in sync with actual camera connection state.
-            connected_byte, connected_bit = get_connected_bit_config()
-            camera_connected = False
-            if camera_service is not None:
-                try:
-                    with camera_service.lock:
-                        camera_connected = camera_service.camera is not None and camera_service.camera.isOpened()
-                except Exception:
-                    camera_connected = False
-            connected_address = (123, connected_byte, connected_bit)
-            if (camera_connected_last_written_state is None
-                or camera_connected_last_written_state != camera_connected
-                or camera_connected_last_written_address != connected_address):
-                if queue_plc_bit_write(123, connected_byte, connected_bit, camera_connected):
-                    camera_connected_last_written_state = camera_connected
-                    camera_connected_last_written_address = connected_address
-                    logger.info(f"📡 Camera connected bit synced -> DB123.DBX{connected_byte}.{connected_bit}={camera_connected}")
-
-            # ==================================================
-            # EXECUTE QUEUED WRITES (after reads to avoid conflicts)
-            # ==================================================
-            with plc_write_lock:
-                writes_to_process = plc_write_queue.copy()
-                plc_write_queue.clear()
-
-            for write_op in writes_to_process:
-                try:
-                    op_type = write_op.get('type', 'bytes')
-                    if op_type == 'bit':
-                        bit = int(write_op.get('bit', -1))
-                        value = bool(write_op.get('value', False))
-                        if bit < 0 or bit > 7:
-                            logger.error(f"❌ Invalid queued bit write: DB{write_op['db']}.DBX{write_op['offset']}.{bit}")
-                            continue
-                        if is_tag_read_only(write_op['db'], write_op['offset'], bit):
-                            logger.error(f"❌ BLOCKED write to read-only bit: DB{write_op['db']}.DBX{write_op['offset']}.{bit}")
-                            continue
-                        current_data = plc_client.client.db_read(write_op['db'], write_op['offset'], 1)
-                        merged = bytearray(current_data)
-                        snap7.util.set_bool(merged, 0, bit, value)
-                        plc_client.client.db_write(write_op['db'], write_op['offset'], merged)
-                        logger.debug(f"✍️ Executed PLC bit write: DB{write_op['db']}.DBX{write_op['offset']}.{bit}={value}")
-                    else:
-                        # Final check: verify this write is not to a read-only tag
-                        is_allowed, reason = check_write_permission(write_op['db'], write_op['offset'], len(write_op['data']))
-                        if not is_allowed:
-                            logger.error(f"âŒ BLOCKED write to read-only tag: DB{write_op['db']}.{write_op['offset']} - {reason}")
-                            continue  # Skip this write
-
-                        write_data = write_op['data']
-
-                        # Special handling for DB123 camera status byte at offset 26:
-                        # preserve PLC-owned Start (bit 0) and Connected (bit 1) while
-                        # applying our status bits (Busy/Completed/Object_* flags).
-                        if (
-                            write_op['db'] == 123
-                            and write_op['offset'] == 26
-                            and isinstance(write_data, (bytes, bytearray))
-                            and len(write_data) == 1
-                        ):
-                            try:
-                                current = plc_client.client.db_read(123, 26, 1)
-                                merged = bytearray(current)
-                                # Copy bits 2-6 from the queued status byte
-                                for bit in (2, 3, 4, 5, 6):
-                                    value = snap7.util.get_bool(write_data, 0, bit)
-                                    snap7.util.set_bool(merged, 0, bit, value)
-                                write_data = merged
-                            except Exception as merge_err:
-                                logger.error(f"Error merging camera status byte at DB123.DBX26.x: {merge_err}")
-
-                        # Execute the write
-                        plc_client.client.db_write(write_op['db'], write_op['offset'], write_data)
-                        logger.debug(f"âœï¸ Executed PLC write: DB{write_op['db']}.{write_op['offset']}")
-                except Exception as e:
-                    logger.error(f"PLC write error DB{write_op['db']}.{write_op['offset']}: {e}")
-
-            # ==================================================
-            # VISION HANDSHAKING (using cached start bit)
-            # ==================================================
-            # CAMERA ALWAYS RUNNING MODE - PLC start bit disabled
-            # Uncomment below to re-enable PLC start bit control
-            # start_bit = plc_cache['db123']['start']
-            start_bit = True  # Force camera to always run
-            completed_command = bool(plc_cache['db123']['robot_cycle_complete'])
-
-            # When PLC sends Completed Command, clear all cube color bits (DB123.DBX32.0-32.3)
-            if completed_command and not vision_last_completed_command_state:
-                logger.info("✅ PLC completed command received - clearing cube color bits DB123.DBX32.0-32.3")
-                queue_cube_color_bits(0)
-            vision_last_completed_command_state = completed_command
-
-            # If a clear was requested while latch hold was active, clear once hold expires.
-            if cube_color_pending_clear and time.time() >= cube_color_latched_until:
-                logger.info("⏱️ Cube color bit hold elapsed - clearing DB123.DBX32.0-32.3")
-                queue_cube_color_bits(0, force_clear=True)
-
-            # Log state changes (DISABLED - camera always running)
-            # if start_bit != vision_handshake_last_start_state:
-            #     logger.info(f"ðŸ"„ Start bit changed: {vision_handshake_last_start_state} -> {start_bit}")
-            #     vision_handshake_last_start_state = start_bit
-            #
-            #     if not start_bit:
-            #         # Start is FALSE - reset (queue write instead of direct write)
-            #         logger.info("ðŸ"¸ Start bit FALSE - resetting vision")
-            #         # Queue the reset writes for next cycle
-            #         # Note: Start bit is now at DB123.DBX26.0 (read-only, PLC controlled)
-            #         reset_byte40 = bytearray(1)
-            #         snap7.util.set_bool(reset_byte40, 0, 0, False)      # Bit 0 unused in byte 40 now
-            #         snap7.util.set_bool(reset_byte40, 0, 1, False)      # Connected handled by configurable bit writer
-            #         snap7.util.set_bool(reset_byte40, 0, 2, False)     # Busy = False
-            #         snap7.util.set_bool(reset_byte40, 0, 3, False)     # Complete = False
-            #         snap7.util.set_bool(reset_byte40, 0, 4, False)     # Object_Detected = False
-            #         snap7.util.set_bool(reset_byte40, 0, 5, True)      # Object_OK = True (default)
-            #         snap7.util.set_bool(reset_byte40, 0, 6, False)      # Defect_Detected = False
-            #
-            #         # Queue separate writes for byte 40, 42, and 44
-            #         queue_plc_write(123, 40, reset_byte40)
-            #
-            #         # Reset object_number to 0
-            #         object_number_reset = bytearray(2)
-            #         snap7.util.set_int(object_number_reset, 0, 0)
-            #         queue_plc_write(123, 42, object_number_reset)
-            #
-            #         # Reset defect_number to 0
-            #         defect_number_reset = bytearray(2)
-            #         snap7.util.set_int(defect_number_reset, 0, 0)
-            #         queue_plc_write(123, 44, defect_number_reset)
-
-
-            # ALWAYS RUNNING MODE:
-            # Camera continuously runs 1-sample analysis cycles without PLC start bit
-            # Uncomment the conditional below to re-enable PLC start bit control:
-            # if start_bit and not vision_handshake_processing:
-            if not vision_handshake_processing:
-                # logger.info("📸 Start bit TRUE - triggering vision processing cycle")
-                threading.Thread(target=process_vision_handshake, daemon=True).start()
-
-        except Exception as e:
-            logger.error(f"Polling error: {e}")
-
-        # Sleep for exactly 1 second (or adjust to maintain 1 Hz polling)
-        cycle_time = time.time() - cycle_start
-        sleep_time = max(1.0 - cycle_time, 0.1)  # At least 100ms, target 1 second
-        time.sleep(sleep_time)
-
-    logger.info("Polling thread stopped")
-
-# NOTE: start_command_poll_loop() REMOVED - replaced by unified poll_loop() above
+# OLD POLL_LOOP - DISABLED (new plc_worker handles all polling)
+# This entire function is commented out because the new worker architecture
+# handles all polling internally. Keeping it here temporarily for reference.
 
 # ==================================================
 # Camera & Vision System Endpoints
@@ -2196,8 +1712,7 @@ def poll_loop():
 def write_plc_fault_bit(defects_found: bool):
     """Write vision fault status to PLC memory bit
     
-    This is a wrapper function that uses the unified PLC client methods.
-    All S7 communication is handled in plc_client.py.
+    This is a wrapper function that delegates to the worker-backed PLC wrapper.
     """
     if plc_client is None:
         return {'written': False, 'reason': 'plc_not_available'}
@@ -2245,7 +1760,7 @@ def _build_annotated_placeholder():
     placeholder[:] = (20, 30, 50)  # Dark blue-grey background
 
     # Add status text (PLC-driven mode friendly)
-    plc_start = bool(plc_cache.get('db123', {}).get('start', False))
+    plc_start = bool(get_legacy_plc_cache().get('db123', {}).get('start', False))
     if plc_start:
         text_lines = [
             "WAITING FOR FIRST PLC CYCLE",
@@ -2307,7 +1822,7 @@ def _get_latest_annotated_result_image_with_key():
     import base64
 
     if latest_annotated_image is None:
-        plc_start = bool(plc_cache.get('db123', {}).get('start', False))
+        plc_start = bool(get_legacy_plc_cache().get('db123', {}).get('start', False))
         image_data, mime_type = _build_annotated_placeholder()
         return image_data, mime_type, f"placeholder:{1 if plc_start else 0}"
 
@@ -3031,9 +2546,6 @@ def vision_detect():
 
         detected_objects = []
 
-        # Set busy flag at start of detection
-        write_vision_to_plc(0, 0, True, False, busy=True)
-        
         # Run object detection if enabled
         if object_detection_enabled:
             # If using YOLO, call vision service instead of direct YOLO
@@ -3107,9 +2619,12 @@ def vision_detect():
             except Exception as e:
                 logger.debug(f"Error reading defect data: {e}")
 
-        # Write vision results to PLC DB123 (busy=False since detection is complete)
         object_count = results.get('object_count', 0)
-        write_vision_to_plc(object_count, defect_count, object_ok, defect_detected, busy=False)
+        queue_vision_result(
+            object_detected=object_count > 0,
+            object_ok=object_ok,
+            defect_detected=defect_detected
+        )
 
         return jsonify(results)
 
@@ -3122,8 +2637,15 @@ def vision_process_manual():
     """Manually trigger vision processing"""
     logger.info("ðŸ“¸ Manual vision processing triggered via API")
 
-    # Run the handshake process in a background thread to avoid blocking the API response
-    threading.Thread(target=process_vision_handshake, daemon=True).start()
+    if plc_client is None or not hasattr(plc_client, 'worker') or plc_client.worker is None:
+        return jsonify({'success': False, 'error': 'PLC worker not initialized'}), 503
+
+    cache_snapshot = get_plc_cache()
+    threading.Thread(
+        target=process_vision_cycle_new,
+        args=(cache_snapshot, plc_client.worker),
+        daemon=True
+    ).start()
 
     return jsonify({
         'success': True,
@@ -3217,8 +2739,10 @@ def get_latest_vision_cycle():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/plc/db123/read', methods=['GET'])
-def read_db123_tags():
-    """Read current vision tags from PLC DB123 (ultra-simple version)"""
+@app.route('/api/plc/db124/read', methods=['GET'])
+@app.route('/api/plc/camera/read', methods=['GET'])
+def read_camera_db_tags():
+    """Read current vision tags from the configured camera PLC DB."""
     # Always return immediately - no exceptions that could cause timeouts
     default_tags = {
         'start': False,
@@ -3240,7 +2764,7 @@ def read_db123_tags():
         return jsonify({
             'success': False,
             'error': 'PLC client not initialized',
-            'db_number': 123,
+            'db_number': 124,
             'tags': default_tags,
             'plc_connected': False
         }), 503
@@ -3248,8 +2772,8 @@ def read_db123_tags():
     try:
         # Get config
         config = load_config()
-        db123_config = config.get('plc', {}).get('db123', {})
-        db_number = db123_config.get('db_number', 123)
+        camera_db_config = get_camera_db_config(config)
+        db_number = camera_db_config.get('db_number', 124)
 
         # Try to read tags (returns immediately with cached values if lock busy)
         start_byte, start_bit = get_start_bit_config()
@@ -3270,36 +2794,38 @@ def read_db123_tags():
             'plc_connected': plc_client.is_connected()
         })
     except Exception as e:
-        logger.error(f"Error reading DB123 tags: {e}")
+        logger.error(f"Error reading camera DB tags: {e}")
         # Return default tags on error - never timeout
         return jsonify({
             'success': False,
             'error': str(e),
-            'db_number': 123,
+            'db_number': 124,
             'tags': default_tags,
             'plc_connected': False
         }), 500
 
 @app.route('/api/plc/db40/start', methods=['GET'])
-def read_db40_start_bit():
-    """Read vision start bit from PLC (address configurable in config).
+@app.route('/api/plc/camera/start', methods=['GET'])
+def read_camera_start_bit():
+    """Read vision start bit from the configured camera DB.
 
-    LOCK-FREE: Returns cached value from unified poll_loop()
+    LOCK-FREE: Returns cached value from plc_worker.
     Zero lock contention - instant response
     """
-    global plc_cache
-
     try:
+        legacy_cache = get_legacy_plc_cache()
+        config = load_config()
+        db_number = get_camera_db_number(config)
         start_byte, start_bit = get_start_bit_config()
         connected_byte, connected_bit = get_connected_bit_config()
-        address = f"DB123.DBX{start_byte}.{start_bit}"
-        cache_age = time.time() - plc_cache['last_update'] if plc_cache['last_update'] > 0 else 999
+        address = f"DB{db_number}.DBX{start_byte}.{start_bit}"
+        cache_age = time.time() - legacy_cache['last_update'] if legacy_cache['last_update'] > 0 else 999
 
         return jsonify({
             'success': True,
-            'start': bool(plc_cache['db123']['start']),
-            'plc_connected': plc_cache['plc_connected'],
-            'db_number': 123,
+            'start': bool(legacy_cache['db123']['start']),
+            'plc_connected': legacy_cache['plc_connected'],
+            'db_number': db_number,
             'address': address,
             'start_byte': start_byte,
             'start_bit': start_bit,
@@ -3650,18 +3176,17 @@ def get_counter_defect_results():
 @app.route('/api/smart-factory', methods=['GET'])
 def get_smart_factory_data():
     """Get real-time smart factory dashboard data from PLC cache"""
-    global plc_cache
-    
     try:
+        legacy_cache = get_legacy_plc_cache()
         # Get real data from PLC cache
-        production_counter = plc_cache.get('db123', {}).get('counter', 0)
-        conveyor_busy = plc_cache.get('db123', {}).get('busy', False)
-        conveyor_running = conveyor_busy or plc_cache.get('db123', {}).get('start', False)
-        gantry_connected = plc_cache.get('db123', {}).get('robot_connected', False)
-        gantry_busy = plc_cache.get('db123', {}).get('robot_busy', False)
+        production_counter = legacy_cache.get('db123', {}).get('counter', 0)
+        conveyor_busy = legacy_cache.get('db123', {}).get('busy', False)
+        conveyor_running = conveyor_busy or legacy_cache.get('db123', {}).get('start', False)
+        gantry_connected = legacy_cache.get('db123', {}).get('robot_connected', False)
+        gantry_busy = legacy_cache.get('db123', {}).get('robot_busy', False)
         gantry_running = gantry_connected and gantry_busy
-        fault_detected = plc_cache.get('db123', {}).get('fault', False)
-        plc_connected = plc_cache.get('plc_connected', False)
+        fault_detected = legacy_cache.get('db123', {}).get('fault', False)
+        plc_connected = legacy_cache.get('plc_connected', False)
         
         # Calculate quality rate (based on defects vs total)
         # If we have defect data, use it; otherwise estimate from fault status
@@ -3687,7 +3212,7 @@ def get_smart_factory_data():
         uptime_percent = 98.5 if plc_connected else 0.0
         
         # Calculate system uptime duration (simplified)
-        last_update = plc_cache.get('last_update', 0)
+        last_update = legacy_cache.get('last_update', 0)
         if last_update > 0:
             uptime_seconds = time.time() - last_update
             uptime_hours = int(uptime_seconds // 3600)
@@ -4386,10 +3911,6 @@ if __name__ == '__main__':
         logger.error(f"âŒ Dobot connection failed: {dobot_client.last_error}")
         logger.error("ðŸ’¡ Check the debug logs above for detailed troubleshooting steps")
 
-    # Start lightweight polling for start command (camera control only)
-    # This is separate from the main polling loop to avoid lock contention
-    # Start unified PLC polling loop (auto-start on app launch)
-    start_polling_thread()
 
     # Start server
     port = int(os.getenv('PORT', 8080))

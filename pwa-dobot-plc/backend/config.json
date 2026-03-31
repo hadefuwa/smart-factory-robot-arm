@@ -36,49 +36,75 @@
     "ip": "192.168.7.2",
     "rack": 0,
     "slot": 1,
-    "db_number": 4,
-    "poll_interval": 2,
-    "db40": {
-      "enabled": false,
-      "comment": "Camera_UDT is actually in DB123 starting at byte 40, not in a separate DB40"
-    },
+    "cycle_time_ms": 100,
+    "comment": "DB123 holds main line state. DB124 holds camera and vision tags.",
     "db123": {
       "enabled": true,
       "db_number": 123,
+      "total_size": 80,
+      "comment": "Main process DB: HMI, robot, conveyors, objects, gantry, system, pallet, overrides",
+      "tags": {}
+    },
+    "db124": {
+      "enabled": true,
+      "db_number": 124,
+      "total_size": 8,
+      "comment": "Camera DB: handshake, result bits, counters, and cube colors",
       "tags": {
         "start": {
-          "byte": 26,
-          "bit": 0
+          "byte": 0,
+          "bit": 0,
+          "comment": "READ-ONLY (PLC-controlled)"
         },
         "connected": {
-          "byte": 26,
+          "byte": 0,
           "bit": 1
         },
         "busy": {
-          "byte": 40,
+          "byte": 0,
           "bit": 2
         },
         "completed": {
-          "byte": 40,
+          "byte": 0,
           "bit": 3
         },
         "object_detected": {
-          "byte": 40,
+          "byte": 0,
           "bit": 4
         },
         "object_ok": {
-          "byte": 40,
+          "byte": 0,
           "bit": 5
         },
         "defect_detected": {
-          "byte": 40,
+          "byte": 0,
           "bit": 6
         },
         "object_number": {
-          "byte": 42
+          "byte": 2
         },
         "defect_number": {
-          "byte": 44
+          "byte": 4
+        },
+        "yellow_cube": {
+          "byte": 6,
+          "bit": 0
+        },
+        "white_cube": {
+          "byte": 6,
+          "bit": 1
+        },
+        "steel_cube": {
+          "byte": 6,
+          "bit": 2
+        },
+        "aluminum_cube": {
+          "byte": 6,
+          "bit": 3
+        },
+        "counter_exceeded": {
+          "byte": 6,
+          "bit": 4
         }
       }
     }
