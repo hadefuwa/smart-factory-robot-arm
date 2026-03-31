@@ -553,7 +553,7 @@ class PLCWorker:
                         self.cache['last_update'] = time.time()
                         self.cache['cycle_count'] += 1
                 except Exception as e:
-                    logger.error(f"PLC DB read error: {e}")
+                    logger.error(f"PLC DB read error: {e}", exc_info=True)
                     self.stats['read_errors'] += 1
                     continue
 
@@ -625,49 +625,49 @@ class PLCWorker:
             self.cache['conveyor2_start'] = get_bool(data, 24, 0)
             self.cache['conveyor2_stop'] = get_bool(data, 24, 1)
 
-            # Objects & Counters (byte 34-47)
-            self.cache['material_type'] = get_int(data, 34)
-            self.cache['quarantined_count'] = get_int(data, 36)
-            self.cache['defect_count'] = get_int(data, 38)
-            self.cache['aluminum_count'] = get_int(data, 40)
-            self.cache['steel_count'] = get_int(data, 42)
-            self.cache['yellow_count'] = get_int(data, 44)
-            self.cache['white_count'] = get_int(data, 46)
+            # Objects & Counters (byte 26-39)
+            self.cache['material_type'] = get_int(data, 26)
+            self.cache['quarantined_count'] = get_int(data, 28)
+            self.cache['defect_count'] = get_int(data, 30)
+            self.cache['aluminum_count'] = get_int(data, 32)
+            self.cache['steel_count'] = get_int(data, 34)
+            self.cache['yellow_count'] = get_int(data, 36)
+            self.cache['white_count'] = get_int(data, 38)
 
-            # Gantry (byte 48-71)
-            self.cache['gantry_home'] = get_bool(data, 48, 0)
-            self.cache['gantry_busy'] = get_bool(data, 48, 1)
-            self.cache['gantry_move_done'] = get_bool(data, 48, 2)
-            self.cache['gantry_pick_up'] = get_bool(data, 48, 3)
-            self.cache['gantry_place_down'] = get_bool(data, 48, 4)
-            self.cache['gantry_home_command'] = get_bool(data, 48, 5)
-            self.cache['gantry_power_ok'] = get_bool(data, 48, 6)
-            self.cache['gantry_current_position'] = get_real(data, 50)
-            self.cache['gantry_target_position'] = get_real(data, 54)
-            self.cache['gantry_velocity'] = get_real(data, 58)
-            self.cache['gantry_position1'] = get_real(data, 62)
-            self.cache['gantry_position2'] = get_real(data, 66)
-            self.cache['gantry_home_error'] = get_bool(data, 70, 0)
-            self.cache['gantry_home_error_fix'] = get_bool(data, 70, 1)
+            # Gantry (byte 40-63)
+            self.cache['gantry_home'] = get_bool(data, 40, 0)
+            self.cache['gantry_busy'] = get_bool(data, 40, 1)
+            self.cache['gantry_move_done'] = get_bool(data, 40, 2)
+            self.cache['gantry_pick_up'] = get_bool(data, 40, 3)
+            self.cache['gantry_place_down'] = get_bool(data, 40, 4)
+            self.cache['gantry_home_command'] = get_bool(data, 40, 5)
+            self.cache['gantry_power_ok'] = get_bool(data, 40, 6)
+            self.cache['gantry_current_position'] = get_real(data, 42)
+            self.cache['gantry_target_position'] = get_real(data, 46)
+            self.cache['gantry_velocity'] = get_real(data, 50)
+            self.cache['gantry_position1'] = get_real(data, 54)
+            self.cache['gantry_position2'] = get_real(data, 58)
+            self.cache['gantry_home_error'] = get_bool(data, 62, 0)
+            self.cache['gantry_home_error_fix'] = get_bool(data, 62, 1)
 
-            # System (byte 72-75)
-            self.cache['system_safety_ok'] = get_bool(data, 72, 0)
-            self.cache['system_no_faults'] = get_bool(data, 72, 1)
-            self.cache['system_active_fault'] = get_bool(data, 72, 2)
-            self.cache['system_startup_completed'] = get_bool(data, 72, 3)
-            self.cache['system_state'] = get_int(data, 74)
+            # System (byte 64-67)
+            self.cache['system_safety_ok'] = get_bool(data, 64, 0)
+            self.cache['system_no_faults'] = get_bool(data, 64, 1)
+            self.cache['system_active_fault'] = get_bool(data, 64, 2)
+            self.cache['system_startup_completed'] = get_bool(data, 64, 3)
+            self.cache['system_state'] = get_int(data, 66)
 
-            # Pallet (byte 76-85)
-            self.cache['pallet_row1'] = [get_bool(data, 76, i) for i in range(4)]
-            self.cache['pallet_row2'] = [get_bool(data, 78, i) for i in range(4)]
-            self.cache['pallet_row3'] = [get_bool(data, 80, i) for i in range(4)]
-            self.cache['pallet_row4'] = [get_bool(data, 82, i) for i in range(4)]
-            self.cache['pallet_full'] = get_bool(data, 84, 0)
+            # Pallet (byte 68-77)
+            self.cache['pallet_row1'] = [get_bool(data, 68, i) for i in range(4)]
+            self.cache['pallet_row2'] = [get_bool(data, 70, i) for i in range(4)]
+            self.cache['pallet_row3'] = [get_bool(data, 72, i) for i in range(4)]
+            self.cache['pallet_row4'] = [get_bool(data, 74, i) for i in range(4)]
+            self.cache['pallet_full'] = get_bool(data, 76, 0)
 
-            # HMI Overrides (byte 86-87)
-            self.cache['conveyor1_override'] = get_bool(data, 86, 0)
-            self.cache['conveyor2_override'] = get_bool(data, 86, 1)
-            self.cache['linear_override'] = get_bool(data, 86, 2)
+            # HMI Overrides (byte 78)
+            self.cache['conveyor1_override'] = get_bool(data, 78, 0)
+            self.cache['conveyor2_override'] = get_bool(data, 78, 1)
+            self.cache['linear_override'] = get_bool(data, 78, 2)
 
     def _decode_camera_db(self, data: bytearray):
         """Decode the camera PLC DB into cache (called by worker thread only)."""
