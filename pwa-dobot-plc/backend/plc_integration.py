@@ -4,7 +4,7 @@ import logging
 import time
 import snap7
 from snap7.util import set_bool, set_int
-from plc_worker import PLCWorker
+from plc_worker import PLCWorker, MAIN_DB_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -118,13 +118,15 @@ def queue_robot_position(x: int, y: int, z: int):
         logger.warning("PLC worker not initialized")
         return
 
-    # Robot current position is at bytes 10, 12, 14 (INT)
-    data = bytearray(6)
-    set_int(data, 0, int(x))
-    set_int(data, 2, int(y))
-    set_int(data, 4, int(z))
-
-    plc_worker.queue_write(plc_worker.main_db_number, 10, data, f"Robot position: ({x}, {y}, {z})")
+    for field_name, value in (
+        ('robot_current_x', x),
+        ('robot_current_y', y),
+        ('robot_current_z', z),
+    ):
+        offset = plc_worker.main_db_tags[field_name]['byte']
+        data = bytearray(2)
+        set_int(data, 0, int(value))
+        plc_worker.queue_write(plc_worker.main_db_number, offset, data, f"{field_name}={value}")
 
 
 def queue_robot_status(connected: bool = None, busy: bool = None):
@@ -150,11 +152,22 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         if busy is None:
             busy = cache.get('robot_busy', False)
 
-        set_bool(status_byte, 0, 0, connected)
-        set_bool(status_byte, 0, 1, busy)
-        # Bit 2 (cycle_complete) is READ-ONLY - don't touch
+        byte_writes = {}
+        for field_name, value in (
+            ('robot_connected', connected),
+            ('robot_busy', busy),
+        ):
+            tag = plc_worker.main_db_tags[field_name]
+            entry = byte_writes.setdefault(tag['byte'], bytearray(1))
+            set_bool(entry, 0, tag['bit'], value)
 
-        plc_worker.queue_write(plc_worker.main_db_number, 2, status_byte, f"Robot status: connected={connected}, busy={busy}")
+        cycle_tag = plc_worker.main_db_tags.get('robot_cycle_complete')
+        if cycle_tag:
+            entry = byte_writes.setdefault(cycle_tag['byte'], bytearray(1))
+            set_bool(entry, 0, cycle_tag['bit'], cache.get('robot_cycle_complete', False))
+
+        for byte_offset, byte_data in byte_writes.items():
+            plc_worker.queue_write(plc_worker.main_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
 
     except Exception as e:
         logger.error(f"Error queueing robot status: {e}")
@@ -382,14 +395,12 @@ class PLCClientCompatWrapper:
                 if bit_offset in bit_map:
                     return cache.get(bit_map[bit_offset], False)
         elif db == self.worker.main_db_number:
-            if byte_offset == 2:
-                bit_map = {
-                    0: 'robot_connected',
-                    1: 'robot_busy',
-                    2: 'robot_cycle_complete'
-                }
-                if bit_offset in bit_map:
-                    return cache.get(bit_map[bit_offset], False)
+            for tag_name, tag in self.worker.main_db_tags.items():
+                if tag.get('kind') == 'bool' and tag['byte'] == byte_offset and tag['bit'] == bit_offset:
+                    return cache.get(tag_name, False)
+                if tag.get('kind') == 'row4' and tag['byte'] == byte_offset and 0 <= bit_offset < 4:
+                    row = cache.get(tag_name, [False, False, False, False])
+                    return row[bit_offset] if bit_offset < len(row) else False
 
         return None
 
@@ -403,20 +414,9 @@ class PLCClientCompatWrapper:
         cache = self.worker.get_cache_snapshot()
 
         if db == self.worker.main_db_number:
-            int_map = {
-                4: 'robot_target_x',
-                6: 'robot_target_y',
-                8: 'robot_target_z',
-                10: 'robot_current_x',
-                12: 'robot_current_y',
-                14: 'robot_current_z',
-                16: 'robot_status_code',
-                18: 'robot_error_code',
-                20: 'cube_type',
-                34: 'material_type'
-            }
-            if offset in int_map:
-                return cache.get(int_map[offset], 0)
+            for tag_name, tag in self.worker.main_db_tags.items():
+                if tag.get('kind') == 'int' and tag['byte'] == offset:
+                    return cache.get(tag_name, 0)
         elif db == self.worker.camera_db_number:
             int_map = {
                 self.worker.camera_db_tags['object_number']['byte']: 'object_number',

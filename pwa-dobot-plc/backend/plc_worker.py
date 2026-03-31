@@ -23,6 +23,79 @@ from snap7.util import get_bool, get_int, get_real, set_bool, set_int, set_real
 
 logger = logging.getLogger(__name__)
 
+MAIN_DB_DEFAULTS = {
+    'hmi_start': {'byte': 0, 'bit': 0, 'kind': 'bool'},
+    'hmi_stop': {'byte': 0, 'bit': 1, 'kind': 'bool'},
+    'hmi_reset': {'byte': 0, 'bit': 2, 'kind': 'bool'},
+    'robot_connected': {'byte': 2, 'bit': 0, 'kind': 'bool'},
+    'robot_busy': {'byte': 2, 'bit': 1, 'kind': 'bool'},
+    'robot_cycle_complete': {'byte': 2, 'bit': 2, 'kind': 'bool'},
+    'robot_target_x': {'byte': 4, 'kind': 'int'},
+    'robot_target_y': {'byte': 6, 'kind': 'int'},
+    'robot_target_z': {'byte': 8, 'kind': 'int'},
+    'robot_current_x': {'byte': 10, 'kind': 'int'},
+    'robot_current_y': {'byte': 12, 'kind': 'int'},
+    'robot_current_z': {'byte': 14, 'kind': 'int'},
+    'robot_status_code': {'byte': 16, 'kind': 'int'},
+    'robot_error_code': {'byte': 18, 'kind': 'int'},
+    'cube_type': {'byte': 20, 'kind': 'int'},
+    'conveyor1_start': {'byte': 22, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_stop': {'byte': 22, 'bit': 1, 'kind': 'bool'},
+    'conveyor2_start': {'byte': 24, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_stop': {'byte': 24, 'bit': 1, 'kind': 'bool'},
+    'material_type': {'byte': 26, 'kind': 'int'},
+    'quarantined_count': {'byte': 28, 'kind': 'int'},
+    'defect_count': {'byte': 30, 'kind': 'int'},
+    'aluminum_count': {'byte': 32, 'kind': 'int'},
+    'steel_count': {'byte': 34, 'kind': 'int'},
+    'yellow_count': {'byte': 36, 'kind': 'int'},
+    'white_count': {'byte': 38, 'kind': 'int'},
+    'gantry_home': {'byte': 40, 'bit': 0, 'kind': 'bool'},
+    'gantry_busy': {'byte': 40, 'bit': 1, 'kind': 'bool'},
+    'gantry_move_done': {'byte': 40, 'bit': 2, 'kind': 'bool'},
+    'gantry_pick_up': {'byte': 40, 'bit': 3, 'kind': 'bool'},
+    'gantry_place_down': {'byte': 40, 'bit': 4, 'kind': 'bool'},
+    'gantry_home_command': {'byte': 40, 'bit': 5, 'kind': 'bool'},
+    'gantry_power_ok': {'byte': 40, 'bit': 6, 'kind': 'bool'},
+    'gantry_current_position': {'byte': 42, 'kind': 'real'},
+    'gantry_target_position': {'byte': 46, 'kind': 'real'},
+    'gantry_velocity': {'byte': 50, 'kind': 'real'},
+    'gantry_position1': {'byte': 54, 'kind': 'real'},
+    'gantry_position2': {'byte': 58, 'kind': 'real'},
+    'gantry_home_error': {'byte': 62, 'bit': 0, 'kind': 'bool'},
+    'gantry_home_error_fix': {'byte': 62, 'bit': 1, 'kind': 'bool'},
+    'system_safety_ok': {'byte': 64, 'bit': 0, 'kind': 'bool'},
+    'system_no_faults': {'byte': 64, 'bit': 1, 'kind': 'bool'},
+    'system_active_fault': {'byte': 64, 'bit': 2, 'kind': 'bool'},
+    'system_startup_completed': {'byte': 64, 'bit': 3, 'kind': 'bool'},
+    'system_state': {'byte': 66, 'kind': 'int'},
+    'pallet_row1': {'byte': 68, 'kind': 'row4'},
+    'pallet_row2': {'byte': 70, 'kind': 'row4'},
+    'pallet_row3': {'byte': 72, 'kind': 'row4'},
+    'pallet_row4': {'byte': 74, 'kind': 'row4'},
+    'pallet_full': {'byte': 76, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_override': {'byte': 78, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_override': {'byte': 78, 'bit': 1, 'kind': 'bool'},
+    'linear_override': {'byte': 78, 'bit': 2, 'kind': 'bool'},
+}
+
+CAMERA_DB_DEFAULTS = {
+    'start': {'byte': 0, 'bit': 0, 'kind': 'bool'},
+    'connected': {'byte': 0, 'bit': 1, 'kind': 'bool'},
+    'busy': {'byte': 0, 'bit': 2, 'kind': 'bool'},
+    'completed': {'byte': 0, 'bit': 3, 'kind': 'bool'},
+    'object_detected': {'byte': 0, 'bit': 4, 'kind': 'bool'},
+    'object_ok': {'byte': 0, 'bit': 5, 'kind': 'bool'},
+    'defect_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
+    'object_number': {'byte': 2, 'kind': 'int'},
+    'defect_number': {'byte': 4, 'kind': 'int'},
+    'yellow_cube': {'byte': 6, 'bit': 0, 'kind': 'bool'},
+    'white_cube': {'byte': 6, 'bit': 1, 'kind': 'bool'},
+    'steel_cube': {'byte': 6, 'bit': 2, 'kind': 'bool'},
+    'aluminum_cube': {'byte': 6, 'bit': 3, 'kind': 'bool'},
+    'counter_exceeded': {'byte': 6, 'bit': 4, 'kind': 'bool'},
+}
+
 
 # ============================================================================
 # Vision Handshake State Machine
@@ -105,6 +178,7 @@ class PLCWorker:
         self.cycle_time_sec = cycle_time_ms / 1000.0
         self.main_db_number = 123
         self.main_db_total_size = 80
+        self.main_db_tags = {}
         self.camera_db_number = 124
         self.camera_db_total_size = 8
         self.camera_db_tags = {}
@@ -150,9 +224,10 @@ class PLCWorker:
         camera_db_config = camera_db_config or {}
         self.main_db_number = int(main_db_config.get('db_number', 123))
         self.main_db_total_size = max(80, int(main_db_config.get('total_size', 80)))
+        self.main_db_tags = self._build_tag_config(main_db_config.get('tags', {}), MAIN_DB_DEFAULTS)
         self.camera_db_number = int(camera_db_config.get('db_number', 124))
         self.camera_db_total_size = max(8, int(camera_db_config.get('total_size', 8)))
-        self.camera_db_tags = self._build_camera_tag_config(camera_db_config.get('tags', {}))
+        self.camera_db_tags = self._build_tag_config(camera_db_config.get('tags', {}), CAMERA_DB_DEFAULTS)
         logger.info(
             "Updated PLC mappings: main DB%s size=%s, camera DB%s size=%s",
             self.main_db_number,
@@ -168,32 +243,41 @@ class PLCWorker:
             db123_config
         )
 
-    def _build_camera_tag_config(self, tags: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
-        """Normalize configured camera DB tag offsets."""
-        defaults = {
-            'start': {'byte': 0, 'bit': 0},
-            'connected': {'byte': 0, 'bit': 1},
-            'busy': {'byte': 0, 'bit': 2},
-            'completed': {'byte': 0, 'bit': 3},
-            'object_detected': {'byte': 0, 'bit': 4},
-            'object_ok': {'byte': 0, 'bit': 5},
-            'defect_detected': {'byte': 0, 'bit': 6},
-            'object_number': {'byte': 2},
-            'defect_number': {'byte': 4},
-            'yellow_cube': {'byte': 6, 'bit': 0},
-            'white_cube': {'byte': 6, 'bit': 1},
-            'steel_cube': {'byte': 6, 'bit': 2},
-            'aluminum_cube': {'byte': 6, 'bit': 3},
-            'counter_exceeded': {'byte': 6, 'bit': 4},
-        }
+    def _build_tag_config(self, tags: Dict[str, Any], defaults: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
+        """Normalize configured DB tag offsets."""
         normalized = {}
         for tag_name, default in defaults.items():
             raw = tags.get(tag_name, {}) if isinstance(tags.get(tag_name, {}), dict) else {}
             entry = {'byte': int(raw.get('byte', default['byte']))}
             if 'bit' in default:
                 entry['bit'] = int(raw.get('bit', default['bit']))
+            entry['kind'] = default.get('kind')
             normalized[tag_name] = entry
         return normalized
+
+    def _main_bit(self, data: bytearray, tag_name: str, fallback: bool = False) -> bool:
+        tag = self.main_db_tags.get(tag_name)
+        if not tag or 'bit' not in tag:
+            return fallback
+        return get_bool(data, tag['byte'], tag['bit'])
+
+    def _main_int(self, data: bytearray, tag_name: str, fallback: int = 0) -> int:
+        tag = self.main_db_tags.get(tag_name)
+        if not tag:
+            return fallback
+        return get_int(data, tag['byte'])
+
+    def _main_real(self, data: bytearray, tag_name: str, fallback: float = 0.0) -> float:
+        tag = self.main_db_tags.get(tag_name)
+        if not tag:
+            return fallback
+        return get_real(data, tag['byte'])
+
+    def _main_row(self, data: bytearray, tag_name: str) -> List[bool]:
+        tag = self.main_db_tags.get(tag_name)
+        if not tag:
+            return [False, False, False, False]
+        return [get_bool(data, tag['byte'], i) for i in range(4)]
 
     def _camera_bit(self, data: bytearray, tag_name: str, fallback: bool = False) -> bool:
         tag = self.camera_db_tags.get(tag_name)
@@ -600,74 +684,66 @@ class PLCWorker:
     def _decode_main_db(self, data: bytearray):
         """Decode the main PLC DB into cache (called by worker thread only)."""
         with self.cache_lock:
-            # HMI & Buttons (byte 0-1)
-            self.cache['hmi_start'] = get_bool(data, 0, 0)
-            self.cache['hmi_stop'] = get_bool(data, 0, 1)
-            self.cache['hmi_reset'] = get_bool(data, 0, 2)
+            self.cache['hmi_start'] = self._main_bit(data, 'hmi_start')
+            self.cache['hmi_stop'] = self._main_bit(data, 'hmi_stop')
+            self.cache['hmi_reset'] = self._main_bit(data, 'hmi_reset')
 
-            # Robot (byte 2-21)
-            self.cache['robot_connected'] = get_bool(data, 2, 0)
-            self.cache['robot_busy'] = get_bool(data, 2, 1)
-            self.cache['robot_cycle_complete'] = get_bool(data, 2, 2)
-            self.cache['robot_target_x'] = get_int(data, 4)
-            self.cache['robot_target_y'] = get_int(data, 6)
-            self.cache['robot_target_z'] = get_int(data, 8)
-            self.cache['robot_current_x'] = get_int(data, 10)
-            self.cache['robot_current_y'] = get_int(data, 12)
-            self.cache['robot_current_z'] = get_int(data, 14)
-            self.cache['robot_status_code'] = get_int(data, 16)
-            self.cache['robot_error_code'] = get_int(data, 18)
-            self.cache['cube_type'] = get_int(data, 20)
+            self.cache['robot_connected'] = self._main_bit(data, 'robot_connected')
+            self.cache['robot_busy'] = self._main_bit(data, 'robot_busy')
+            self.cache['robot_cycle_complete'] = self._main_bit(data, 'robot_cycle_complete')
+            self.cache['robot_target_x'] = self._main_int(data, 'robot_target_x')
+            self.cache['robot_target_y'] = self._main_int(data, 'robot_target_y')
+            self.cache['robot_target_z'] = self._main_int(data, 'robot_target_z')
+            self.cache['robot_current_x'] = self._main_int(data, 'robot_current_x')
+            self.cache['robot_current_y'] = self._main_int(data, 'robot_current_y')
+            self.cache['robot_current_z'] = self._main_int(data, 'robot_current_z')
+            self.cache['robot_status_code'] = self._main_int(data, 'robot_status_code')
+            self.cache['robot_error_code'] = self._main_int(data, 'robot_error_code')
+            self.cache['cube_type'] = self._main_int(data, 'cube_type')
 
-            # Conveyors (byte 22-25)
-            self.cache['conveyor1_start'] = get_bool(data, 22, 0)
-            self.cache['conveyor1_stop'] = get_bool(data, 22, 1)
-            self.cache['conveyor2_start'] = get_bool(data, 24, 0)
-            self.cache['conveyor2_stop'] = get_bool(data, 24, 1)
+            self.cache['conveyor1_start'] = self._main_bit(data, 'conveyor1_start')
+            self.cache['conveyor1_stop'] = self._main_bit(data, 'conveyor1_stop')
+            self.cache['conveyor2_start'] = self._main_bit(data, 'conveyor2_start')
+            self.cache['conveyor2_stop'] = self._main_bit(data, 'conveyor2_stop')
 
-            # Objects & Counters (byte 26-39)
-            self.cache['material_type'] = get_int(data, 26)
-            self.cache['quarantined_count'] = get_int(data, 28)
-            self.cache['defect_count'] = get_int(data, 30)
-            self.cache['aluminum_count'] = get_int(data, 32)
-            self.cache['steel_count'] = get_int(data, 34)
-            self.cache['yellow_count'] = get_int(data, 36)
-            self.cache['white_count'] = get_int(data, 38)
+            self.cache['material_type'] = self._main_int(data, 'material_type')
+            self.cache['quarantined_count'] = self._main_int(data, 'quarantined_count')
+            self.cache['defect_count'] = self._main_int(data, 'defect_count')
+            self.cache['aluminum_count'] = self._main_int(data, 'aluminum_count')
+            self.cache['steel_count'] = self._main_int(data, 'steel_count')
+            self.cache['yellow_count'] = self._main_int(data, 'yellow_count')
+            self.cache['white_count'] = self._main_int(data, 'white_count')
 
-            # Gantry (byte 40-63)
-            self.cache['gantry_home'] = get_bool(data, 40, 0)
-            self.cache['gantry_busy'] = get_bool(data, 40, 1)
-            self.cache['gantry_move_done'] = get_bool(data, 40, 2)
-            self.cache['gantry_pick_up'] = get_bool(data, 40, 3)
-            self.cache['gantry_place_down'] = get_bool(data, 40, 4)
-            self.cache['gantry_home_command'] = get_bool(data, 40, 5)
-            self.cache['gantry_power_ok'] = get_bool(data, 40, 6)
-            self.cache['gantry_current_position'] = get_real(data, 42)
-            self.cache['gantry_target_position'] = get_real(data, 46)
-            self.cache['gantry_velocity'] = get_real(data, 50)
-            self.cache['gantry_position1'] = get_real(data, 54)
-            self.cache['gantry_position2'] = get_real(data, 58)
-            self.cache['gantry_home_error'] = get_bool(data, 62, 0)
-            self.cache['gantry_home_error_fix'] = get_bool(data, 62, 1)
+            self.cache['gantry_home'] = self._main_bit(data, 'gantry_home')
+            self.cache['gantry_busy'] = self._main_bit(data, 'gantry_busy')
+            self.cache['gantry_move_done'] = self._main_bit(data, 'gantry_move_done')
+            self.cache['gantry_pick_up'] = self._main_bit(data, 'gantry_pick_up')
+            self.cache['gantry_place_down'] = self._main_bit(data, 'gantry_place_down')
+            self.cache['gantry_home_command'] = self._main_bit(data, 'gantry_home_command')
+            self.cache['gantry_power_ok'] = self._main_bit(data, 'gantry_power_ok')
+            self.cache['gantry_current_position'] = self._main_real(data, 'gantry_current_position')
+            self.cache['gantry_target_position'] = self._main_real(data, 'gantry_target_position')
+            self.cache['gantry_velocity'] = self._main_real(data, 'gantry_velocity')
+            self.cache['gantry_position1'] = self._main_real(data, 'gantry_position1')
+            self.cache['gantry_position2'] = self._main_real(data, 'gantry_position2')
+            self.cache['gantry_home_error'] = self._main_bit(data, 'gantry_home_error')
+            self.cache['gantry_home_error_fix'] = self._main_bit(data, 'gantry_home_error_fix')
 
-            # System (byte 64-67)
-            self.cache['system_safety_ok'] = get_bool(data, 64, 0)
-            self.cache['system_no_faults'] = get_bool(data, 64, 1)
-            self.cache['system_active_fault'] = get_bool(data, 64, 2)
-            self.cache['system_startup_completed'] = get_bool(data, 64, 3)
-            self.cache['system_state'] = get_int(data, 66)
+            self.cache['system_safety_ok'] = self._main_bit(data, 'system_safety_ok')
+            self.cache['system_no_faults'] = self._main_bit(data, 'system_no_faults')
+            self.cache['system_active_fault'] = self._main_bit(data, 'system_active_fault')
+            self.cache['system_startup_completed'] = self._main_bit(data, 'system_startup_completed')
+            self.cache['system_state'] = self._main_int(data, 'system_state')
 
-            # Pallet (byte 68-77)
-            self.cache['pallet_row1'] = [get_bool(data, 68, i) for i in range(4)]
-            self.cache['pallet_row2'] = [get_bool(data, 70, i) for i in range(4)]
-            self.cache['pallet_row3'] = [get_bool(data, 72, i) for i in range(4)]
-            self.cache['pallet_row4'] = [get_bool(data, 74, i) for i in range(4)]
-            self.cache['pallet_full'] = get_bool(data, 76, 0)
+            self.cache['pallet_row1'] = self._main_row(data, 'pallet_row1')
+            self.cache['pallet_row2'] = self._main_row(data, 'pallet_row2')
+            self.cache['pallet_row3'] = self._main_row(data, 'pallet_row3')
+            self.cache['pallet_row4'] = self._main_row(data, 'pallet_row4')
+            self.cache['pallet_full'] = self._main_bit(data, 'pallet_full')
 
-            # HMI Overrides (byte 78)
-            self.cache['conveyor1_override'] = get_bool(data, 78, 0)
-            self.cache['conveyor2_override'] = get_bool(data, 78, 1)
-            self.cache['linear_override'] = get_bool(data, 78, 2)
+            self.cache['conveyor1_override'] = self._main_bit(data, 'conveyor1_override')
+            self.cache['conveyor2_override'] = self._main_bit(data, 'conveyor2_override')
+            self.cache['linear_override'] = self._main_bit(data, 'linear_override')
 
     def _decode_camera_db(self, data: bytearray):
         """Decode the camera PLC DB into cache (called by worker thread only)."""
