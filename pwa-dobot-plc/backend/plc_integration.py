@@ -4,7 +4,7 @@ import logging
 import time
 import snap7
 from snap7.util import set_bool, set_int
-from plc_worker import PLCWorker, MAIN_DB_DEFAULTS
+from plc_worker import PLCWorker
 
 logger = logging.getLogger(__name__)
 

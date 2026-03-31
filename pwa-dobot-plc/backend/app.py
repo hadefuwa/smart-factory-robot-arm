@@ -1112,6 +1112,23 @@ def dobot_status():
         'last_error': dobot_client.last_error
     })
 
+@app.route('/api/robot/status', methods=['GET'])
+def robot_status():
+    """Compatibility alias for dashboard clients expecting /api/robot/status."""
+    pose = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'r': 0.0}
+    if dobot_client.connected:
+        try:
+            pose = dobot_client.get_pose()
+        except Exception as e:
+            logger.debug(f"Robot pose read error: {e}")
+
+    return jsonify({
+        'connected': dobot_client.connected,
+        'status': 'READY' if dobot_client.connected else 'OFFLINE',
+        'position': pose,
+        'last_error': dobot_client.last_error
+    })
+
 @app.route('/api/dobot/debug', methods=['GET'])
 def dobot_debug():
     """Get detailed Dobot debug information"""
@@ -2012,6 +2029,48 @@ def camera_status():
         return jsonify({
             'initialized': True,
             'connected': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/vision/status', methods=['GET'])
+def vision_status():
+    """Compatibility alias for dashboard clients expecting /api/vision/status."""
+    if camera_service is None:
+        return jsonify({
+            'active': False,
+            'status': 'OFFLINE',
+            'fps': 0,
+            'connected': False,
+            'initialized': False
+        })
+
+    try:
+        with camera_service.lock:
+            camera_opened = camera_service.camera is not None and camera_service.camera.isOpened()
+
+        last_frame_time = float(camera_service.frame_time or 0)
+        can_read = bool(camera_service.last_frame is not None)
+        fps = 0
+        if last_frame_time > 0:
+            age = max(0.0, time.time() - last_frame_time)
+            fps = round(1.0 / age, 1) if age > 0 else 0
+
+        active = bool(camera_opened and can_read)
+        return jsonify({
+            'active': active,
+            'status': 'ACTIVE' if active else ('IDLE' if camera_opened else 'OFFLINE'),
+            'fps': fps,
+            'connected': camera_opened,
+            'initialized': camera_opened
+        })
+    except Exception as e:
+        logger.error(f"Vision status error: {e}")
+        return jsonify({
+            'active': False,
+            'status': 'ERROR',
+            'fps': 0,
+            'connected': False,
+            'initialized': False,
             'error': str(e)
         }), 500
 

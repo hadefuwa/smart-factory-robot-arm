@@ -61,12 +61,6 @@
               <p>RFID Tracking</p>
             </a>
           </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/digital-twin.html">
-              <i class="material-icons">view_in_ar</i>
-              <p>Digital Twin</p>
-            </a>
-          </li>
           <li class="nav-item active">
             <a class="nav-link" href="/plc-diagnostics.html">
               <i class="material-icons">analytics</i>
@@ -116,6 +110,56 @@
                   <p class="card-category">Real-time monitoring of Siemens PLC data blocks - Start <span id="headerStartAddress">DB124.DBX0.0</span> | Connected <span id="headerConnectedAddress">DB124.DBX0.1</span></p>
                 </div>
                 <div class="card-body">
+                  <!-- DB123 Configuration -->
+                  <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px;">
+                      <div>
+                        <h5 style="margin: 0 0 8px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">DB123 Main Mapping Editor</h5>
+                        <p style="color: var(--text-muted, #888); font-size: 11px; margin: 0;">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
+                      </div>
+                      <div id="mainDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">DB Number</label>
+                        <input type="number" id="mainDbNumber" min="1" max="999" value="123" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                      </div>
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Total Size</label>
+                        <input type="number" id="mainDbTotalSize" min="1" max="512" value="80" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                      </div>
+                      <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Enabled</label>
+                        <select id="mainDbEnabled" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                          <option value="true">True</option>
+                          <option value="false">False</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                      <table style="width: 100%; border-collapse: collapse; min-width: 760px;">
+                        <thead>
+                          <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Tag</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Type</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Byte</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Bit</th>
+                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Address Preview</th>
+                          </tr>
+                        </thead>
+                        <tbody id="mainDbEditorBody"></tbody>
+                      </table>
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;">
+                      <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn" style="padding: 8px 16px;">Save DB123 Mapping</button>
+                      <button type="button" class="btn btn-sm btn-default" id="reloadMainDbConfigBtn" style="padding: 8px 16px;">Reload Saved Values</button>
+                      <button type="button" class="btn btn-sm btn-default" id="resetMainDbDefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
+                    </div>
+                  </div>
+
                   <!-- DB124 Configuration -->
                   <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px;">
@@ -162,7 +206,7 @@
                     <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;">
                       <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn" style="padding: 8px 16px;">Save DB124 Mapping</button>
                       <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn" style="padding: 8px 16px;">Reload Saved Values</button>
-                      <button type="button" class="btn btn-sm btn-default" id="resetDb123DefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
+                      <button type="button" class="btn btn-sm btn-default" id="resetCameraDbDefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
                     </div>
                   </div>
 
@@ -251,6 +295,61 @@
     let pollTimer = null;
     let paused = false;
     let startTime = Date.now();
+    const MAIN_DB_TAG_FIELDS = [
+      { key: 'hmi_start', label: 'HMI Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
+      { key: 'hmi_stop', label: 'HMI Stop', type: 'bool', defaultByte: 0, defaultBit: 1 },
+      { key: 'hmi_reset', label: 'HMI Reset', type: 'bool', defaultByte: 0, defaultBit: 2 },
+      { key: 'robot_connected', label: 'Robot Connected', type: 'bool', defaultByte: 2, defaultBit: 0 },
+      { key: 'robot_busy', label: 'Robot Busy', type: 'bool', defaultByte: 2, defaultBit: 1 },
+      { key: 'robot_cycle_complete', label: 'Robot Cycle Complete', type: 'bool', defaultByte: 2, defaultBit: 2 },
+      { key: 'robot_target_x', label: 'Robot Target X', type: 'int', defaultByte: 4 },
+      { key: 'robot_target_y', label: 'Robot Target Y', type: 'int', defaultByte: 6 },
+      { key: 'robot_target_z', label: 'Robot Target Z', type: 'int', defaultByte: 8 },
+      { key: 'robot_current_x', label: 'Robot Current X', type: 'int', defaultByte: 10 },
+      { key: 'robot_current_y', label: 'Robot Current Y', type: 'int', defaultByte: 12 },
+      { key: 'robot_current_z', label: 'Robot Current Z', type: 'int', defaultByte: 14 },
+      { key: 'robot_status_code', label: 'Robot Status Code', type: 'int', defaultByte: 16 },
+      { key: 'robot_error_code', label: 'Robot Error Code', type: 'int', defaultByte: 18 },
+      { key: 'cube_type', label: 'Cube Type', type: 'int', defaultByte: 20 },
+      { key: 'conveyor1_start', label: 'Conveyor1 Start', type: 'bool', defaultByte: 22, defaultBit: 0 },
+      { key: 'conveyor1_stop', label: 'Conveyor1 Stop', type: 'bool', defaultByte: 22, defaultBit: 1 },
+      { key: 'conveyor2_start', label: 'Conveyor2 Start', type: 'bool', defaultByte: 24, defaultBit: 0 },
+      { key: 'conveyor2_stop', label: 'Conveyor2 Stop', type: 'bool', defaultByte: 24, defaultBit: 1 },
+      { key: 'material_type', label: 'Material Type', type: 'int', defaultByte: 26 },
+      { key: 'quarantined_count', label: 'Quarantined Count', type: 'int', defaultByte: 28 },
+      { key: 'defect_count', label: 'Defect Count', type: 'int', defaultByte: 30 },
+      { key: 'aluminum_count', label: 'Aluminum Count', type: 'int', defaultByte: 32 },
+      { key: 'steel_count', label: 'Steel Count', type: 'int', defaultByte: 34 },
+      { key: 'yellow_count', label: 'Yellow Count', type: 'int', defaultByte: 36 },
+      { key: 'white_count', label: 'White Count', type: 'int', defaultByte: 38 },
+      { key: 'gantry_home', label: 'Gantry Home', type: 'bool', defaultByte: 40, defaultBit: 0 },
+      { key: 'gantry_busy', label: 'Gantry Busy', type: 'bool', defaultByte: 40, defaultBit: 1 },
+      { key: 'gantry_move_done', label: 'Gantry Move Done', type: 'bool', defaultByte: 40, defaultBit: 2 },
+      { key: 'gantry_pick_up', label: 'Gantry Pick Up', type: 'bool', defaultByte: 40, defaultBit: 3 },
+      { key: 'gantry_place_down', label: 'Gantry Place Down', type: 'bool', defaultByte: 40, defaultBit: 4 },
+      { key: 'gantry_home_command', label: 'Gantry Home Command', type: 'bool', defaultByte: 40, defaultBit: 5 },
+      { key: 'gantry_power_ok', label: 'Gantry Power OK', type: 'bool', defaultByte: 40, defaultBit: 6 },
+      { key: 'gantry_current_position', label: 'Gantry Current Position', type: 'real', defaultByte: 42 },
+      { key: 'gantry_target_position', label: 'Gantry Target Position', type: 'real', defaultByte: 46 },
+      { key: 'gantry_velocity', label: 'Gantry Velocity', type: 'real', defaultByte: 50 },
+      { key: 'gantry_position1', label: 'Gantry Position1', type: 'real', defaultByte: 54 },
+      { key: 'gantry_position2', label: 'Gantry Position2', type: 'real', defaultByte: 58 },
+      { key: 'gantry_home_error', label: 'Gantry Home Error', type: 'bool', defaultByte: 62, defaultBit: 0 },
+      { key: 'gantry_home_error_fix', label: 'Gantry Home Error Fix', type: 'bool', defaultByte: 62, defaultBit: 1 },
+      { key: 'system_safety_ok', label: 'System Safety OK', type: 'bool', defaultByte: 64, defaultBit: 0 },
+      { key: 'system_no_faults', label: 'System No Faults', type: 'bool', defaultByte: 64, defaultBit: 1 },
+      { key: 'system_active_fault', label: 'System Active Fault', type: 'bool', defaultByte: 64, defaultBit: 2 },
+      { key: 'system_startup_completed', label: 'System Startup Completed', type: 'bool', defaultByte: 64, defaultBit: 3 },
+      { key: 'system_state', label: 'System State', type: 'int', defaultByte: 66 },
+      { key: 'pallet_row1', label: 'Pallet Row 1 Base', type: 'row4', defaultByte: 68 },
+      { key: 'pallet_row2', label: 'Pallet Row 2 Base', type: 'row4', defaultByte: 70 },
+      { key: 'pallet_row3', label: 'Pallet Row 3 Base', type: 'row4', defaultByte: 72 },
+      { key: 'pallet_row4', label: 'Pallet Row 4 Base', type: 'row4', defaultByte: 74 },
+      { key: 'pallet_full', label: 'Pallet Full', type: 'bool', defaultByte: 76, defaultBit: 0 },
+      { key: 'conveyor1_override', label: 'Conveyor1 Override', type: 'bool', defaultByte: 78, defaultBit: 0 },
+      { key: 'conveyor2_override', label: 'Conveyor2 Override', type: 'bool', defaultByte: 78, defaultBit: 1 },
+      { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 78, defaultBit: 2 }
+    ];
     const CAMERA_DB_TAG_FIELDS = [
       { key: 'start', label: 'Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'connected', label: 'Connected', type: 'bool', defaultByte: 0, defaultBit: 1 },
@@ -275,14 +374,13 @@
       errors: 0
     };
 
-    // Update displayed bit addresses in header/status rows.
-    function getCurrentDbNumber() {
-      const dbInput = document.getElementById('cameraDbNumber');
-      return Math.max(1, Math.min(999, parseInt(dbInput && dbInput.value, 10) || 124));
+    function getDbNumber(inputId, fallbackDbNumber) {
+      const dbInput = document.getElementById(inputId);
+      return Math.max(1, Math.min(999, parseInt(dbInput && dbInput.value, 10) || fallbackDbNumber));
     }
 
     function setStartBitAddressDisplay(byte, bit) {
-      const addr = 'DB' + getCurrentDbNumber() + '.DBX' + byte + '.' + bit;
+      const addr = 'DB' + getDbNumber('cameraDbNumber', 124) + '.DBX' + byte + '.' + bit;
       const headerEl = document.getElementById('headerStartAddress');
       const labelEl = document.getElementById('startBitAddressLabel');
       if (headerEl) headerEl.textContent = addr;
@@ -290,14 +388,14 @@
     }
 
     function setConnectedBitAddressDisplay(byte, bit) {
-      const addr = 'DB' + getCurrentDbNumber() + '.DBX' + byte + '.' + bit;
+      const addr = 'DB' + getDbNumber('cameraDbNumber', 124) + '.DBX' + byte + '.' + bit;
       const headerEl = document.getElementById('headerConnectedAddress');
       if (headerEl) headerEl.textContent = addr;
     }
 
-    function getDefaultCameraDbConfig() {
+    function getDefaultDbConfig(fields, dbNumber, totalSize) {
       const tags = {};
-      CAMERA_DB_TAG_FIELDS.forEach((field) => {
+      fields.forEach((field) => {
         tags[field.key] = { byte: field.defaultByte };
         if (field.type === 'bool') {
           tags[field.key].bit = field.defaultBit;
@@ -305,29 +403,34 @@
       });
       return {
         enabled: true,
-        db_number: 124,
-        total_size: 8,
+        db_number: dbNumber,
+        total_size: totalSize,
         tags
       };
     }
 
-    function renderCameraDbEditor(cameraDbConfig) {
-      const tbody = document.getElementById('cameraDbEditorBody');
-      const tags = (cameraDbConfig && cameraDbConfig.tags) || {};
+    function getAddressPreview(dbNumber, field, byteValue, bitValue) {
+      if (field.type === 'bool') return `DB${dbNumber}.DBX${byteValue}.${bitValue}`;
+      if (field.type === 'real') return `DB${dbNumber}.DBD${byteValue}`;
+      if (field.type === 'row4') return `DB${dbNumber}.DBX${byteValue}.0-3`;
+      return `DB${dbNumber}.DBW${byteValue}`;
+    }
 
-      document.getElementById('cameraDbNumber').value = parseInt(cameraDbConfig.db_number, 10) || 124;
-      document.getElementById('cameraDbTotalSize').value = parseInt(cameraDbConfig.total_size, 10) || 8;
-      document.getElementById('cameraDbEnabled').value = cameraDbConfig.enabled === false ? 'false' : 'true';
+    function renderDbEditor(fields, config, options) {
+      const tbody = document.getElementById(options.bodyId);
+      const tags = (config && config.tags) || {};
 
-      tbody.innerHTML = CAMERA_DB_TAG_FIELDS.map((field) => {
+      document.getElementById(options.dbNumberId).value = parseInt(config.db_number, 10) || options.defaultDbNumber;
+      document.getElementById(options.totalSizeId).value = parseInt(config.total_size, 10) || options.defaultTotalSize;
+      document.getElementById(options.enabledId).value = config.enabled === false ? 'false' : 'true';
+
+      tbody.innerHTML = fields.map((field) => {
         const saved = tags[field.key] || {};
         const byteValue = parseInt(saved.byte, 10);
         const bitValue = parseInt(saved.bit, 10);
         const safeByte = Number.isFinite(byteValue) ? byteValue : field.defaultByte;
         const safeBit = Number.isFinite(bitValue) ? bitValue : field.defaultBit;
-        const address = field.type === 'bool'
-          ? `DB${getCurrentDbNumber()}.DBX${safeByte}.${safeBit}`
-          : `DB${getCurrentDbNumber()}.DBW${safeByte}`;
+        const address = getAddressPreview(getDbNumber(options.dbNumberId, options.defaultDbNumber), field, safeByte, safeBit);
 
         return `
           <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -339,6 +442,7 @@
                 min="0"
                 max="255"
                 value="${safeByte}"
+                data-scope="${options.scope}"
                 data-tag="${field.key}"
                 data-part="byte"
                 style="width: 84px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
@@ -351,50 +455,51 @@
                   min="0"
                   max="7"
                   value="${safeBit}"
+                  data-scope="${options.scope}"
                   data-tag="${field.key}"
                   data-part="bit"
                   style="width: 72px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
                 >
               ` : '<span style="color: var(--text-muted, #888); font-size: 12px;">N/A</span>'}
             </td>
-            <td style="padding: 10px 8px; color: #9fe8dc;" id="preview-${field.key}">${address}</td>
+            <td style="padding: 10px 8px; color: #9fe8dc;" id="${options.previewPrefix}-${field.key}">${address}</td>
           </tr>
         `;
       }).join('');
 
-      updateCameraDbPreviews();
+      updateDbPreviews(fields, options);
     }
 
-    function updateCameraDbPreviews() {
-      CAMERA_DB_TAG_FIELDS.forEach((field) => {
-        const byteInput = document.querySelector(`[data-tag="${field.key}"][data-part="byte"]`);
-        const bitInput = document.querySelector(`[data-tag="${field.key}"][data-part="bit"]`);
+    function updateDbPreviews(fields, options) {
+      fields.forEach((field) => {
+        const byteInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="byte"]`);
+        const bitInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="bit"]`);
         if (!byteInput) return;
         const byteValue = Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte));
         byteInput.value = byteValue;
-        let preview = `DB${getCurrentDbNumber()}.DBW${byteValue}`;
+        let preview = getAddressPreview(getDbNumber(options.dbNumberId, options.defaultDbNumber), field, byteValue, field.defaultBit);
         if (field.type === 'bool') {
           const bitValue = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || field.defaultBit));
           bitInput.value = bitValue;
-          preview = `DB${getCurrentDbNumber()}.DBX${byteValue}.${bitValue}`;
+          preview = getAddressPreview(getDbNumber(options.dbNumberId, options.defaultDbNumber), field, byteValue, bitValue);
         }
-        const previewEl = document.getElementById(`preview-${field.key}`);
+        const previewEl = document.getElementById(`${options.previewPrefix}-${field.key}`);
         if (previewEl) previewEl.textContent = preview;
 
-        if (field.key === 'start') {
+        if (options.scope === 'camera' && field.key === 'start') {
           setStartBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
         }
-        if (field.key === 'connected') {
+        if (options.scope === 'camera' && field.key === 'connected') {
           setConnectedBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
         }
       });
     }
 
-    function collectCameraDbConfigFromEditor() {
+    function collectDbConfigFromEditor(fields, options) {
       const tags = {};
-      CAMERA_DB_TAG_FIELDS.forEach((field) => {
-        const byteInput = document.querySelector(`[data-tag="${field.key}"][data-part="byte"]`);
-        const bitInput = document.querySelector(`[data-tag="${field.key}"][data-part="bit"]`);
+      fields.forEach((field) => {
+        const byteInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="byte"]`);
+        const bitInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="bit"]`);
         const entry = {
           byte: Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte))
         };
@@ -405,34 +510,147 @@
       });
 
       return {
-        enabled: document.getElementById('cameraDbEnabled').value === 'true',
-        db_number: Math.max(1, Math.min(999, parseInt(document.getElementById('cameraDbNumber').value, 10) || 124)),
-        total_size: Math.max(1, Math.min(512, parseInt(document.getElementById('cameraDbTotalSize').value, 10) || 8)),
+        enabled: document.getElementById(options.enabledId).value === 'true',
+        db_number: getDbNumber(options.dbNumberId, options.defaultDbNumber),
+        total_size: Math.max(1, Math.min(512, parseInt(document.getElementById(options.totalSizeId).value, 10) || options.defaultTotalSize)),
         tags
       };
     }
 
-    async function loadCameraDbConfig() {
+    function getDefaultMainDbConfig() {
+      return getDefaultDbConfig(MAIN_DB_TAG_FIELDS, 123, 80);
+    }
+
+    function getDefaultCameraDbConfig() {
+      return getDefaultDbConfig(CAMERA_DB_TAG_FIELDS, 124, 8);
+    }
+
+    async function loadDbConfigs() {
       try {
         const response = await fetch(API_BASE + '/api/config', { signal: AbortSignal.timeout(5000) });
         const config = await response.json();
+        const mainDbConfig = ((config.plc || {}).db123) || getDefaultMainDbConfig();
         const cameraDbConfig = ((config.plc || {}).db124) || getDefaultCameraDbConfig();
-        renderCameraDbEditor({
+        renderDbEditor(MAIN_DB_TAG_FIELDS, {
+          ...getDefaultMainDbConfig(),
+          ...mainDbConfig,
+          tags: { ...getDefaultMainDbConfig().tags, ...(mainDbConfig.tags || {}) }
+        }, {
+          scope: 'main',
+          bodyId: 'mainDbEditorBody',
+          dbNumberId: 'mainDbNumber',
+          totalSizeId: 'mainDbTotalSize',
+          enabledId: 'mainDbEnabled',
+          previewPrefix: 'main-preview',
+          defaultDbNumber: 123,
+          defaultTotalSize: 80
+        });
+        renderDbEditor(CAMERA_DB_TAG_FIELDS, {
           ...getDefaultCameraDbConfig(),
           ...cameraDbConfig,
           tags: { ...getDefaultCameraDbConfig().tags, ...(cameraDbConfig.tags || {}) }
+        }, {
+          scope: 'camera',
+          bodyId: 'cameraDbEditorBody',
+          dbNumberId: 'cameraDbNumber',
+          totalSizeId: 'cameraDbTotalSize',
+          enabledId: 'cameraDbEnabled',
+          previewPrefix: 'camera-preview',
+          defaultDbNumber: 124,
+          defaultTotalSize: 8
         });
       } catch (e) {
-        console.error('Load DB124 config failed:', e);
-        renderCameraDbEditor(getDefaultCameraDbConfig());
+        console.error('Load PLC config failed:', e);
+        renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), {
+          scope: 'main',
+          bodyId: 'mainDbEditorBody',
+          dbNumberId: 'mainDbNumber',
+          totalSizeId: 'mainDbTotalSize',
+          enabledId: 'mainDbEnabled',
+          previewPrefix: 'main-preview',
+          defaultDbNumber: 123,
+          defaultTotalSize: 80
+        });
+        renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), {
+          scope: 'camera',
+          bodyId: 'cameraDbEditorBody',
+          dbNumberId: 'cameraDbNumber',
+          totalSizeId: 'cameraDbTotalSize',
+          enabledId: 'cameraDbEnabled',
+          previewPrefix: 'camera-preview',
+          defaultDbNumber: 124,
+          defaultTotalSize: 8
+        });
       }
     }
 
+    async function saveMainDbConfig() {
+      updateDbPreviews(MAIN_DB_TAG_FIELDS, {
+        scope: 'main',
+        bodyId: 'mainDbEditorBody',
+        dbNumberId: 'mainDbNumber',
+        totalSizeId: 'mainDbTotalSize',
+        enabledId: 'mainDbEnabled',
+        previewPrefix: 'main-preview',
+        defaultDbNumber: 123,
+        defaultTotalSize: 80
+      });
+      const msgEl = document.getElementById('mainDbSaveMessage');
+      const btn = document.getElementById('saveMainDbConfigBtn');
+      const mainDbConfig = collectDbConfigFromEditor(MAIN_DB_TAG_FIELDS, {
+        scope: 'main',
+        dbNumberId: 'mainDbNumber',
+        totalSizeId: 'mainDbTotalSize',
+        enabledId: 'mainDbEnabled',
+        defaultDbNumber: 123,
+        defaultTotalSize: 80
+      });
+      btn.disabled = true;
+      msgEl.textContent = 'Saving...';
+      msgEl.style.color = '';
+      try {
+        const response = await fetch(API_BASE + '/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plc: { db123: mainDbConfig } }),
+          signal: AbortSignal.timeout(5000)
+        });
+        const data = await response.json();
+        if (data.success) {
+          msgEl.textContent = `Saved main mapping for DB${mainDbConfig.db_number}. Live worker updated.`;
+          msgEl.style.color = 'var(--accent-green, #4caf50)';
+        } else {
+          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
+          msgEl.style.color = 'var(--accent-red, #f44336)';
+        }
+      } catch (e) {
+        msgEl.textContent = 'Error: ' + e.message;
+        msgEl.style.color = 'var(--accent-red, #f44336)';
+      }
+      btn.disabled = false;
+    }
+
     async function saveCameraDbConfig() {
-      updateCameraDbPreviews();
+      updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
+        scope: 'camera',
+        bodyId: 'cameraDbEditorBody',
+        dbNumberId: 'cameraDbNumber',
+        totalSizeId: 'cameraDbTotalSize',
+        enabledId: 'cameraDbEnabled',
+        previewPrefix: 'camera-preview',
+        defaultDbNumber: 124,
+        defaultTotalSize: 8
+      });
       const msgEl = document.getElementById('cameraDbSaveMessage');
       const btn = document.getElementById('saveCameraDbConfigBtn');
-      const cameraDbConfig = collectCameraDbConfigFromEditor();
+      const cameraDbConfig = collectDbConfigFromEditor(CAMERA_DB_TAG_FIELDS, {
+        scope: 'camera',
+        dbNumberId: 'cameraDbNumber',
+        totalSizeId: 'cameraDbTotalSize',
+        enabledId: 'cameraDbEnabled',
+        defaultDbNumber: 124,
+        defaultTotalSize: 8
+      });
       btn.disabled = true;
       msgEl.textContent = 'Saving...';
       msgEl.style.color = '';
@@ -464,12 +682,71 @@
 
     // Run on page load
       document.addEventListener('DOMContentLoaded', function() {
-      loadCameraDbConfig();
+      loadDbConfigs();
+      document.getElementById('saveMainDbConfigBtn').addEventListener('click', saveMainDbConfig);
+      document.getElementById('reloadMainDbConfigBtn').addEventListener('click', loadDbConfigs);
+      document.getElementById('resetMainDbDefaultsBtn').addEventListener('click', () => renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), {
+        scope: 'main',
+        bodyId: 'mainDbEditorBody',
+        dbNumberId: 'mainDbNumber',
+        totalSizeId: 'mainDbTotalSize',
+        enabledId: 'mainDbEnabled',
+        previewPrefix: 'main-preview',
+        defaultDbNumber: 123,
+        defaultTotalSize: 80
+      }));
       document.getElementById('saveCameraDbConfigBtn').addEventListener('click', saveCameraDbConfig);
-      document.getElementById('reloadCameraDbConfigBtn').addEventListener('click', loadCameraDbConfig);
-      document.getElementById('resetDb123DefaultsBtn').addEventListener('click', () => renderCameraDbEditor(getDefaultCameraDbConfig()));
-      document.getElementById('cameraDbEditorBody').addEventListener('input', updateCameraDbPreviews);
-      document.getElementById('cameraDbNumber').addEventListener('input', updateCameraDbPreviews);
+      document.getElementById('reloadCameraDbConfigBtn').addEventListener('click', loadDbConfigs);
+      document.getElementById('resetCameraDbDefaultsBtn').addEventListener('click', () => renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), {
+        scope: 'camera',
+        bodyId: 'cameraDbEditorBody',
+        dbNumberId: 'cameraDbNumber',
+        totalSizeId: 'cameraDbTotalSize',
+        enabledId: 'cameraDbEnabled',
+        previewPrefix: 'camera-preview',
+        defaultDbNumber: 124,
+        defaultTotalSize: 8
+      }));
+      document.getElementById('mainDbEditorBody').addEventListener('input', () => updateDbPreviews(MAIN_DB_TAG_FIELDS, {
+        scope: 'main',
+        bodyId: 'mainDbEditorBody',
+        dbNumberId: 'mainDbNumber',
+        totalSizeId: 'mainDbTotalSize',
+        enabledId: 'mainDbEnabled',
+        previewPrefix: 'main-preview',
+        defaultDbNumber: 123,
+        defaultTotalSize: 80
+      }));
+      document.getElementById('mainDbNumber').addEventListener('input', () => updateDbPreviews(MAIN_DB_TAG_FIELDS, {
+        scope: 'main',
+        bodyId: 'mainDbEditorBody',
+        dbNumberId: 'mainDbNumber',
+        totalSizeId: 'mainDbTotalSize',
+        enabledId: 'mainDbEnabled',
+        previewPrefix: 'main-preview',
+        defaultDbNumber: 123,
+        defaultTotalSize: 80
+      }));
+      document.getElementById('cameraDbEditorBody').addEventListener('input', () => updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
+        scope: 'camera',
+        bodyId: 'cameraDbEditorBody',
+        dbNumberId: 'cameraDbNumber',
+        totalSizeId: 'cameraDbTotalSize',
+        enabledId: 'cameraDbEnabled',
+        previewPrefix: 'camera-preview',
+        defaultDbNumber: 124,
+        defaultTotalSize: 8
+      }));
+      document.getElementById('cameraDbNumber').addEventListener('input', () => updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
+        scope: 'camera',
+        bodyId: 'cameraDbEditorBody',
+        dbNumberId: 'cameraDbNumber',
+        totalSizeId: 'cameraDbTotalSize',
+        enabledId: 'cameraDbEnabled',
+        previewPrefix: 'camera-preview',
+        defaultDbNumber: 124,
+        defaultTotalSize: 8
+      }));
     });
 
     function addLog(message, isTrue = null) {

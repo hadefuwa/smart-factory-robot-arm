@@ -35,13 +35,32 @@
 
   const apiClient = {
     async getRobotStatus() {
-      return fetchJSON(`${API_BASE}/api/robot/status`);
+      const data = await fetchJSON(`${API_BASE}/api/data`);
+      const dobot = data.dobot || {};
+      return {
+        connected: !!(dobot.status && dobot.status.connected),
+        status: (dobot.status && dobot.status.connected) ? 'READY' : 'OFFLINE',
+        position: dobot.pose || { x: 0, y: 0, z: 0, r: 0 },
+        last_error: (dobot.status && dobot.status.last_error) || '',
+      };
     },
     async getPLCStatus() {
       return fetchJSON(`${API_BASE}/api/plc/status`);
     },
     async getVisionStatus() {
-      return fetchJSON(`${API_BASE}/api/vision/status`);
+      const data = await fetchJSON(`${API_BASE}/api/camera/status`);
+      const connected = !!data.connected;
+      const hasFrames = !!data.can_read;
+      let fps = 0;
+      if (data.last_frame_time) {
+        const age = Math.max(0, (Date.now() / 1000) - Number(data.last_frame_time));
+        fps = age > 0 ? Number((1 / age).toFixed(1)) : 0;
+      }
+      return {
+        active: connected && hasFrames,
+        status: connected ? (hasFrames ? 'ACTIVE' : 'IDLE') : 'OFFLINE',
+        fps,
+      };
     },
     async getSmartFactory() {
       return fetchJSON(`${API_BASE}/api/smart-factory`);
