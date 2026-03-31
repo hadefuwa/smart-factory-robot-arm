@@ -193,9 +193,8 @@
   </div>
 
   <script>
-    // If you open this page on the Pi: keep localhost
-    // If you open on another PC: change to http://PI_IP_ADDRESS:3000/stats
-    var STATS_URL = "http://localhost:3000/stats";
+    // Use same-origin API to avoid CORS errors in browser.
+    var STATS_URL = "/api/edge-device-stats";
 
     function formatSecondsToHMS(seconds) {
       var hours = Math.floor(seconds / 3600);

@@ -933,6 +933,93 @@ def health_check():
         'timestamp': time.time()
     })
 
+def _get_cpu_temperature_celsius() -> Optional[float]:
+    """Read Raspberry Pi CPU temperature using vcgencmd. Returns None if unavailable."""
+    try:
+        result = subprocess.run(
+            ['vcgencmd', 'measure_temp'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        output = (result.stdout or '').strip()
+        match = re.search(r'temp=([\d\.]+)', output)
+        if match:
+            return float(match.group(1))
+    except Exception:
+        pass
+    return None
+
+def _get_memory_mb() -> Dict[str, int]:
+    """Read total/used memory (MB) from /proc/meminfo."""
+    total_kb = 0
+    available_kb = 0
+    try:
+        with open('/proc/meminfo', 'r', encoding='utf-8') as meminfo_file:
+            for line in meminfo_file:
+                if line.startswith('MemTotal:'):
+                    total_kb = int(line.split()[1])
+                elif line.startswith('MemAvailable:'):
+                    available_kb = int(line.split()[1])
+        if total_kb > 0:
+            used_kb = max(total_kb - available_kb, 0)
+            return {
+                'totalMB': round(total_kb / 1024),
+                'usedMB': round(used_kb / 1024)
+            }
+    except Exception:
+        pass
+    return {
+        'totalMB': 0,
+        'usedMB': 0
+    }
+
+def _get_uptime_seconds() -> float:
+    """Read system uptime in seconds."""
+    try:
+        with open('/proc/uptime', 'r', encoding='utf-8') as uptime_file:
+            value = uptime_file.read().split()[0]
+            return float(value)
+    except Exception:
+        return 0.0
+
+@app.route('/api/edge-device-stats', methods=['GET'])
+def edge_device_stats():
+    """Same-origin edge stats endpoint used by edge-device-stats.html."""
+    try:
+        load1 = 0.0
+        load5 = 0.0
+        load15 = 0.0
+        try:
+            load_values = os.getloadavg()
+            load1 = float(load_values[0])
+            load5 = float(load_values[1])
+            load15 = float(load_values[2])
+        except Exception:
+            pass
+
+        response = {
+            'cpu': {
+                'load1': load1,
+                'load5': load5,
+                'load15': load15,
+                'coreCount': int(os.cpu_count() or 0)
+            },
+            'memory': _get_memory_mb(),
+            'uptimeSeconds': _get_uptime_seconds(),
+            'temperatureCelsius': _get_cpu_temperature_celsius()
+        }
+        return jsonify(response)
+    except Exception as e:
+        logger.error(f"Error in edge_device_stats endpoint: {e}")
+        return jsonify({
+            'error': str(e),
+            'cpu': {'load1': 0.0, 'load5': 0.0, 'load15': 0.0, 'coreCount': int(os.cpu_count() or 0)},
+            'memory': {'totalMB': 0, 'usedMB': 0},
+            'uptimeSeconds': 0.0,
+            'temperatureCelsius': None
+        }), 500
+
 @app.route('/log', methods=['POST'])
 def log_message():
     """Accept client log messages from digital twin (prevents 405 errors)"""
