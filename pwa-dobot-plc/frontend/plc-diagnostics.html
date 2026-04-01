@@ -22,6 +22,92 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <!-- All styles consolidated in professional-theme.css -->
+  <style>
+    .db-map-panel {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+    }
+
+    .db-map-panel .db-map-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .db-map-panel .db-map-title {
+      margin: 0 0 4px 0;
+      font-size: 12px;
+      color: var(--md-sys-color-primary, #03dac6);
+    }
+
+    .db-map-panel .db-map-copy {
+      color: var(--text-muted, #888);
+      font-size: 10px;
+      line-height: 1.35;
+      margin: 0;
+      max-width: 720px;
+    }
+
+    .db-map-panel .db-map-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .db-map-panel .db-map-controls label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .db-map-panel .db-map-controls input,
+    .db-map-panel .db-map-controls select {
+      width: 100%;
+      padding: 5px 7px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+
+    .db-map-panel .db-map-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 560px;
+    }
+
+    .db-map-panel .db-map-table th {
+      text-align: left;
+      padding: 6px 5px;
+      font-size: 10px;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      white-space: nowrap;
+    }
+
+    .db-map-panel .db-map-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .db-map-panel .db-map-actions .btn {
+      padding: 6px 10px !important;
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+  </style>
 </head>
 
 <body class="dark-edition dashboard-v2 sf-subpage-v2">
@@ -111,27 +197,27 @@
                 </div>
                 <div class="card-body">
                   <!-- DB123 Configuration -->
-                  <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                    <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px;">
+                  <div class="panel db-map-panel">
+                    <div class="db-map-header">
                       <div>
-                        <h5 style="margin: 0 0 8px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">DB123 Main Mapping Editor</h5>
-                        <p style="color: var(--text-muted, #888); font-size: 11px; margin: 0;">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
+                        <h5 class="db-map-title">DB123 Main Mapping Editor</h5>
+                        <p class="db-map-copy">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
                       </div>
                       <div id="mainDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                    <div class="db-map-controls">
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">DB Number</label>
-                        <input type="number" id="mainDbNumber" min="1" max="999" value="123" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>DB Number</label>
+                        <input type="number" id="mainDbNumber" min="1" max="999" value="123">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Total Size</label>
-                        <input type="number" id="mainDbTotalSize" min="1" max="512" value="80" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>Total Size</label>
+                        <input type="number" id="mainDbTotalSize" min="1" max="512" value="80">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Enabled</label>
-                        <select id="mainDbEnabled" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>Enabled</label>
+                        <select id="mainDbEnabled">
                           <option value="true">True</option>
                           <option value="false">False</option>
                         </select>
@@ -139,49 +225,49 @@
                     </div>
 
                     <div style="overflow-x: auto;">
-                      <table style="width: 100%; border-collapse: collapse; min-width: 760px;">
+                      <table class="db-map-table">
                         <thead>
-                          <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Tag</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Type</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Byte</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Bit</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Address Preview</th>
+                          <tr>
+                            <th>Tag</th>
+                            <th>Type</th>
+                            <th>Byte</th>
+                            <th>Bit</th>
+                            <th>Address Preview</th>
                           </tr>
                         </thead>
                         <tbody id="mainDbEditorBody"></tbody>
                       </table>
                     </div>
 
-                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;">
-                      <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn" style="padding: 8px 16px;">Save DB123 Mapping</button>
-                      <button type="button" class="btn btn-sm btn-default" id="reloadMainDbConfigBtn" style="padding: 8px 16px;">Reload Saved Values</button>
-                      <button type="button" class="btn btn-sm btn-default" id="resetMainDbDefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
+                    <div class="db-map-actions">
+                      <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn">Save DB123 Mapping</button>
+                      <button type="button" class="btn btn-sm btn-default" id="reloadMainDbConfigBtn">Reload Saved Values</button>
+                      <button type="button" class="btn btn-sm btn-default" id="resetMainDbDefaultsBtn">Reset Defaults</button>
                     </div>
                   </div>
 
                   <!-- DB124 Configuration -->
-                  <div class="panel" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                    <div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 12px;">
+                  <div class="panel db-map-panel">
+                    <div class="db-map-header">
                       <div>
-                        <h5 style="margin: 0 0 8px 0; font-size: 14px; color: var(--md-sys-color-primary, #03dac6);">DB124 Camera Mapping Editor</h5>
-                        <p style="color: var(--text-muted, #888); font-size: 11px; margin: 0;">Edit the Pi-side DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
+                        <h5 class="db-map-title">DB124 Camera Mapping Editor</h5>
+                        <p class="db-map-copy">Edit the Pi-side DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
                       </div>
                       <div id="cameraDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                    <div class="db-map-controls">
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">DB Number</label>
-                        <input type="number" id="cameraDbNumber" min="1" max="999" value="124" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>DB Number</label>
+                        <input type="number" id="cameraDbNumber" min="1" max="999" value="124">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Total Size</label>
-                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="8" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>Total Size</label>
+                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="8">
                       </div>
                       <div>
-                        <label style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Enabled</label>
-                        <select id="cameraDbEnabled" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 14px; border-radius: 4px;">
+                        <label>Enabled</label>
+                        <select id="cameraDbEnabled">
                           <option value="true">True</option>
                           <option value="false">False</option>
                         </select>
@@ -189,24 +275,24 @@
                     </div>
 
                     <div style="overflow-x: auto;">
-                      <table style="width: 100%; border-collapse: collapse; min-width: 700px;">
+                      <table class="db-map-table">
                         <thead>
-                          <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Tag</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Type</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Byte</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Bit</th>
-                            <th style="text-align: left; padding: 10px 8px; font-size: 11px; color: var(--text-muted);">Address Preview</th>
+                          <tr>
+                            <th>Tag</th>
+                            <th>Type</th>
+                            <th>Byte</th>
+                            <th>Bit</th>
+                            <th>Address Preview</th>
                           </tr>
                         </thead>
                         <tbody id="cameraDbEditorBody"></tbody>
                       </table>
                     </div>
 
-                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;">
-                      <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn" style="padding: 8px 16px;">Save DB124 Mapping</button>
-                      <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn" style="padding: 8px 16px;">Reload Saved Values</button>
-                      <button type="button" class="btn btn-sm btn-default" id="resetCameraDbDefaultsBtn" style="padding: 8px 16px;">Reset Defaults</button>
+                    <div class="db-map-actions">
+                      <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn">Save DB124 Mapping</button>
+                      <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn">Reload Saved Values</button>
+                      <button type="button" class="btn btn-sm btn-default" id="resetCameraDbDefaultsBtn">Reset Defaults</button>
                     </div>
                   </div>
 
@@ -434,9 +520,9 @@
 
         return `
           <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <td style="padding: 10px 8px; color: #fff;">${field.label}</td>
-            <td style="padding: 10px 8px; color: var(--text-muted, #888); text-transform: uppercase; font-size: 11px;">${field.type}</td>
-            <td style="padding: 10px 8px;">
+            <td style="padding: 5px 5px; color: #fff; font-size: 11px; line-height: 1.2;">${field.label}</td>
+            <td style="padding: 5px 5px; color: var(--text-muted, #888); text-transform: uppercase; font-size: 10px; white-space: nowrap;">${field.type}</td>
+            <td style="padding: 5px 5px;">
               <input
                 type="number"
                 min="0"
@@ -445,10 +531,10 @@
                 data-scope="${options.scope}"
                 data-tag="${field.key}"
                 data-part="byte"
-                style="width: 84px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
+                style="width: 58px; padding: 4px 5px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px; font-size: 11px;"
               >
             </td>
-            <td style="padding: 10px 8px;">
+            <td style="padding: 5px 5px;">
               ${field.type === 'bool' ? `
                 <input
                   type="number"
@@ -458,11 +544,11 @@
                   data-scope="${options.scope}"
                   data-tag="${field.key}"
                   data-part="bit"
-                  style="width: 72px; padding: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px;"
+                  style="width: 46px; padding: 4px 5px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 4px; font-size: 11px;"
                 >
-              ` : '<span style="color: var(--text-muted, #888); font-size: 12px;">N/A</span>'}
+              ` : '<span style="color: var(--text-muted, #888); font-size: 10px;">N/A</span>'}
             </td>
-            <td style="padding: 10px 8px; color: #9fe8dc;" id="${options.previewPrefix}-${field.key}">${address}</td>
+            <td style="padding: 5px 5px; color: #9fe8dc; font-size: 10px; white-space: nowrap;" id="${options.previewPrefix}-${field.key}">${address}</td>
           </tr>
         `;
       }).join('');
