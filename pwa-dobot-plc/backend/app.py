@@ -2672,7 +2672,7 @@ def vision_detect():
         data = request.json or {}
         object_detection_enabled = data.get('object_detection_enabled', True)
         defect_detection_enabled = data.get('defect_detection_enabled', False)
-        object_method = data.get('object_method', 'yolo')  # Default to YOLO for counter detection
+        object_method = data.get('object_method', 'blob')  # YOLO disabled on Pi 4 for now
         defect_method = data.get('method', 'combined')
 
         # Read current frame

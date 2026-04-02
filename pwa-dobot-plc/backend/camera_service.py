@@ -16,14 +16,37 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-# Try to import YOLO (optional)
-try:
-    from ultralytics import YOLO
-    YOLO_AVAILABLE = True
-    logger.info("YOLO (Ultralytics) loaded successfully")
-except ImportError:
-    YOLO_AVAILABLE = False
-    logger.warning("YOLO not available - install with: pip install ultralytics")
+YOLO = None
+YOLO_AVAILABLE = None
+YOLO_IMPORT_ERROR = None
+YOLO_FORCE_DISABLED = True
+
+def ensure_yolo_available() -> bool:
+    """Load ultralytics lazily so incompatible builds don't crash app startup."""
+    global YOLO, YOLO_AVAILABLE, YOLO_IMPORT_ERROR
+
+    if YOLO_FORCE_DISABLED:
+        YOLO = None
+        YOLO_AVAILABLE = False
+        YOLO_IMPORT_ERROR = "YOLO is disabled in camera_service.py"
+        return False
+
+    if YOLO_AVAILABLE is not None:
+        return YOLO_AVAILABLE
+
+    try:
+        from ultralytics import YOLO as ultralytics_yolo
+        YOLO = ultralytics_yolo
+        YOLO_AVAILABLE = True
+        YOLO_IMPORT_ERROR = None
+        logger.info("YOLO (Ultralytics) loaded successfully")
+    except Exception as e:
+        YOLO = None
+        YOLO_AVAILABLE = False
+        YOLO_IMPORT_ERROR = str(e)
+        logger.warning(f"YOLO unavailable in this environment: {e}")
+
+    return YOLO_AVAILABLE
 
 class CameraService:
     """Service for managing USB camera and defect detection"""
@@ -436,8 +459,8 @@ class CameraService:
         Returns:
             True if model loaded successfully
         """
-        if not YOLO_AVAILABLE:
-            logger.error("YOLO not available")
+        if not ensure_yolo_available():
+            logger.error(f"YOLO not available: {YOLO_IMPORT_ERROR or 'unknown error'}")
             return False
 
         try:
@@ -523,8 +546,9 @@ class CameraService:
 
     def _detect_with_yolo(self, frame: np.ndarray, params: Dict) -> Dict:
         """Detect objects using YOLO - thread-safe with locking, rate limiting, and result caching"""
-        if not YOLO_AVAILABLE:
-            error_msg = 'YOLO library not available. Install with: pip install ultralytics'
+        if not ensure_yolo_available():
+            detail = YOLO_IMPORT_ERROR or 'Install with: pip install ultralytics'
+            error_msg = f'YOLO library not available. {detail}'
             logger.error(error_msg)
             return {
                 'objects_found': False,

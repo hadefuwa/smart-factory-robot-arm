@@ -8,10 +8,11 @@ from flask_cors import CORS
 import logging
 import os
 import time
+import json
 import cv2
 import numpy as np
 import base64
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 # Configure logging
 logging.basicConfig(
@@ -28,6 +29,7 @@ CORS(app)
 yolo_model = None
 yolo_model_path = None
 yolo_lock = None
+model_load_error = None
 
 # Try to import YOLO
 try:
@@ -43,7 +45,7 @@ except ImportError:
 
 def load_yolo_model(model_path: str) -> bool:
     """Load YOLO model once at startup"""
-    global yolo_model, yolo_model_path
+    global yolo_model, yolo_model_path, model_load_error
     
     if not YOLO_AVAILABLE:
         logger.error("YOLO library not available")
@@ -53,11 +55,91 @@ def load_yolo_model(model_path: str) -> bool:
         logger.info(f"Loading YOLO model: {model_path}")
         yolo_model = YOLO(model_path)
         yolo_model_path = model_path
+        model_load_error = None
         logger.info(f"YOLO model loaded successfully: {model_path}")
         return True
     except Exception as e:
+        model_load_error = str(e)
         logger.error(f"Error loading YOLO model: {e}")
         return False
+
+
+def _load_runtime_config() -> Dict:
+    """Load repo config and local override so vision settings stay consistent."""
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_config_path = os.path.join(backend_dir, 'config.json')
+    local_config_path = os.path.expanduser('~/.sf2/config.local.json')
+
+    def _deep_merge(base: Dict, override: Dict) -> Dict:
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = _deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    config: Dict = {}
+
+    try:
+        with open(repo_config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception as e:
+        logger.debug(f"Could not load repo config for model discovery: {e}")
+
+    try:
+        if os.path.exists(local_config_path):
+            with open(local_config_path, 'r', encoding='utf-8') as f:
+                local_config = json.load(f)
+            config = _deep_merge(config, local_config)
+    except Exception as e:
+        logger.debug(f"Could not load local config override for model discovery: {e}")
+
+    return config
+
+
+def _candidate_model_paths() -> List[str]:
+    """Return likely locations for the trained YOLO model, in priority order."""
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.normpath(os.path.join(backend_dir, '..', '..'))
+    config = _load_runtime_config()
+    vision_config = config.get('vision', {}) if isinstance(config, dict) else {}
+
+    raw_candidates = [
+        os.getenv('YOLO_MODEL_PATH'),
+        os.getenv('COUNTER_MODEL_PATH'),
+        vision_config.get('model_path'),
+        os.path.expanduser('~/counter_detector.pt'),
+        os.path.join(backend_dir, 'counter_detector.pt'),
+        os.path.join(repo_root, 'counters-training', 'runs', 'detect', 'counter_train', 'weights', 'best.pt'),
+        os.path.join(repo_root, 'counters-training', 'runs', 'detect', 'counter_train', 'weights', 'counter_detector.pt'),
+        os.path.join(backend_dir, 'yolov8n.pt'),
+    ]
+
+    candidates: List[str] = []
+    seen = set()
+
+    for candidate in raw_candidates:
+        if not candidate:
+            continue
+        resolved = os.path.abspath(os.path.expanduser(candidate))
+        if resolved not in seen:
+            seen.add(resolved)
+            candidates.append(resolved)
+
+    return candidates
+
+
+def resolve_model_path() -> Optional[str]:
+    """Pick the first available model path from the configured/common locations."""
+    candidates = _candidate_model_paths()
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            logger.info(f"Resolved YOLO model path: {candidate}")
+            return candidate
+
+    logger.warning("No YOLO model found. Checked: %s", ", ".join(candidates))
+    return None
 
 
 def detect_with_yolo(frame: np.ndarray, params: Dict) -> Dict:
@@ -191,7 +273,8 @@ def health_check():
         'status': 'healthy',
         'yolo_available': YOLO_AVAILABLE,
         'model_loaded': yolo_model is not None,
-        'model_path': yolo_model_path
+        'model_path': yolo_model_path,
+        'model_load_error': model_load_error
     })
 
 
@@ -248,8 +331,8 @@ def detect():
 
 if __name__ == '__main__':
     # Load YOLO model at startup
-    model_path = os.path.expanduser('~/counter_detector.pt')
-    if os.path.exists(model_path):
+    model_path = resolve_model_path()
+    if model_path:
         if load_yolo_model(model_path):
             logger.info("✅ Vision service ready with YOLO model")
         else:

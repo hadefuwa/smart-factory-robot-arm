@@ -1591,6 +1591,43 @@ body.dashboard-v2 .sf-sidebar-footer {
   padding: 14px;
 }
 
+body.dashboard-v2 .sf-utility-links {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+body.dashboard-v2 .sf-utility-links p {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sf-text-muted) !important;
+}
+
+body.dashboard-v2 .sf-utility-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: var(--sf-text-soft) !important;
+  background: rgba(8, 18, 36, 0.42);
+  border: 1px solid rgba(125, 164, 215, 0.12);
+}
+
+body.dashboard-v2 .sf-utility-link i {
+  font-size: 16px !important;
+  color: var(--sf-accent-amber-1) !important;
+}
+
+body.dashboard-v2 .sf-utility-link:hover {
+  color: var(--sf-text-strong) !important;
+  border-color: rgba(249, 202, 112, 0.28);
+  background: rgba(14, 26, 49, 0.75);
+}
+
 body.dashboard-v2 .sf-sidebar-chip,
 body.dashboard-v2 .sf-chip {
   border-radius: 14px;
@@ -2207,7 +2244,8 @@ body.dashboard-v2.sf-sidebar-collapsed .sf-shell {
 
 body.dashboard-v2.sf-sidebar-collapsed .sf-nav-item span,
 body.dashboard-v2.sf-sidebar-collapsed .sf-brand-text,
-body.dashboard-v2.sf-sidebar-collapsed .sf-sidebar-chip {
+body.dashboard-v2.sf-sidebar-collapsed .sf-sidebar-chip,
+body.dashboard-v2.sf-sidebar-collapsed .sf-utility-links {
   display: none;
 }
 
@@ -2766,6 +2804,86 @@ body.dashboard-v2.sf-subpage-v2 .sf-page-hero--twin {
     linear-gradient(160deg, rgba(125, 164, 215, 0.13), transparent 70%);
 }
 
+body.dashboard-v2.sf-subpage-v2 .sf-page-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(125, 164, 215, 0.22);
+  background: rgba(9, 18, 36, 0.72);
+  box-shadow: 0 12px 24px rgba(5, 10, 22, 0.28);
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-notice.is-legacy {
+  border-color: rgba(240, 176, 64, 0.38);
+  background: linear-gradient(135deg, rgba(72, 48, 19, 0.38), rgba(9, 18, 36, 0.78));
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-notice.is-utility {
+  border-color: rgba(89, 167, 255, 0.24);
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-notice-kicker {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sf-text-muted) !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-notice strong {
+  color: var(--sf-text-strong) !important;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-notice-cta {
+  white-space: nowrap;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .content {
+  padding: 0 !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .container-fluid {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .container-fluid > .row:first-child {
+  margin-top: 0;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .navbar,
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .navbar-wrapper,
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .navbar-brand,
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .navbar-toggler {
+  display: none !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .main-panel,
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .wrapper {
+  width: 100% !important;
+  min-height: 0 !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .card {
+  overflow: hidden;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .list-group-item {
+  background: rgba(8, 16, 31, 0.72) !important;
+  border-color: rgba(125, 164, 215, 0.18) !important;
+  color: var(--sf-text-soft) !important;
+}
+
+body.dashboard-v2.sf-subpage-v2 .sf-page-content .badge-info {
+  background: linear-gradient(135deg, rgba(66, 143, 226, 0.92), rgba(89, 167, 255, 0.95)) !important;
+}
+
 @media (max-width: 991px) {
   body.dashboard-v2.sf-subpage-v2 .sf-page-hero {
     grid-template-columns: 1fr;
@@ -2780,5 +2898,10 @@ body.dashboard-v2.sf-subpage-v2 .sf-page-hero--twin {
 
   body.dashboard-v2.sf-subpage-v2 .sf-page-hero-chips {
     grid-template-columns: 1fr;
+  }
+
+  body.dashboard-v2.sf-subpage-v2 .sf-page-notice {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
