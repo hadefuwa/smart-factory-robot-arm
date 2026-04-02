@@ -13,6 +13,7 @@
   
   <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
+  <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
   
   <!-- PWA Manifest -->
@@ -34,9 +35,10 @@
     .db-map-panel {
       margin-bottom: 0;
       padding: 10px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
+      background: var(--sf-base-100);
+      border: 1px solid var(--sf-base-300);
+      border-radius: 12px;
+      box-shadow: none;
     }
 
     .db-map-panel .db-map-header {
@@ -51,11 +53,11 @@
     .db-map-panel .db-map-title {
       margin: 0 0 4px 0;
       font-size: 12px;
-      color: var(--md-sys-color-primary, #03dac6);
+      color: var(--sf-primary);
     }
 
     .db-map-panel .db-map-copy {
-      color: var(--text-muted, #888);
+      color: var(--sf-base-muted);
       font-size: 10px;
       line-height: 1.35;
       margin: 0;
@@ -72,7 +74,7 @@
     .db-map-panel .db-map-controls label {
       display: block;
       font-size: 10px;
-      color: var(--text-muted);
+      color: var(--sf-base-muted);
       margin-bottom: 3px;
     }
 
@@ -80,11 +82,11 @@
     .db-map-panel .db-map-controls select {
       width: 100%;
       padding: 5px 7px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.15);
-      color: #fff;
+      background: var(--sf-base-100);
+      border: 1px solid var(--sf-base-300);
+      color: var(--sf-base-content);
       font-size: 12px;
-      border-radius: 4px;
+      border-radius: 8px;
     }
 
     .db-map-panel .db-map-table {
@@ -98,8 +100,8 @@
       text-align: left;
       padding: 6px 5px;
       font-size: 10px;
-      color: var(--text-muted);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      color: var(--sf-base-muted);
+      border-bottom: 1px solid var(--sf-base-300);
       white-space: nowrap;
     }
 
@@ -279,7 +281,7 @@
                       </div>
                       <div>
                         <label>Total Size</label>
-                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="8">
+                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="2">
                       </div>
                       <div>
                         <label>Enabled</label>
@@ -459,16 +461,11 @@
       { key: 'connected', label: 'Connected', type: 'bool', defaultByte: 0, defaultBit: 1 },
       { key: 'busy', label: 'Busy', type: 'bool', defaultByte: 0, defaultBit: 2 },
       { key: 'completed', label: 'Completed', type: 'bool', defaultByte: 0, defaultBit: 3 },
-      { key: 'object_detected', label: 'Object Detected', type: 'bool', defaultByte: 0, defaultBit: 4 },
-      { key: 'object_ok', label: 'Object OK', type: 'bool', defaultByte: 0, defaultBit: 5 },
-      { key: 'defect_detected', label: 'Defect Detected', type: 'bool', defaultByte: 0, defaultBit: 6 },
-      { key: 'object_number', label: 'Object Number', type: 'int', defaultByte: 2 },
-      { key: 'defect_number', label: 'Defect Number', type: 'int', defaultByte: 4 },
-      { key: 'yellow_cube', label: 'Yellow Cube', type: 'bool', defaultByte: 6, defaultBit: 0 },
-      { key: 'white_cube', label: 'White Cube', type: 'bool', defaultByte: 6, defaultBit: 1 },
-      { key: 'steel_cube', label: 'Steel Cube', type: 'bool', defaultByte: 6, defaultBit: 2 },
-      { key: 'aluminum_cube', label: 'Aluminum Cube', type: 'bool', defaultByte: 6, defaultBit: 3 },
-      { key: 'counter_exceeded', label: 'Counter Exceeded', type: 'bool', defaultByte: 6, defaultBit: 4 }
+      { key: 'defect_detected', label: 'Defect Detected', type: 'bool', defaultByte: 0, defaultBit: 4 },
+      { key: 'reject_command_from_plc', label: 'Reject Command From PLC', type: 'bool', defaultByte: 0, defaultBit: 5 },
+      { key: 'yellow_cube_detected', label: 'Yellow Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 6 },
+      { key: 'white_cube_detected', label: 'White Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 7 },
+      { key: 'metal_cube_detected', label: 'Metal Cube Detected', type: 'bool', defaultByte: 1, defaultBit: 0 }
     ];
 
     let stats = {
@@ -626,7 +623,7 @@
     }
 
     function getDefaultCameraDbConfig() {
-      return getDefaultDbConfig(CAMERA_DB_TAG_FIELDS, 124, 8);
+      return getDefaultDbConfig(CAMERA_DB_TAG_FIELDS, 124, 2);
     }
 
     async function loadDbConfigs() {
@@ -661,7 +658,7 @@
           enabledId: 'cameraDbEnabled',
           previewPrefix: 'camera-preview',
           defaultDbNumber: 124,
-          defaultTotalSize: 8
+          defaultTotalSize: 2
         });
       } catch (e) {
         console.error('Load PLC config failed:', e);
@@ -683,7 +680,7 @@
           enabledId: 'cameraDbEnabled',
           previewPrefix: 'camera-preview',
           defaultDbNumber: 124,
-          defaultTotalSize: 8
+          defaultTotalSize: 2
         });
       }
     }
@@ -743,7 +740,7 @@
         enabledId: 'cameraDbEnabled',
         previewPrefix: 'camera-preview',
         defaultDbNumber: 124,
-        defaultTotalSize: 8
+        defaultTotalSize: 2
       });
       const msgEl = document.getElementById('cameraDbSaveMessage');
       const btn = document.getElementById('saveCameraDbConfigBtn');
@@ -753,7 +750,7 @@
         totalSizeId: 'cameraDbTotalSize',
         enabledId: 'cameraDbEnabled',
         defaultDbNumber: 124,
-        defaultTotalSize: 8
+        defaultTotalSize: 2
       });
       btn.disabled = true;
       msgEl.textContent = 'Saving...';
@@ -809,7 +806,7 @@
         enabledId: 'cameraDbEnabled',
         previewPrefix: 'camera-preview',
         defaultDbNumber: 124,
-        defaultTotalSize: 8
+        defaultTotalSize: 2
       }));
       document.getElementById('mainDbEditorBody').addEventListener('input', () => updateDbPreviews(MAIN_DB_TAG_FIELDS, {
         scope: 'main',
@@ -839,7 +836,7 @@
         enabledId: 'cameraDbEnabled',
         previewPrefix: 'camera-preview',
         defaultDbNumber: 124,
-        defaultTotalSize: 8
+        defaultTotalSize: 2
       }));
       document.getElementById('cameraDbNumber').addEventListener('input', () => updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
         scope: 'camera',
@@ -849,7 +846,7 @@
         enabledId: 'cameraDbEnabled',
         previewPrefix: 'camera-preview',
         defaultDbNumber: 124,
-        defaultTotalSize: 8
+        defaultTotalSize: 2
       }));
     });
 

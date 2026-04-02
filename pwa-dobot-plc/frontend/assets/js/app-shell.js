@@ -144,6 +144,19 @@
       .replace(/'/g, '&#39;');
   }
 
+  function ensureMatrixAssets() {
+    const head = document.head;
+    if (!head) return;
+
+    if (!document.querySelector('link[data-matrix-template-css="true"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/assets/css/matrix-ui-template.css';
+      link.setAttribute('data-matrix-template-css', 'true');
+      head.insertBefore(link, head.querySelector('link[href*="professional-theme.css"]') || null);
+    }
+  }
+
   function initParticles(container) {
     if (!container || container.dataset.initialized === 'true') return;
     container.dataset.initialized = 'true';
@@ -176,6 +189,7 @@
       const href = link.getAttribute('href');
       const active = href === normalizedPath;
       link.classList.toggle('active', active);
+      link.classList.toggle('menu-active', active);
       if (active) {
         link.setAttribute('aria-current', 'page');
       } else {
@@ -258,23 +272,27 @@
     });
   }
 
-  function buildNav(items) {
+  function buildNavItems(items) {
     return items.map((item) => `
-      <a class="sf-nav-item" href="${item.href}">
-        <i class="material-icons">${item.icon}</i>
-        <span>${escapeHtml(item.label)}</span>
-      </a>
+      <li>
+        <a class="sf-nav-item flex items-center gap-3 rounded-lg" href="${item.href}">
+          <i class="material-icons">${item.icon}</i>
+          <span>${escapeHtml(item.label)}</span>
+        </a>
+      </li>
     `).join('');
   }
 
-  function buildUtilityLinks() {
-    const items = NAV_ITEMS.filter((item) => item.section === 'utility');
-    return items.map((item) => `
-      <a class="sf-utility-link" href="${item.href}">
-        <i class="material-icons">${item.icon}</i>
-        <span>${escapeHtml(item.label)}</span>
-      </a>
-    `).join('');
+  function buildSidebarSections() {
+    const primary = NAV_ITEMS.filter((item) => item.section === 'primary');
+    const utility = NAV_ITEMS.filter((item) => item.section === 'utility');
+
+    return `
+      <li class="sf-menu-title"><span>Production</span></li>
+      ${buildNavItems(primary)}
+      <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+      ${buildNavItems(utility)}
+    `;
   }
 
   function buildHero() {
@@ -343,78 +361,81 @@
 
     const innerContent = content.innerHTML;
     const shellMarkup = `
-      <div class="sf-shell">
-        <aside class="sf-sidebar" id="sfSidebar">
-          <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-          <div class="sf-sidebar-brand">
-            <button class="sf-icon-btn sf-mobile-only" id="sfSidebarClose" type="button" aria-label="Close navigation">
-              <i class="material-icons">close</i>
+      <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+        <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+          <div class="sf-template-header-left flex-none flex items-center gap-2">
+            <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+              <i class="material-icons">menu</i>
             </button>
-            <a href="/index.html" class="sf-brand-link">
+            <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+              <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
               <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
               <span class="sf-brand-text">Smart Factory</span>
             </a>
           </div>
-          <nav class="sf-nav" aria-label="Primary navigation">
-            ${buildNav(NAV_ITEMS.filter((item) => item.section === 'primary'))}
-          </nav>
-          <div class="sf-sidebar-footer">
-            <div class="sf-sidebar-chip">
-              <span>Workspace</span>
-              <strong>${pageKind === 'primary' ? 'PRODUCTION' : pageKind.toUpperCase()}</strong>
-            </div>
-            <div class="sf-sidebar-chip">
-              <span>Tools</span>
-              <strong>${pageKind === 'primary' ? 'SECONDARY' : 'VISIBLE'}</strong>
-            </div>
-            <div class="sf-utility-links">
-              <p>Secondary Pages</p>
-              ${buildUtilityLinks()}
-            </div>
+          <div class="sf-template-header-center flex-1 flex justify-center">
+            <span class="sf-template-shell-title">Matrix Operations UI</span>
           </div>
-        </aside>
+          <div class="sf-template-header-right flex-none flex items-center gap-4">
+            <label class="sf-theme-wrap label cursor-pointer gap-2">
+              <span>Theme</span>
+              <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+              <i class="material-icons">dashboard</i>
+              Dashboard
+            </a>
+          </div>
+        </header>
 
-        <div class="sf-backdrop" id="sfBackdrop"></div>
+        <div class="sf-template-body flex flex-1 bg-base-100 relative">
+          <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
 
-        <div class="sf-main">
-          <header class="sf-topbar">
-            <div class="sf-topbar-left">
-              <button class="sf-icon-btn sf-mobile-only" id="sfMenuToggle" type="button" aria-label="Open navigation">
-                <i class="material-icons">menu</i>
-              </button>
-              <button class="sf-icon-btn sf-desktop-only" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
-                <i class="material-icons">left_panel_open</i>
-              </button>
+          <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+            <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+              <div>
+                <p class="sf-template-sidebar-kicker">Workspace</p>
+                <strong>${pageKind === 'primary' ? 'Production Pages' : pageKind === 'legacy' ? 'Legacy Access' : 'Utility Pages'}</strong>
+              </div>
+              <div class="sf-template-sidebar-actions flex items-center gap-2">
+                <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+                  <i class="material-icons">close</i>
+                </button>
+                <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+                  <i class="material-icons">left_panel_open</i>
+                </button>
+              </div>
+            </div>
+            <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Primary navigation">
+              <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+                ${buildSidebarSections()}
+              </ul>
+            </nav>
+          </aside>
+
+          <div class="sf-main">
+            <div class="sf-template-pagehead">
               <div class="sf-topbar-title-wrap">
                 <p class="sf-eyebrow">${escapeHtml(pageSubtitle)}</p>
                 <h1 class="sf-topbar-title">${escapeHtml(pageTitle)}</h1>
               </div>
             </div>
-            <div class="sf-topbar-right">
-              <label class="sf-theme-wrap">
-                <span>Theme</span>
-                <select class="sf-theme-select" data-sf-theme-select>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </label>
-              <a class="sf-btn sf-btn-ghost" href="/index.html">
-                <i class="material-icons">dashboard</i>
-                Dashboard
-              </a>
-            </div>
-          </header>
 
-          <main class="sf-content">
+            <main class="sf-content">
             ${buildHero()}
             ${buildNotice()}
             <div class="sf-page-content">${innerContent}</div>
-            <footer class="sf-footer-meta">
-              <span>&copy; ${new Date().getFullYear()} Smart Factory Control System</span>
-              <a href="/index.html">Return to dashboard</a>
-            </footer>
-          </main>
+            </main>
+          </div>
         </div>
+
+        <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+          <span>Matrix TSL ${new Date().getFullYear()}</span>
+          <a href="/index.html">Return to dashboard</a>
+        </footer>
       </div>
     `;
 
@@ -427,18 +448,33 @@
 
     pageContent.querySelectorAll('.card').forEach((card) => {
       card.classList.add('sf-template-card');
+      card.classList.add('card', 'bg-base-100', 'shadow-sm', 'border', 'border-base-300');
     });
 
     pageContent.querySelectorAll('table').forEach((table) => {
       table.classList.add('sf-template-table');
+      table.classList.add('table', 'table-zebra');
     });
 
     pageContent.querySelectorAll('.btn, button').forEach((button) => {
       button.classList.add('sf-template-btn');
+      button.classList.add('btn', 'btn-sm');
     });
 
     pageContent.querySelectorAll('.form-group').forEach((group) => {
       group.classList.add('sf-template-field');
+    });
+
+    pageContent.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="range"])').forEach((input) => {
+      input.classList.add('input', 'input-bordered', 'w-full');
+    });
+
+    pageContent.querySelectorAll('select').forEach((select) => {
+      select.classList.add('select', 'select-bordered', 'w-full');
+    });
+
+    pageContent.querySelectorAll('textarea').forEach((textarea) => {
+      textarea.classList.add('textarea', 'textarea-bordered', 'w-full');
     });
   }
 
@@ -486,6 +522,7 @@
 
     pageContent.querySelectorAll('.status-panel, .controls, .camera-viewer, .conveyor-container, .chart-container, .panel, .stat-card, .stat-box').forEach((block) => {
       block.classList.add('sf-surface-block');
+      block.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
     });
   }
 
@@ -495,12 +532,42 @@
     if (rows[1]) rows[1].classList.add('sf-robot-position-row');
     if (rows[2]) rows[2].classList.add('sf-robot-control-row');
     if (rows[3]) rows[3].classList.add('sf-robot-tool-row');
+    rows.forEach((row) => row.classList.add('gap-4'));
 
-    document.querySelectorAll('.sf-robot-status-row .card').forEach((card) => card.classList.add('sf-stat-card'));
-    document.querySelectorAll('.sf-robot-position-row .card').forEach((card) => card.classList.add('sf-data-card'));
-    document.querySelectorAll('.sf-robot-control-row .card').forEach((card) => card.classList.add('sf-action-card'));
-    document.querySelectorAll('.preset-btn').forEach((btn) => btn.classList.add('sf-action-btn-block'));
+    document.querySelectorAll('.sf-robot-status-row .card').forEach((card) => {
+      card.classList.add('sf-stat-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-robot-position-row .card').forEach((card) => {
+      card.classList.add('sf-data-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-robot-control-row .card').forEach((card) => {
+      card.classList.add('sf-action-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.classList.add('sf-action-btn-block', 'w-full', 'justify-start');
+    });
     document.querySelectorAll('#manualX, #manualY, #manualZ, #manualR').forEach((input) => input.classList.add('sf-robot-input'));
+    document.querySelectorAll('.sf-robot-status-row .card-title, .sf-robot-position-row .card-title').forEach((title) => {
+      title.classList.add('text-2xl', 'font-bold');
+    });
+    document.querySelectorAll('.sf-robot-control-row .table td:last-child').forEach((cell) => {
+      cell.classList.add('font-semibold');
+    });
+    document.querySelectorAll('.sf-page-robot .card-category').forEach((text) => {
+      text.classList.add('text-sm', 'text-base-content/60');
+    });
+    document.querySelectorAll('.sf-page-robot .card-body h5').forEach((heading) => {
+      heading.classList.add('text-sm', 'font-semibold', 'uppercase', 'tracking-wide');
+    });
+    document.querySelectorAll('.sf-page-robot .btn-block').forEach((button) => {
+      button.classList.add('w-full');
+    });
+    document.querySelectorAll('.sf-page-robot .settings-input').forEach((input) => {
+      input.classList.add('input', 'input-bordered', 'w-full');
+    });
+    document.querySelectorAll('.sf-page-robot .settings-actions .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
   }
 
   function enhanceVisionPage() {
@@ -511,12 +578,50 @@
     if (rows[3]) rows[3].classList.add('sf-vision-results-row');
     if (rows[5]) rows[5].classList.add('sf-vision-settings-row');
 
-    document.querySelectorAll('.sf-vision-status-row .card').forEach((card) => card.classList.add('sf-status-strip-card'));
-    document.querySelectorAll('.sf-vision-status-row [id$="Card"]').forEach((item) => item.classList.add('sf-inline-status-card'));
-    document.querySelectorAll('.sf-vision-actions-row .card').forEach((card) => card.classList.add('sf-action-strip-card'));
-    document.querySelectorAll('.sf-vision-media-row .card').forEach((card) => card.classList.add('sf-media-card'));
-    document.querySelectorAll('.sf-vision-results-row .card').forEach((card) => card.classList.add('sf-results-card'));
-    document.querySelectorAll('#settingsBody details').forEach((details) => details.classList.add('sf-template-details'));
+    rows.forEach((row) => row.classList.add('gap-4'));
+
+    document.querySelectorAll('.sf-vision-status-row .card').forEach((card) => {
+      card.classList.add('sf-status-strip-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-vision-status-row [id$="Card"]').forEach((item) => {
+      item.classList.add('sf-inline-status-card', 'rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('.sf-vision-actions-row .card').forEach((card) => {
+      card.classList.add('sf-action-strip-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-vision-media-row .card').forEach((card) => {
+      card.classList.add('sf-media-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-vision-results-row .card').forEach((card) => {
+      card.classList.add('sf-results-card', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('#settingsBody details').forEach((details) => {
+      details.classList.add('sf-template-details', 'rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('.sf-vision-actions-row .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
+    document.querySelectorAll('.sf-vision-media-row img').forEach((image) => {
+      image.classList.add('rounded-box', 'border', 'border-base-300');
+    });
+    document.querySelectorAll('.sf-page-vision .card-category').forEach((text) => {
+      text.classList.add('text-sm', 'text-base-content/60');
+    });
+    document.querySelectorAll('.sf-page-vision .card-title').forEach((title) => {
+      title.classList.add('font-semibold');
+    });
+    document.querySelectorAll('.sf-page-vision #resultsContent').forEach((content) => {
+      content.classList.add('text-sm', 'text-base-content/80');
+    });
+    document.querySelectorAll('.sf-page-vision #debugLog').forEach((log) => {
+      log.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('.sf-page-vision input[type="range"]').forEach((slider) => {
+      slider.classList.add('range', 'range-primary');
+    });
+    document.querySelectorAll('.sf-page-vision .camera-viewer').forEach((viewer) => {
+      viewer.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
   }
 
   function enhancePlcPage() {
@@ -528,6 +633,173 @@
     document.querySelectorAll('.db-map-actions').forEach((actions) => actions.classList.add('sf-plc-action-row'));
     document.querySelectorAll('.status-panel').forEach((panel) => panel.classList.add('sf-plc-status-panel'));
     document.querySelectorAll('.controls').forEach((controls) => controls.classList.add('sf-plc-quick-controls'));
+    document.querySelectorAll('.db-map-panel input').forEach((input) => {
+      input.classList.add('input', 'input-bordered', 'w-full');
+    });
+    document.querySelectorAll('.db-map-panel select').forEach((select) => {
+      select.classList.add('select', 'select-bordered', 'w-full');
+    });
+    document.querySelectorAll('.db-map-actions .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
+    document.querySelectorAll('.btn-control').forEach((button) => {
+      button.classList.add('btn', 'btn-sm', 'btn-outline');
+    });
+    document.querySelectorAll('.stat-box').forEach((box) => {
+      box.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    const logPanel = document.getElementById('logPanel');
+    if (logPanel) {
+      logPanel.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    }
+  }
+
+  function enhanceRobotModal() {
+    const modal = document.getElementById('settingsModal');
+    const content = modal && modal.querySelector('.settings-content');
+    if (!modal || !content) return;
+
+    modal.classList.add('sf-matrix-modal');
+    content.classList.add('card', 'bg-base-100', 'border', 'border-base-300', 'shadow-xl');
+
+    content.querySelectorAll('.settings-group').forEach((group) => {
+      group.classList.add('sf-matrix-settings-group');
+    });
+
+    content.querySelectorAll('.settings-input').forEach((input) => {
+      if (input.tagName === 'SELECT') {
+        input.classList.add('select', 'select-bordered', 'w-full');
+      } else {
+        input.classList.add('input', 'input-bordered', 'w-full');
+      }
+    });
+
+    content.querySelectorAll('.settings-actions .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
+  }
+
+  function enhanceVisionSettingsPanel() {
+    const toggleButton = document.getElementById('settingsToggleBtn');
+    if (toggleButton) {
+      toggleButton.classList.add('btn', 'btn-ghost', 'w-full', 'justify-between');
+    }
+
+    const settingsBody = document.getElementById('settingsBody');
+    if (settingsBody) {
+      settingsBody.classList.add('space-y-4');
+    }
+  }
+
+  function enhanceRfidPage() {
+    const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
+    rows.forEach((row) => row.classList.add('gap-4'));
+
+    document.querySelectorAll('.conveyor-container').forEach((container) => {
+      container.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+
+    document.querySelectorAll('.status-badge').forEach((badge) => {
+      badge.classList.add('badge');
+    });
+
+    document.querySelectorAll('.info-value-highlight').forEach((value) => {
+      value.classList.add('font-semibold');
+    });
+
+    document.querySelectorAll('.sf-page-content .table-hover').forEach((table) => {
+      table.classList.add('table-zebra');
+    });
+  }
+
+  function enhanceIoLinkPage() {
+    const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
+    rows.forEach((row) => row.classList.add('gap-4'));
+
+    document.querySelectorAll('.status-panel').forEach((panel) => {
+      panel.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+
+    document.querySelectorAll('.controls').forEach((controls) => {
+      controls.classList.add('sf-iolink-controls');
+    });
+
+    document.querySelectorAll('.btn-control').forEach((button) => {
+      button.classList.add('btn', 'btn-sm', 'btn-outline');
+    });
+
+    document.querySelectorAll('.chart-container').forEach((container) => {
+      container.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+
+    const productImage = document.getElementById('productImage');
+    if (productImage) {
+      productImage.classList.add('rounded-box', 'border', 'border-base-300');
+    }
+  }
+
+  function enhanceEdgePage() {
+    const table = document.querySelector('.edge-stats-table');
+    if (table) {
+      table.classList.add('table', 'table-zebra');
+    }
+
+    const updated = document.getElementById('lastUpdated');
+    if (updated) {
+      updated.classList.add('text-sm', 'text-base-content/60');
+    }
+
+    const error = document.getElementById('errorMessage');
+    if (error) {
+      error.classList.add('text-sm');
+    }
+  }
+
+  function enhanceHotspotPage() {
+    document.querySelectorAll('.list-group').forEach((list) => {
+      list.classList.add('rounded-box', 'border', 'border-base-300', 'overflow-hidden');
+    });
+
+    document.querySelectorAll('.list-group-item').forEach((item) => {
+      item.classList.add('bg-base-100', 'border-base-300');
+    });
+
+    document.querySelectorAll('.badge-pill').forEach((badge) => {
+      badge.classList.add('badge');
+    });
+
+    const refreshButton = document.getElementById('refreshButton');
+    if (refreshButton) {
+      refreshButton.classList.add('btn', 'btn-primary', 'btn-sm');
+    }
+  }
+
+  function enhanceColorVotingPage() {
+    document.querySelectorAll('.result-box').forEach((box) => {
+      box.classList.add('rounded-box', 'border', 'shadow-sm');
+    });
+
+    document.querySelectorAll('.confidence-bar').forEach((bar) => {
+      bar.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+
+    document.querySelectorAll('input[type="range"]').forEach((slider) => {
+      slider.classList.add('range', 'range-primary');
+    });
+  }
+
+  function enhanceLegacyVisionPage() {
+    document.querySelectorAll('.camera-controls .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
+
+    document.querySelectorAll('.panel').forEach((panel) => {
+      panel.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+
+    document.querySelectorAll('input[type="range"]').forEach((slider) => {
+      slider.classList.add('range', 'range-primary');
+    });
   }
 
   function enhancePageContent() {
@@ -537,9 +809,29 @@
     if (normalizedPath === '/robot-arm.html') {
       document.body.classList.add('sf-page-robot');
       enhanceRobotPage();
+      enhanceRobotModal();
     } else if (normalizedPath === '/vision-system-new.html') {
       document.body.classList.add('sf-page-vision');
       enhanceVisionPage();
+      enhanceVisionSettingsPanel();
+    } else if (normalizedPath === '/rfid.html') {
+      document.body.classList.add('sf-page-rfid');
+      enhanceRfidPage();
+    } else if (normalizedPath === '/io-link.html') {
+      document.body.classList.add('sf-page-iolink');
+      enhanceIoLinkPage();
+    } else if (normalizedPath === '/edge-device-stats.html') {
+      document.body.classList.add('sf-page-edge');
+      enhanceEdgePage();
+    } else if (normalizedPath === '/hotspot-status.html') {
+      document.body.classList.add('sf-page-hotspot');
+      enhanceHotspotPage();
+    } else if (normalizedPath === '/color-voting-test.html') {
+      document.body.classList.add('sf-page-color-voting');
+      enhanceColorVotingPage();
+    } else if (normalizedPath === '/vision-system.html') {
+      document.body.classList.add('sf-page-vision-legacy');
+      enhanceLegacyVisionPage();
     } else if (normalizedPath === '/plc-diagnostics.html') {
       document.body.classList.add('sf-page-plc');
       enhancePlcPage();
@@ -547,6 +839,7 @@
   }
 
   function bootstrap() {
+    ensureMatrixAssets();
     transformLegacySubpage();
     initThemeControls();
     initShellInteractions();

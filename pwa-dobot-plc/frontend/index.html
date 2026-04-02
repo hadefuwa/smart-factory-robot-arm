@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/demo/demo.css" rel="stylesheet" />
+  <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
 
   <link rel="manifest" href="/manifest.json">
@@ -19,87 +20,86 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body class="dark-edition dashboard-v2">
-  <div class="sf-shell">
-    <aside class="sf-sidebar" id="sfSidebar">
-      <div class="sf-sidebar-brand">
-        <button class="sf-icon-btn sf-mobile-only" id="sfSidebarClose" type="button" aria-label="Close navigation">
-          <i class="material-icons">close</i>
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
         </button>
-        <a href="/index.html" class="sf-brand-link">
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
           <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
           <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-
-      <nav class="sf-nav" aria-label="Main navigation">
-        <a class="sf-nav-item active" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a>
-        <a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a>
-        <a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a>
-        <a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a>
-        <a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a>
-        <a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a>
-        <a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a>
-      </nav>
-
-      <div class="sf-sidebar-footer">
-        <div class="sf-sidebar-chip">
-          <span>Line Mode</span>
-          <strong data-bind="meta.mode">AUTONOMOUS</strong>
-        </div>
-        <div class="sf-utility-links">
-          <p>Secondary Pages</p>
-          <a class="sf-utility-link" href="/hotspot-status.html">
-            <i class="material-icons">wifi</i>
-            <span>Hotspot Status</span>
-          </a>
-          <a class="sf-utility-link" href="/color-voting-test.html">
-            <i class="material-icons">palette</i>
-            <span>Color Voting Test</span>
-          </a>
-          <a class="sf-utility-link" href="/vision-system.html">
-            <i class="material-icons">history</i>
-            <span>Vision Legacy</span>
-          </a>
-        </div>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </aside>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" data-action="refreshNow">
+          <i class="material-icons">refresh</i>
+          Refresh
+        </button>
+        <button class="sf-btn sf-btn-danger btn btn-error btn-sm" type="button" data-action="emergencyStop">
+          <i class="material-icons">stop_circle</i>
+          E-Stop
+        </button>
+      </div>
+    </header>
 
-    <div class="sf-backdrop" id="sfBackdrop"></div>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
 
-    <div class="sf-main">
-      <header class="sf-topbar">
-        <div class="sf-topbar-left">
-          <button class="sf-icon-btn" id="sfMenuToggle" type="button" aria-label="Open navigation">
-            <i class="material-icons">menu</i>
-          </button>
-          <button class="sf-icon-btn sf-desktop-only" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
-            <i class="material-icons">left_panel_open</i>
-          </button>
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
+          </div>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
+        </div>
+
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item active" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
+
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Operations Cockpit</p>
             <h1 class="sf-topbar-title">Production Command Center</h1>
           </div>
         </div>
-        <div class="sf-topbar-right">
-          <label class="sf-theme-wrap">
-            <span>Theme</span>
-            <select class="sf-theme-select" data-sf-theme-select>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
-          <button class="sf-btn sf-btn-ghost" type="button" data-action="refreshNow">
-            <i class="material-icons">refresh</i>
-            Refresh
-          </button>
-          <button class="sf-btn sf-btn-danger" type="button" data-action="emergencyStop">
-            <i class="material-icons">stop_circle</i>
-            E-Stop
-          </button>
-        </div>
-      </header>
 
-      <main class="sf-content">
+        <main class="sf-content">
         <div class="sf-warning" id="sfSoftWarning" role="status" aria-live="polite"></div>
 
         <section class="sf-hero sf-stage sf-stage-1">
@@ -291,12 +291,14 @@
           </article>
         </section>
 
-        <footer class="sf-footer-meta">
-          <span>&copy; <script>document.write(new Date().getFullYear())</script> Smart Factory Control System</span>
-          <a href="/">Smart Factory Home</a>
-        </footer>
-      </main>
+        </main>
+      </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
   <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
