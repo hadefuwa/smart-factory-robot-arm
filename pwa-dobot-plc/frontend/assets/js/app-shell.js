@@ -277,7 +277,7 @@
       <li>
         <a class="sf-nav-item flex items-center gap-3 rounded-lg" href="${item.href}">
           <i class="material-icons">${item.icon}</i>
-          <span>${escapeHtml(item.label)}</span>
+          <span class="sf-nav-text">${escapeHtml(item.label)}</span>
         </a>
       </li>
     `).join('');
@@ -414,6 +414,16 @@
                 ${buildSidebarSections()}
               </ul>
             </nav>
+            <div class="sf-template-sidebar-foot">
+              <div class="sf-sidebar-meta-chip">
+                <span>UI</span>
+                <strong>Matrix</strong>
+              </div>
+              <div class="sf-sidebar-meta-chip">
+                <span>Mode</span>
+                <strong>${pageKind === 'primary' ? 'Production' : pageKind === 'legacy' ? 'Legacy' : 'Utility'}</strong>
+              </div>
+            </div>
           </aside>
 
           <div class="sf-main">
@@ -421,6 +431,10 @@
               <div class="sf-topbar-title-wrap">
                 <p class="sf-eyebrow">${escapeHtml(pageSubtitle)}</p>
                 <h1 class="sf-topbar-title">${escapeHtml(pageTitle)}</h1>
+              </div>
+              <div class="sf-pagehead-chip-row">
+                <span class="sf-pagehead-chip">${pageKind === 'primary' ? 'Live Operations' : pageKind === 'legacy' ? 'Legacy Access' : 'Support Tool'}</span>
+                <span class="sf-pagehead-chip">${escapeHtml(pageTitle)}</span>
               </div>
             </div>
 
@@ -451,6 +465,14 @@
       card.classList.add('card', 'bg-base-100', 'shadow-sm', 'border', 'border-base-300');
     });
 
+    pageContent.querySelectorAll('pre, code').forEach((block) => {
+      block.classList.add('sf-template-code');
+    });
+
+    pageContent.querySelectorAll('details').forEach((details) => {
+      details.classList.add('sf-template-details');
+    });
+
     pageContent.querySelectorAll('table').forEach((table) => {
       table.classList.add('sf-template-table');
       table.classList.add('table', 'table-zebra');
@@ -475,6 +497,26 @@
 
     pageContent.querySelectorAll('textarea').forEach((textarea) => {
       textarea.classList.add('textarea', 'textarea-bordered', 'w-full');
+    });
+
+    pageContent.querySelectorAll('.alert').forEach((alert) => {
+      alert.classList.add('rounded-box');
+    });
+
+    pageContent.querySelectorAll('.badge, .badge-pill, .status-badge').forEach((badge) => {
+      badge.classList.add('badge');
+    });
+
+    pageContent.querySelectorAll('.list-group').forEach((list) => {
+      list.classList.add('rounded-box', 'border', 'border-base-300', 'overflow-hidden');
+    });
+
+    pageContent.querySelectorAll('.list-group-item').forEach((item) => {
+      item.classList.add('bg-base-100');
+    });
+
+    pageContent.querySelectorAll('.card-body > .row').forEach((row) => {
+      row.classList.add('sf-inner-grid');
     });
   }
 
@@ -524,6 +566,26 @@
       block.classList.add('sf-surface-block');
       block.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
     });
+
+    pageContent.querySelectorAll('.status-row').forEach((row) => {
+      row.classList.add('sf-status-row');
+    });
+
+    pageContent.querySelectorAll('.status-label').forEach((label) => {
+      label.classList.add('sf-status-label');
+    });
+
+    pageContent.querySelectorAll('.status-value').forEach((value) => {
+      value.classList.add('sf-status-value');
+    });
+
+    pageContent.querySelectorAll('.controls').forEach((controls) => {
+      controls.classList.add('sf-action-row');
+    });
+
+    pageContent.querySelectorAll('thead.text-primary').forEach((head) => {
+      head.classList.add('sf-table-head');
+    });
   }
 
   function enhanceRobotPage() {
@@ -534,14 +596,26 @@
     if (rows[3]) rows[3].classList.add('sf-robot-tool-row');
     rows.forEach((row) => row.classList.add('gap-4'));
 
+    const controlCards = rows[2] ? Array.from(rows[2].querySelectorAll('.card')) : [];
+    if (controlCards[0]) controlCards[0].classList.add('sf-robot-bits-card');
+    if (controlCards[1]) controlCards[1].classList.add('sf-robot-manual-card');
+    if (controlCards[2]) controlCards[2].classList.add('sf-robot-quick-card');
+
+    const toolCards = rows[3] ? Array.from(rows[3].querySelectorAll('.card')) : [];
+    if (toolCards[0]) toolCards[0].classList.add('sf-robot-effector-card');
+    if (toolCards[1]) toolCards[1].classList.add('sf-robot-system-card');
+
     document.querySelectorAll('.sf-robot-status-row .card').forEach((card) => {
-      card.classList.add('sf-stat-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-stat-card', 'sf-card-accent-primary', 'bg-base-100', 'shadow-sm');
     });
     document.querySelectorAll('.sf-robot-position-row .card').forEach((card) => {
-      card.classList.add('sf-data-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-data-card', 'sf-card-accent-info', 'bg-base-100', 'shadow-sm');
     });
     document.querySelectorAll('.sf-robot-control-row .card').forEach((card) => {
-      card.classList.add('sf-action-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-action-card', 'sf-card-accent-warning', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-page-robot .card:has(#debugLog), .sf-page-robot .card:has(#settingsModal)').forEach((card) => {
+      card.classList.add('sf-card-accent-danger');
     });
     document.querySelectorAll('.preset-btn').forEach((btn) => {
       btn.classList.add('sf-action-btn-block', 'w-full', 'justify-start');
@@ -559,6 +633,9 @@
     document.querySelectorAll('.sf-page-robot .card-body h5').forEach((heading) => {
       heading.classList.add('text-sm', 'font-semibold', 'uppercase', 'tracking-wide');
     });
+    document.querySelectorAll('.sf-page-robot .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg', 'font-semibold');
+    });
     document.querySelectorAll('.sf-page-robot .btn-block').forEach((button) => {
       button.classList.add('w-full');
     });
@@ -567,6 +644,36 @@
     });
     document.querySelectorAll('.sf-page-robot .settings-actions .btn').forEach((button) => {
       button.classList.add('btn', 'btn-sm');
+    });
+    document.querySelectorAll('.sf-page-robot .settings-grid-4, .sf-page-robot .settings-grid-2').forEach((grid) => {
+      grid.classList.add('gap-3');
+    });
+    document.querySelectorAll('.sf-page-robot .status-dot').forEach((dot) => {
+      dot.classList.add('sf-status-indicator');
+    });
+    document.querySelectorAll('.sf-page-robot .card-footer .stats').forEach((stats) => {
+      stats.classList.add('sf-card-meta');
+    });
+    document.querySelectorAll('.sf-page-robot .form-group label').forEach((label) => {
+      label.classList.add('sf-field-label');
+    });
+    document.querySelectorAll('.sf-page-robot #debugLog, .sf-page-robot .log-placeholder').forEach((entry) => {
+      entry.classList.add('sf-template-code');
+    });
+    document.querySelectorAll('.sf-page-robot .card-body .row').forEach((row) => {
+      row.classList.add('sf-metric-grid');
+    });
+    document.querySelectorAll('.sf-page-robot .form-group').forEach((group) => {
+      group.classList.add('sf-stack-fields');
+    });
+    document.querySelectorAll('.sf-page-robot .preset-btn').forEach((button) => {
+      button.classList.add('justify-start');
+    });
+    document.querySelectorAll('.sf-page-robot .preset-btn').forEach((button) => {
+      button.parentElement && button.parentElement.classList.add('sf-action-stack');
+    });
+    document.querySelectorAll('.sf-page-robot .card-body > .row > [class*="col-"]').forEach((col) => {
+      col.classList.add('sf-split-action');
     });
   }
 
@@ -580,8 +687,15 @@
 
     rows.forEach((row) => row.classList.add('gap-4'));
 
+    const mediaCards = rows[2] ? Array.from(rows[2].querySelectorAll('.card')) : [];
+    if (mediaCards[0]) mediaCards[0].classList.add('sf-vision-camera-card');
+    if (mediaCards[1]) mediaCards[1].classList.add('sf-vision-result-card');
+
+    const actionCard = rows[1] && rows[1].querySelector('.card');
+    if (actionCard) actionCard.classList.add('sf-vision-primary-action-card');
+
     document.querySelectorAll('.sf-vision-status-row .card').forEach((card) => {
-      card.classList.add('sf-status-strip-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-status-strip-card', 'sf-card-accent-info', 'bg-base-100', 'shadow-sm');
     });
     document.querySelectorAll('.sf-vision-status-row [id$="Card"]').forEach((item) => {
       item.classList.add('sf-inline-status-card', 'rounded-box', 'border', 'border-base-300', 'bg-base-100');
@@ -590,10 +704,13 @@
       card.classList.add('sf-action-strip-card', 'bg-base-100', 'shadow-sm');
     });
     document.querySelectorAll('.sf-vision-media-row .card').forEach((card) => {
-      card.classList.add('sf-media-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-media-card', 'sf-card-accent-primary', 'bg-base-100', 'shadow-sm');
     });
     document.querySelectorAll('.sf-vision-results-row .card').forEach((card) => {
-      card.classList.add('sf-results-card', 'bg-base-100', 'shadow-sm');
+      card.classList.add('sf-results-card', 'sf-card-accent-warning', 'bg-base-100', 'shadow-sm');
+    });
+    document.querySelectorAll('.sf-page-vision .card:has(#debugLog), .sf-page-vision .card:has(#settingsBody)').forEach((card) => {
+      card.classList.add('sf-card-accent-success');
     });
     document.querySelectorAll('#settingsBody details').forEach((details) => {
       details.classList.add('sf-template-details', 'rounded-box', 'border', 'border-base-300', 'bg-base-100');
@@ -610,6 +727,9 @@
     document.querySelectorAll('.sf-page-vision .card-title').forEach((title) => {
       title.classList.add('font-semibold');
     });
+    document.querySelectorAll('.sf-page-vision .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg');
+    });
     document.querySelectorAll('.sf-page-vision #resultsContent').forEach((content) => {
       content.classList.add('text-sm', 'text-base-content/80');
     });
@@ -622,6 +742,37 @@
     document.querySelectorAll('.sf-page-vision .camera-viewer').forEach((viewer) => {
       viewer.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
     });
+    document.querySelectorAll('.sf-page-vision #oldButtons .btn').forEach((button) => {
+      button.classList.add('btn', 'btn-sm');
+    });
+    document.querySelectorAll('.sf-page-vision [id$="Placeholder"]').forEach((placeholder) => {
+      placeholder.classList.add('sf-vision-placeholder');
+    });
+    document.querySelectorAll('.sf-page-vision [id^="status"][id$="Card"]').forEach((card) => {
+      card.classList.add('sf-kpi-card');
+    });
+    document.querySelectorAll('.sf-page-vision .card-body > div[style*="display: grid"]').forEach((grid) => {
+      grid.classList.add('sf-status-kpi-grid');
+    });
+    document.querySelectorAll('.sf-page-vision summary').forEach((summary) => {
+      summary.classList.add('sf-details-summary');
+    });
+    document.querySelectorAll('.sf-page-vision #debugSummary').forEach((summary) => {
+      summary.classList.add('sf-inline-helper');
+    });
+    document.querySelectorAll('.sf-page-vision #settingsBody > div[style*="margin-bottom"]').forEach((block) => {
+      block.classList.add('sf-panel-note');
+    });
+    document.querySelectorAll('.sf-page-vision #settingsBody > div[style*="display: flex"], .sf-page-vision #settingsBody > div[style*="display: grid"]').forEach((block) => {
+      block.classList.add('sf-settings-layout-block');
+    });
+    document.querySelectorAll('.sf-page-vision #settingsBody h5').forEach((title) => {
+      title.classList.add('sf-mini-title');
+    });
+    document.querySelectorAll('.sf-page-vision #settingsBody label').forEach((label) => {
+      label.classList.add('sf-field-label');
+    });
+    applyVisionDynamicEnhancements();
   }
 
   function enhancePlcPage() {
@@ -644,6 +795,9 @@
     });
     document.querySelectorAll('.btn-control').forEach((button) => {
       button.classList.add('btn', 'btn-sm', 'btn-outline');
+    });
+    document.querySelectorAll('.db-map-table thead, .db-map-table tbody').forEach((section) => {
+      section.classList.add('sf-plc-table-section');
     });
     document.querySelectorAll('.stat-box').forEach((box) => {
       box.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
@@ -688,12 +842,20 @@
     const settingsBody = document.getElementById('settingsBody');
     if (settingsBody) {
       settingsBody.classList.add('space-y-4');
+      settingsBody.querySelectorAll('input[type="hidden"] + div, div[style*="padding: 16px"], div[style*="padding: 12px"]').forEach((panel) => {
+        panel.classList.add('sf-settings-panel');
+      });
     }
   }
 
   function enhanceRfidPage() {
     const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
     rows.forEach((row) => row.classList.add('gap-4'));
+
+    const cards = Array.from(document.querySelectorAll('.sf-page-rfid .card'));
+    cards.forEach((card, index) => {
+      card.classList.add(index === 0 ? 'sf-rfid-hero-card' : 'sf-rfid-data-card');
+    });
 
     document.querySelectorAll('.conveyor-container').forEach((container) => {
       container.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
@@ -710,14 +872,34 @@
     document.querySelectorAll('.sf-page-content .table-hover').forEach((table) => {
       table.classList.add('table-zebra');
     });
+    document.querySelectorAll('.sf-page-rfid .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg', 'font-semibold');
+    });
+    document.querySelectorAll('.sf-page-rfid .card-category').forEach((text) => {
+      text.classList.add('text-sm', 'text-base-content/60');
+    });
   }
 
   function enhanceIoLinkPage() {
     const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
     rows.forEach((row) => row.classList.add('gap-4'));
 
+    const heroCards = rows[0] ? Array.from(rows[0].querySelectorAll('.card')) : [];
+    if (heroCards[0]) heroCards[0].classList.add('sf-iolink-device-card');
+    if (heroCards[1]) heroCards[1].classList.add('sf-iolink-status-card');
+
+    const trendCard = rows[2] && rows[2].querySelector('.card');
+    if (trendCard) trendCard.classList.add('sf-iolink-trends-card');
+
     document.querySelectorAll('.status-panel').forEach((panel) => {
       panel.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('.sf-page-iolink .card').forEach((card, index) => {
+      card.classList.add(index < 2 ? 'sf-card-accent-info' : 'sf-card-accent-primary');
+    });
+
+    document.querySelectorAll('.status-panel .status-value').forEach((value) => {
+      value.classList.add('sf-kpi-value');
     });
 
     document.querySelectorAll('.controls').forEach((controls) => {
@@ -731,11 +913,112 @@
     document.querySelectorAll('.chart-container').forEach((container) => {
       container.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
     });
+    document.querySelectorAll('#portDetailsContainer .port-detail-card').forEach((card) => {
+      card.classList.add('rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('#portTableBody tr').forEach((row) => {
+      row.classList.add('sf-port-row');
+    });
+    document.querySelectorAll('.sf-page-iolink .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg', 'font-semibold');
+    });
+    document.querySelectorAll('.sf-page-iolink .card-category').forEach((text) => {
+      text.classList.add('text-sm', 'text-base-content/60');
+    });
+    document.querySelectorAll('.sf-page-iolink .chart-container h6').forEach((title) => {
+      title.classList.add('sf-mini-title');
+    });
+    document.querySelectorAll('.sf-page-iolink .chart-container').forEach((container) => {
+      container.classList.add('sf-chart-panel');
+    });
+    document.querySelectorAll('#supervisionTableBody, #softwareTableBody').forEach((body) => {
+      body.classList.add('sf-stat-table');
+    });
 
     const productImage = document.getElementById('productImage');
     if (productImage) {
       productImage.classList.add('rounded-box', 'border', 'border-base-300');
     }
+
+    const productPlaceholder = document.getElementById('productImagePlaceholder');
+    if (productPlaceholder) {
+      productPlaceholder.classList.add('sf-vision-placeholder');
+    }
+
+    applyIoLinkDynamicEnhancements();
+  }
+
+  function applyRobotDynamicEnhancements() {
+    const log = document.getElementById('debugLog');
+    if (log) {
+      log.classList.add('sf-template-code');
+    }
+  }
+
+  function applyVisionDynamicEnhancements() {
+    const resultsContent = document.getElementById('resultsContent');
+    if (resultsContent) {
+      resultsContent.querySelectorAll('table').forEach((table) => {
+        table.classList.add('table', 'table-zebra');
+      });
+      resultsContent.querySelectorAll('tr').forEach((row) => {
+        row.classList.add('sf-port-row');
+      });
+      resultsContent.querySelectorAll('pre, code').forEach((block) => {
+        block.classList.add('sf-template-code');
+      });
+      resultsContent.querySelectorAll('h1, h2, h3, h4, h5, h6, strong').forEach((heading) => {
+        heading.classList.add('sf-mini-title');
+      });
+      resultsContent.querySelectorAll('p, li, div').forEach((node) => {
+        if (node.children.length === 0 && node.textContent.trim()) {
+          node.classList.add('sf-result-line');
+        }
+      });
+    }
+  }
+
+  function applyIoLinkDynamicEnhancements() {
+    document.querySelectorAll('#portDetailsContainer > *').forEach((card) => {
+      card.classList.add('port-detail-card', 'sf-dynamic-card', 'rounded-box', 'border', 'border-base-300', 'bg-base-100');
+    });
+    document.querySelectorAll('#portDetailsContainer code').forEach((code) => {
+      code.classList.add('sf-template-code');
+    });
+    document.querySelectorAll('#portTableBody tr').forEach((row) => {
+      row.classList.add('sf-port-row');
+    });
+    document.querySelectorAll('#supervisionTableBody tr, #softwareTableBody tr').forEach((row) => {
+      row.classList.add('sf-port-row');
+    });
+    document.querySelectorAll('#portDetailsContainer p.text-center, #supervisionTableBody .text-center, #softwareTableBody .text-center').forEach((item) => {
+      item.classList.add('sf-inline-helper');
+    });
+  }
+
+  function applyPlcDynamicEnhancements() {
+    document.querySelectorAll('#cameraDbEditorBody input').forEach((input) => {
+      input.classList.add('input', 'input-bordered', 'input-sm', 'w-full');
+    });
+    document.querySelectorAll('#cameraDbEditorBody select').forEach((select) => {
+      select.classList.add('select', 'select-bordered', 'select-sm', 'w-full');
+    });
+    document.querySelectorAll('#cameraDbEditorBody tr').forEach((row) => {
+      row.classList.add('sf-port-row');
+    });
+  }
+
+  function observeDynamicContent(selector, callback) {
+    const target = document.querySelector(selector);
+    if (!target || target.dataset.sfObserved === 'true') return;
+    target.dataset.sfObserved = 'true';
+
+    const observer = new MutationObserver(() => {
+      callback();
+    });
+
+    observer.observe(target, { childList: true, subtree: true });
+    callback();
   }
 
   function enhanceEdgePage() {
@@ -743,6 +1026,10 @@
     if (table) {
       table.classList.add('table', 'table-zebra');
     }
+
+    document.querySelectorAll('.sf-page-edge .card').forEach((card, index) => {
+      card.classList.add(index === 0 ? 'sf-edge-summary-card' : 'sf-edge-data-card');
+    });
 
     const updated = document.getElementById('lastUpdated');
     if (updated) {
@@ -756,6 +1043,10 @@
   }
 
   function enhanceHotspotPage() {
+    document.querySelectorAll('.sf-page-hotspot .card').forEach((card, index) => {
+      card.classList.add(index === 0 ? 'sf-hotspot-status-card' : 'sf-hotspot-help-card');
+    });
+
     document.querySelectorAll('.list-group').forEach((list) => {
       list.classList.add('rounded-box', 'border', 'border-base-300', 'overflow-hidden');
     });
@@ -772,9 +1063,19 @@
     if (refreshButton) {
       refreshButton.classList.add('btn', 'btn-primary', 'btn-sm');
     }
+    document.querySelectorAll('.sf-page-hotspot ol').forEach((list) => {
+      list.classList.add('list-decimal', 'list-inside', 'space-y-2');
+    });
+    document.querySelectorAll('.sf-page-hotspot .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg', 'font-semibold');
+    });
   }
 
   function enhanceColorVotingPage() {
+    document.querySelectorAll('.sf-page-color-voting .card').forEach((card, index) => {
+      card.classList.add(index === 0 ? 'sf-voting-main-card' : 'sf-voting-side-card');
+    });
+
     document.querySelectorAll('.result-box').forEach((box) => {
       box.classList.add('rounded-box', 'border', 'shadow-sm');
     });
@@ -786,9 +1087,20 @@
     document.querySelectorAll('input[type="range"]').forEach((slider) => {
       slider.classList.add('range', 'range-primary');
     });
+    const testButton = document.getElementById('testBtn');
+    if (testButton) {
+      testButton.classList.add('btn', 'btn-success');
+    }
+    document.querySelectorAll('.sf-page-color-voting .card-header .card-title').forEach((title) => {
+      title.classList.add('text-lg', 'font-semibold');
+    });
   }
 
   function enhanceLegacyVisionPage() {
+    document.querySelectorAll('.sf-page-vision-legacy .panel').forEach((panel, index) => {
+      panel.classList.add(index === 0 ? 'sf-legacy-primary-panel' : 'sf-legacy-secondary-panel');
+    });
+
     document.querySelectorAll('.camera-controls .btn').forEach((button) => {
       button.classList.add('btn', 'btn-sm');
     });
@@ -800,6 +1112,9 @@
     document.querySelectorAll('input[type="range"]').forEach((slider) => {
       slider.classList.add('range', 'range-primary');
     });
+    document.querySelectorAll('.sf-page-vision-legacy h4, .sf-page-vision-legacy h5').forEach((heading) => {
+      heading.classList.add('sf-mini-title');
+    });
   }
 
   function enhancePageContent() {
@@ -810,16 +1125,22 @@
       document.body.classList.add('sf-page-robot');
       enhanceRobotPage();
       enhanceRobotModal();
+      applyRobotDynamicEnhancements();
     } else if (normalizedPath === '/vision-system-new.html') {
       document.body.classList.add('sf-page-vision');
       enhanceVisionPage();
       enhanceVisionSettingsPanel();
+      observeDynamicContent('#resultsContent', applyVisionDynamicEnhancements);
     } else if (normalizedPath === '/rfid.html') {
       document.body.classList.add('sf-page-rfid');
       enhanceRfidPage();
     } else if (normalizedPath === '/io-link.html') {
       document.body.classList.add('sf-page-iolink');
       enhanceIoLinkPage();
+      observeDynamicContent('#portDetailsContainer', applyIoLinkDynamicEnhancements);
+      observeDynamicContent('#portTableBody', applyIoLinkDynamicEnhancements);
+      observeDynamicContent('#supervisionTableBody', applyIoLinkDynamicEnhancements);
+      observeDynamicContent('#softwareTableBody', applyIoLinkDynamicEnhancements);
     } else if (normalizedPath === '/edge-device-stats.html') {
       document.body.classList.add('sf-page-edge');
       enhanceEdgePage();
@@ -835,6 +1156,7 @@
     } else if (normalizedPath === '/plc-diagnostics.html') {
       document.body.classList.add('sf-page-plc');
       enhancePlcPage();
+      observeDynamicContent('#cameraDbEditorBody', applyPlcDynamicEnhancements);
     }
   }
 
