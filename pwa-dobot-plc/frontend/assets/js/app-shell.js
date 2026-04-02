@@ -238,6 +238,26 @@
     });
   }
 
+  function applyTheme(theme) {
+    const normalized = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', normalized);
+    localStorage.setItem('sf-template-theme', normalized);
+    document.querySelectorAll('[data-sf-theme-select]').forEach((select) => {
+      select.value = normalized;
+    });
+  }
+
+  function initThemeControls() {
+    const savedTheme = localStorage.getItem('sf-template-theme') || document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(savedTheme);
+
+    document.querySelectorAll('[data-sf-theme-select]').forEach((select) => {
+      if (select.dataset.boundTheme === 'true') return;
+      select.dataset.boundTheme = 'true';
+      select.addEventListener('change', () => applyTheme(select.value));
+    });
+  }
+
   function buildNav(items) {
     return items.map((item) => `
       <a class="sf-nav-item" href="${item.href}">
@@ -371,6 +391,13 @@
               </div>
             </div>
             <div class="sf-topbar-right">
+              <label class="sf-theme-wrap">
+                <span>Theme</span>
+                <select class="sf-theme-select" data-sf-theme-select>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
               <a class="sf-btn sf-btn-ghost" href="/index.html">
                 <i class="material-icons">dashboard</i>
                 Dashboard
@@ -394,9 +421,136 @@
     wrapper.outerHTML = shellMarkup;
   }
 
+  function upgradeCommonContent() {
+    const pageContent = document.querySelector('.sf-page-content');
+    if (!pageContent) return;
+
+    pageContent.querySelectorAll('.card').forEach((card) => {
+      card.classList.add('sf-template-card');
+    });
+
+    pageContent.querySelectorAll('table').forEach((table) => {
+      table.classList.add('sf-template-table');
+    });
+
+    pageContent.querySelectorAll('.btn, button').forEach((button) => {
+      button.classList.add('sf-template-btn');
+    });
+
+    pageContent.querySelectorAll('.form-group').forEach((group) => {
+      group.classList.add('sf-template-field');
+    });
+  }
+
+  function normalizeLegacyLayout() {
+    const pageContent = document.querySelector('.sf-page-content');
+    if (!pageContent) return;
+
+    pageContent.querySelectorAll('.container-fluid').forEach((container) => {
+      container.classList.add('sf-template-container');
+    });
+
+    pageContent.querySelectorAll('.row').forEach((row) => {
+      row.classList.add('sf-template-row');
+      const directCols = Array.from(row.children).filter((child) => /(^|\s)col[-\w]*/.test(child.className));
+      const colCount = Math.max(1, directCols.length);
+      row.dataset.sfCols = String(Math.min(colCount, 4));
+      directCols.forEach((col) => col.classList.add('sf-template-col'));
+    });
+
+    pageContent.querySelectorAll('.card-header').forEach((header) => {
+      header.classList.add('sf-template-header');
+      Array.from(header.classList)
+        .filter((cls) => cls.startsWith('card-header-'))
+        .forEach((cls) => header.classList.remove(cls));
+
+      const icon = header.querySelector('.card-icon');
+      if (icon) {
+        header.classList.add('has-template-icon');
+      }
+    });
+
+    pageContent.querySelectorAll('.card-body').forEach((body) => body.classList.add('sf-template-body'));
+    pageContent.querySelectorAll('.card-footer').forEach((footer) => footer.classList.add('sf-template-footer'));
+    pageContent.querySelectorAll('.table-responsive').forEach((wrap) => wrap.classList.add('sf-template-table-wrap'));
+
+    pageContent.querySelectorAll('.btn').forEach((button) => {
+      if (button.classList.contains('btn-primary')) button.dataset.sfVariant = 'primary';
+      else if (button.classList.contains('btn-success')) button.dataset.sfVariant = 'success';
+      else if (button.classList.contains('btn-danger') || button.classList.contains('btn-error')) button.dataset.sfVariant = 'danger';
+      else if (button.classList.contains('btn-warning')) button.dataset.sfVariant = 'warning';
+      else if (button.classList.contains('btn-info')) button.dataset.sfVariant = 'info';
+      else if (button.classList.contains('btn-outline')) button.dataset.sfVariant = 'outline';
+      else button.dataset.sfVariant = button.dataset.sfVariant || 'neutral';
+    });
+
+    pageContent.querySelectorAll('.status-panel, .controls, .camera-viewer, .conveyor-container, .chart-container, .panel, .stat-card, .stat-box').forEach((block) => {
+      block.classList.add('sf-surface-block');
+    });
+  }
+
+  function enhanceRobotPage() {
+    const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
+    if (rows[0]) rows[0].classList.add('sf-robot-status-row');
+    if (rows[1]) rows[1].classList.add('sf-robot-position-row');
+    if (rows[2]) rows[2].classList.add('sf-robot-control-row');
+    if (rows[3]) rows[3].classList.add('sf-robot-tool-row');
+
+    document.querySelectorAll('.sf-robot-status-row .card').forEach((card) => card.classList.add('sf-stat-card'));
+    document.querySelectorAll('.sf-robot-position-row .card').forEach((card) => card.classList.add('sf-data-card'));
+    document.querySelectorAll('.sf-robot-control-row .card').forEach((card) => card.classList.add('sf-action-card'));
+    document.querySelectorAll('.preset-btn').forEach((btn) => btn.classList.add('sf-action-btn-block'));
+    document.querySelectorAll('#manualX, #manualY, #manualZ, #manualR').forEach((input) => input.classList.add('sf-robot-input'));
+  }
+
+  function enhanceVisionPage() {
+    const rows = Array.from(document.querySelectorAll('.sf-page-content .container-fluid > .row'));
+    if (rows[0]) rows[0].classList.add('sf-vision-status-row');
+    if (rows[1]) rows[1].classList.add('sf-vision-actions-row');
+    if (rows[2]) rows[2].classList.add('sf-vision-media-row');
+    if (rows[3]) rows[3].classList.add('sf-vision-results-row');
+    if (rows[5]) rows[5].classList.add('sf-vision-settings-row');
+
+    document.querySelectorAll('.sf-vision-status-row .card').forEach((card) => card.classList.add('sf-status-strip-card'));
+    document.querySelectorAll('.sf-vision-status-row [id$="Card"]').forEach((item) => item.classList.add('sf-inline-status-card'));
+    document.querySelectorAll('.sf-vision-actions-row .card').forEach((card) => card.classList.add('sf-action-strip-card'));
+    document.querySelectorAll('.sf-vision-media-row .card').forEach((card) => card.classList.add('sf-media-card'));
+    document.querySelectorAll('.sf-vision-results-row .card').forEach((card) => card.classList.add('sf-results-card'));
+    document.querySelectorAll('#settingsBody details').forEach((details) => details.classList.add('sf-template-details'));
+  }
+
+  function enhancePlcPage() {
+    const firstCard = document.querySelector('.sf-page-content .container-fluid > .row .card');
+    if (firstCard) firstCard.classList.add('sf-plc-admin-card');
+
+    document.querySelectorAll('.db-map-panel').forEach((panel) => panel.classList.add('sf-plc-map-panel'));
+    document.querySelectorAll('.db-map-controls').forEach((controls) => controls.classList.add('sf-plc-control-grid'));
+    document.querySelectorAll('.db-map-actions').forEach((actions) => actions.classList.add('sf-plc-action-row'));
+    document.querySelectorAll('.status-panel').forEach((panel) => panel.classList.add('sf-plc-status-panel'));
+    document.querySelectorAll('.controls').forEach((controls) => controls.classList.add('sf-plc-quick-controls'));
+  }
+
+  function enhancePageContent() {
+    normalizeLegacyLayout();
+    upgradeCommonContent();
+
+    if (normalizedPath === '/robot-arm.html') {
+      document.body.classList.add('sf-page-robot');
+      enhanceRobotPage();
+    } else if (normalizedPath === '/vision-system-new.html') {
+      document.body.classList.add('sf-page-vision');
+      enhanceVisionPage();
+    } else if (normalizedPath === '/plc-diagnostics.html') {
+      document.body.classList.add('sf-page-plc');
+      enhancePlcPage();
+    }
+  }
+
   function bootstrap() {
     transformLegacySubpage();
+    initThemeControls();
     initShellInteractions();
+    enhancePageContent();
   }
 
   if (document.readyState === 'loading') {

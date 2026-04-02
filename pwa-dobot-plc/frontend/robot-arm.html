@@ -460,8 +460,10 @@
 <script src="/assets/js/plugins/bootstrap-notify.js"></script>
 <script src="/assets/js/material-dashboard.js?v=2.1.0"></script>
 <script src="/assets/js/app-shell.js"></script>
+<script src="/assets/js/robot-arm-page.js"></script>
 
   <script>
+    if (!window.__robotArmPageInitialized) {
     // Read a CSS custom property once and cache it
     const _themeCache = {};
     function theme(name) {
@@ -1001,6 +1003,7 @@
         startPolling();
       }
     });
+    }
   </script>
 
   <script>

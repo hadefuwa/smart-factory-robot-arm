@@ -102,8 +102,8 @@
     "db124": {
       "enabled": true,
       "db_number": 124,
-      "total_size": 8,
-      "comment": "Camera DB: handshake, result bits, counters, and cube colors",
+      "total_size": 2,
+      "comment": "Camera DB: start/handshake bits and cube detection bits",
       "tags": {
         "start": {
           "byte": 0,
@@ -122,43 +122,25 @@
           "byte": 0,
           "bit": 3
         },
-        "object_detected": {
+        "defect_detected": {
           "byte": 0,
           "bit": 4
         },
-        "object_ok": {
+        "reject_command_from_plc": {
           "byte": 0,
           "bit": 5
         },
-        "defect_detected": {
+        "yellow_cube_detected": {
           "byte": 0,
           "bit": 6
         },
-        "object_number": {
-          "byte": 2
+        "white_cube_detected": {
+          "byte": 0,
+          "bit": 7
         },
-        "defect_number": {
-          "byte": 4
-        },
-        "yellow_cube": {
-          "byte": 6,
+        "metal_cube_detected": {
+          "byte": 1,
           "bit": 0
-        },
-        "white_cube": {
-          "byte": 6,
-          "bit": 1
-        },
-        "steel_cube": {
-          "byte": 6,
-          "bit": 2
-        },
-        "aluminum_cube": {
-          "byte": 6,
-          "bit": 3
-        },
-        "counter_exceeded": {
-          "byte": 6,
-          "bit": 4
         }
       }
     }
