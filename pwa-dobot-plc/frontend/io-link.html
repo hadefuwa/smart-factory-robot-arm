@@ -7,17 +7,14 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>IO-Link Master - Smart Factory</title>
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
-  
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
+
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  
-  <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
   <style>
     .port-active, .port-active td, .port-active th, .port-active code { color: #1a1a1a !important; }
-    
+
     /* Chart container styling */
     .chart-container {
       padding: 10px;
@@ -26,7 +23,7 @@
       margin-bottom: 10px;
       min-height: 300px;
     }
-    
+
     /* Make charts taller and more visible - responsive */
     .ct-perfect-fourth {
       display: block;
@@ -35,7 +32,7 @@
       height: 280px;
       min-height: 250px;
     }
-    
+
     /* Responsive chart height on smaller screens */
     @media (max-width: 768px) {
       .ct-perfect-fourth {
@@ -45,7 +42,7 @@
         min-height: 280px;
       }
     }
-    
+
     /* Chart line and area colors for each graph */
     #chartCurrent .ct-line {
       stroke: #4caf50;
@@ -59,7 +56,7 @@
       stroke: #4caf50;
       stroke-width: 8px;
     }
-    
+
     #chartVoltage .ct-line {
       stroke: #ff9800;
       stroke-width: 3px;
@@ -72,7 +69,7 @@
       stroke: #ff9800;
       stroke-width: 8px;
     }
-    
+
     #chartTemp .ct-line {
       stroke: #f44336;
       stroke-width: 3px;
@@ -85,14 +82,14 @@
       stroke: #f44336;
       stroke-width: 8px;
     }
-    
+
     /* Chart labels - responsive and readable */
     .ct-label {
       color: rgba(255, 255, 255, 0.7);
       font-size: 10px;
       fill: rgba(255, 255, 255, 0.7);
     }
-    
+
     /* X-axis labels - better spacing and readability */
     .ct-chart .ct-label.ct-horizontal {
       text-anchor: middle;
@@ -101,300 +98,305 @@
       text-overflow: ellipsis;
       max-width: 60px;
     }
-    
+
     /* Better spacing for x-axis */
     .ct-chart .ct-axis-x {
       overflow: visible;
     }
-    
+
     /* Ensure chart area has enough padding for labels */
     .ct-chart-line .ct-area {
       clip-path: inset(0 0 10% 0);
     }
-    
+
     /* Chart grid */
     .ct-grid {
       stroke: rgba(255, 255, 255, 0.1);
       stroke-width: 1px;
     }
-    
+
     /* Ensure charts resize on window resize */
     .ct-chart {
       overflow: visible;
     }
   </style>
-  
+
   <!-- PWA Manifest -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <!-- All styles consolidated in professional-theme.css -->
 </head>
-
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-iolink">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/edge-device-stats.html">
-              <i class="material-icons">memory</i>
-              <p>Edge Device Stats</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" data-action="refreshNow">
+          <i class="material-icons">refresh</i>
+          Refresh
+        </button>
+        <button class="sf-btn sf-btn-danger btn btn-error btn-sm" type="button" data-action="emergencyStop">
+          <i class="material-icons">stop_circle</i>
+          E-Stop
+        </button>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">IO-Link Master</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-          </button>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
         </div>
-      </nav>
-      <!-- End Navbar -->
 
-      <div class="content">
-        <div class="container-fluid">
-          <!-- Product Image and Header -->
-          <div class="row">
-            <div class="col-md-3">
-              <div class="card">
-                <div class="card-body text-center">
-                  <img id="productImage" src="/assets/img/AL1300.png" alt="IO-Link Master" 
-                       class="img-fluid" style="max-height: 200px; object-fit: contain;"
-                       onerror="this.onerror=null; this.src='/api/io-link/product-image';">
-                  <div id="productImagePlaceholder" style="display:none; padding: 20px; color: #666;">
-                    <i class="material-icons" style="font-size: 80px;">settings_input_component</i>
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item active" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
+
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">I/O Supervision</p>
+            <h1 class="sf-topbar-title">IO-Link Master</h1>
+          </div>
+        </div>
+
+        <main class="sf-content">
+
+          <section class="sf-page-hero sf-page-hero--iolink">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">I/O Supervision</p>
+              <h2>Track the IO-Link master, connected ports, and live supervision data in one Matrix workspace.</h2>
+              <p>
+                Product identity, polling controls, port telemetry, supervision history, software versions, and active port details stay wired to the same live endpoints while the page body moves into a cleaner Matrix layout.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Master</span>
+                <strong>AL1300</strong>
+              </div>
+              <div>
+                <span>Polling</span>
+                <strong>Live</strong>
+              </div>
+              <div>
+                <span>Data</span>
+                <strong>Port Details</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="sf-row sf-stage sf-stage-1">
+            <article class="sf-panel sf-iolink-device-card">
+              <header class="sf-panel-head">
+                <h3>Device Identity</h3>
+                <p>Product image and master reference.</p>
+              </header>
+              <div class="flex items-center justify-center p-4">
+                <div class="w-full max-w-xs text-center">
+                  <img
+                    id="productImage"
+                    src="/assets/img/AL1300.png"
+                    alt="IO-Link Master"
+                    class="rounded-box border border-base-300"
+                    style="max-height:200px; object-fit:contain; width:100%;"
+                    onerror="this.onerror=null; this.src='/api/io-link/product-image';"
+                  >
+                  <div id="productImagePlaceholder" class="sf-vision-placeholder" style="display:none; padding:20px;">
+                    <i class="material-icons" style="font-size:80px;">settings_input_component</i>
                     <p>AL1300 IO-Link Master</p>
                   </div>
                 </div>
               </div>
-            </div>
-            <div class="col-md-9">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title" id="deviceName">IO-Link Master</h4>
-                  <p class="card-category">IFM IO-Link Master - Port status, supervision, and software versions</p>
+            </article>
+
+            <article class="sf-panel sf-iolink-status-card">
+              <header class="sf-panel-head">
+                <h3 id="deviceName">IO-Link Master</h3>
+                <p>IFM master health, polling cadence, and current source.</p>
+              </header>
+              <div class="status-panel rounded-box border border-base-300 bg-base-100 p-4">
+                <div class="status-row">
+                  <div class="status-label">Connection:</div>
+                  <div class="status-value" id="connectionStatus">Checking...</div>
                 </div>
-                <div class="card-body">
-                  <div class="status-panel">
-                    <div class="status-row">
-                      <div class="status-label">Connection:</div>
-                      <div class="status-value" id="connectionStatus">Checking...</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Data Source:</div>
-                      <div class="status-value" id="dataSource">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Last Update:</div>
-                      <div class="status-value" id="lastUpdate">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Poll Interval:</div>
-                      <div class="status-value" id="pollInterval">5s</div>
-                    </div>
-                  </div>
-                  <div class="controls" style="margin-top: 12px;">
-                    <button class="btn-control" onclick="setPollInterval(3)">3s</button>
-                    <button class="btn-control" onclick="setPollInterval(5)">5s</button>
-                    <button class="btn-control" onclick="setPollInterval(10)">10s</button>
-                    <button class="btn-control btn-primary" onclick="refreshNow()">Refresh Now</button>
-                  </div>
+                <div class="status-row">
+                  <div class="status-label">Data Source:</div>
+                  <div class="status-value" id="dataSource">-</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Last Update:</div>
+                  <div class="status-value" id="lastUpdate">-</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Poll Interval:</div>
+                  <div class="status-value" id="pollInterval">5s</div>
                 </div>
               </div>
-            </div>
-          </div>
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button class="sf-btn sf-btn-ghost" onclick="setPollInterval(3)">3s</button>
+                <button class="sf-btn sf-btn-ghost" onclick="setPollInterval(5)">5s</button>
+                <button class="sf-btn sf-btn-ghost" onclick="setPollInterval(10)">10s</button>
+                <button class="sf-btn sf-btn-primary" onclick="refreshNow()">Refresh Now</button>
+              </div>
+            </article>
+          </section>
 
           <!-- Port Status Table -->
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-info">
-                  <h4 class="card-title">Port Status</h4>
-                  <p class="card-category">IO-Link ports and connected devices</p>
-                </div>
-                <div class="card-body table-responsive">
-                  <table class="table table-hover">
-                    <thead class="text-primary">
-                      <tr>
-                        <th>Port</th>
-                        <th>Mode</th>
-                        <th>Comm. Mode</th>
-                        <th>MasterCycle</th>
-                        <th>Vendor ID</th>
-                        <th>Device ID</th>
-                        <th>Name</th>
-                        <th>Serial</th>
-                        <th>PD In</th>
-                        <th>PD Out</th>
-                      </tr>
-                    </thead>
-                    <tbody id="portTableBody">
-                      <tr>
-                        <td colspan="10" class="text-center">Loading...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+          <section class="sf-stage sf-stage-2">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Port Status</h3>
+                <p>IO-Link ports and connected devices</p>
+              </header>
+              <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Port</th><th>Mode</th><th>Comm. Mode</th><th>MasterCycle</th>
+                      <th>Vendor ID</th><th>Device ID</th><th>Name</th><th>Serial</th>
+                      <th>PD In</th><th>PD Out</th>
+                    </tr>
+                  </thead>
+                  <tbody id="portTableBody">
+                    <tr><td colspan="10" class="text-center">Loading...</td></tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
-          <!-- Supervision Trends - Full Width -->
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card card-chart">
-                <div class="card-header card-header-success">
-                  <h4 class="card-title">Supervision Trends</h4>
-                  <p class="card-category">Current, Voltage, Temperature over time</p>
+          <!-- Charts -->
+          <section class="sf-stage sf-stage-2">
+            <article class="sf-panel sf-iolink-trends-card">
+              <header class="sf-panel-head">
+                <h3>Supervision Trends</h3>
+                <p>Current, Voltage, Temperature over time</p>
+              </header>
+              <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div class="chart-container">
+                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Current (mA)</h6>
+                  <div class="ct-chart ct-perfect-fourth" id="chartCurrent"></div>
                 </div>
-                <div class="card-body">
-                  <div class="row">
-                    <div class="col-md-4 col-sm-12">
-                      <div class="chart-container">
-                        <h6 class="text-center font-weight-bold">Current (mA)</h6>
-                        <div class="ct-chart ct-perfect-fourth" id="chartCurrent"></div>
-                      </div>
-                    </div>
-                    <div class="col-md-4 col-sm-12">
-                      <div class="chart-container">
-                        <h6 class="text-center font-weight-bold">Voltage (mV)</h6>
-                        <div class="ct-chart ct-perfect-fourth" id="chartVoltage"></div>
-                      </div>
-                    </div>
-                    <div class="col-md-4 col-sm-12">
-                      <div class="chart-container">
-                        <h6 class="text-center font-weight-bold">Temperature (°C)</h6>
-                        <div class="ct-chart ct-perfect-fourth" id="chartTemp"></div>
-                      </div>
-                    </div>
-                  </div>
+                <div class="chart-container">
+                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Voltage (mV)</h6>
+                  <div class="ct-chart ct-perfect-fourth" id="chartVoltage"></div>
+                </div>
+                <div class="chart-container">
+                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Temperature (°C)</h6>
+                  <div class="ct-chart ct-perfect-fourth" id="chartTemp"></div>
                 </div>
               </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
-          <!-- Supervision and Software -->
-          <div class="row">
-            <div class="col-md-6">
-              <div class="card">
-                <div class="card-header card-header-success">
-                  <h4 class="card-title">Supervision</h4>
-                  <p class="card-category">Device operational parameters</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table">
-                      <tbody id="supervisionTableBody">
-                        <tr><td colspan="2" class="text-center">-</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+          <!-- Supervision and Software Tables -->
+          <section class="sf-row sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Supervision</h3>
+                <p>Device operational parameters</p>
+              </header>
+              <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                  <tbody id="supervisionTableBody">
+                    <tr><td colspan="2" class="text-center">-</td></tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <div class="col-md-6">
-              <div class="card">
-                <div class="card-header card-header-warning">
-                  <h4 class="card-title">Software Versions</h4>
-                  <p class="card-category">Firmware and component versions</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table">
-                      <tbody id="softwareTableBody">
-                        <tr><td colspan="2" class="text-center">-</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+            </article>
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Software Versions</h3>
+                <p>Firmware and component versions</p>
+              </header>
+              <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                  <tbody id="softwareTableBody">
+                    <tr><td colspan="2" class="text-center">-</td></tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
-          <!-- Port Details Section -->
-          <div class="row" id="portDetailsSection">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-info">
-                  <h4 class="card-title">Active Port Details</h4>
-                  <p class="card-category">Process data and decoded device status</p>
-                </div>
-                <div class="card-body" id="portDetailsContainer">
-                  <p class="text-center">Loading...</p>
-                </div>
+          <!-- Port Details -->
+          <section class="sf-stage sf-stage-3" id="portDetailsSection">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Active Port Details</h3>
+                <p>Process data and decoded device status</p>
+              </header>
+              <div id="portDetailsContainer">
+                <p style="text-align:center;">Loading...</p>
               </div>
-            </div>
-          </div>
-        </div>
+            </article>
+          </section>
+
+        </main>
       </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
-  <!-- Core JS Files -->
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
-<script src="/assets/js/core/bootstrap-material-design.min.js"></script>
-<script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-<script src="/assets/js/plugins/chartist.min.js"></script>
-<script src="/assets/js/material-dashboard.min.js?v=2.1.0" type="text/javascript"></script>
-<script src="/assets/js/app-shell.js"></script>
+  <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
+  <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
+  <script src="/assets/js/plugins/chartist.min.js"></script>
+  <script src="/assets/js/material-dashboard.min.js?v=2.1.0" type="text/javascript"></script>
+  <script src="/assets/js/app-shell.js"></script>
 
   <script>
     // ========== IO-LINK MASTER LOGIC ==========
@@ -518,25 +520,25 @@
         `;
         tbody.appendChild(row);
       }
-      
+
       // Load details for active ports
       loadActivePortDetails(ports);
     }
 
     async function loadActivePortDetails(ports) {
       const activePorts = ports.filter(p => (p.mode || '').toLowerCase().includes('io-link'));
-      
+
       if (activePorts.length === 0) {
         document.getElementById('portDetailsContainer').innerHTML = '<p class="text-center">No active IO-Link ports</p>';
         return;
       }
-      
+
       let html = '';
       for (const port of activePorts) {
         try {
           const res = await fetch(`${API_BASE}/api/io-link/port/${port.port}`, { signal: AbortSignal.timeout(30000) });
           const data = await res.json();
-          
+
           if (data.success && data.port) {
             html += generatePortDetailsHTML(data.port);
           } else {
@@ -547,14 +549,14 @@
           html += `<div class="alert alert-warning">Port ${port.port}: ${error.name === 'TimeoutError' ? 'Request timed out (30s)' : 'Error loading details'}</div>`;
         }
       }
-      
+
       document.getElementById('portDetailsContainer').innerHTML = html || '<p class="text-center">No port details available</p>';
     }
 
     function generatePortDetailsHTML(port) {
       let html = `<div class="port-detail-card" style="border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.02);">`;
       html += `<h5 class="text-info">Port ${port.port} - ${escapeHtml(port.name || 'Unknown Device')}</h5>`;
-      
+
       // Device Info
       html += '<div class="row mb-2">';
       html += `<div class="col-md-3"><small><strong>Vendor ID:</strong> ${escapeHtml(port.vendor_id || '-')}</small></div>`;
@@ -562,7 +564,7 @@
       html += `<div class="col-md-3"><small><strong>Serial:</strong> ${escapeHtml(port.serial || '-')}</small></div>`;
       html += `<div class="col-md-3"><small><strong>Mode:</strong> ${escapeHtml(port.mode || '-')}</small></div>`;
       html += '</div>';
-      
+
       // Process Data Out (PLC to Device)
       html += '<div class="row mt-3"><div class="col-12"><h6 class="text-success" style="font-size: 14px;">Process Data Out (PLC → Device)</h6></div></div>';
       html += '<div class="row">';
@@ -570,7 +572,7 @@
         html += `<div class="col-md-4"><small><strong>Raw:</strong> <code>${escapeHtml(port.pdout.raw)}</code></small></div>`;
         html += `<div class="col-md-4"><small><strong>Hex:</strong> <code>${escapeHtml(port.pdout.hex)}</code></small></div>`;
         html += `<div class="col-md-4"><small><strong>Bytes:</strong> <code>[${port.pdout.bytes.join(', ')}]</code></small></div>`;
-        
+
         // Decoded LED status
         if (port.pdout.decoded && Object.keys(port.pdout.decoded).length > 0) {
           html += '<div class="col-12 mt-2">';
@@ -592,7 +594,7 @@
         html += '<div class="col-12"><small><em>No process data out</em></small></div>';
       }
       html += '</div>';
-      
+
       // Process Data In (Device to PLC)
       html += '<div class="row mt-2"><div class="col-12"><h6 class="text-warning" style="font-size: 14px;">Process Data In (Device → PLC)</h6></div></div>';
       html += '<div class="row">';
@@ -604,7 +606,7 @@
         html += '<div class="col-12"><small><em>No process data in</em></small></div>';
       }
       html += '</div>';
-      
+
       html += '</div>';
       return html;
     }
@@ -658,7 +660,7 @@
         const chartWidth = document.getElementById('chartCurrent')?.offsetWidth || 300;
         const maxLabels = Math.max(3, Math.min(8, Math.floor(chartWidth / 70))); // ~70px per label, max 8 labels
         const step = Math.max(1, Math.floor(history.length / maxLabels));
-        
+
         // Create labels with better spacing - only show every Nth label, shorter format
         const labels = history.map((h, i) => {
           if (i % step === 0 || i === history.length - 1) {
@@ -668,7 +670,7 @@
           }
           return '';
         });
-        
+
         const currentSer = history.map(h => h.current != null ? h.current : null);
         const voltageSer = history.map(h => h.voltage != null ? h.voltage : null);
         const tempSer = history.map(h => h.temperature != null ? h.temperature : null);
@@ -681,9 +683,9 @@
           lineSmooth: Chartist.Interpolation.simple({
             divisor: 2
           }),
-          chartPadding: { 
-            top: 15, 
-            right: 15, 
+          chartPadding: {
+            top: 15,
+            right: 15,
             bottom: 30, // Space for x-axis labels
             left: 20 // Space for y-axis labels
           },
@@ -694,8 +696,8 @@
             },
             offset: 50 // Space for rotated labels
           },
-          axisY: { 
-            onlyInteger: false, 
+          axisY: {
+            onlyInteger: false,
             labelInterpolationFnc: value => {
               // Format large numbers better
               if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
@@ -706,7 +708,7 @@
             ['screen and (max-width: 768px)', {
               chartPadding: { top: 10, right: 10, bottom: 30, left: 15 },
               axisX: { offset: 30 },
-              axisY: { 
+              axisY: {
                 labelInterpolationFnc: value => {
                   if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
                   return Math.round(value);
@@ -749,7 +751,7 @@
         console.error('Chart update error:', e);
       }
     }
-    
+
     // Make charts responsive to window resize
     let resizeTimeout;
     window.addEventListener('resize', function() {
@@ -772,40 +774,5 @@
     setPollInterval(5);
   </script>
 
-  <script>
-    // Animated Factory Sidebar Background
-    function initSidebarAnimation() {
-      const container = document.getElementById('sidebarAnimatedBg');
-      if (!container) return;
-
-      for (let i = 0; i < 15; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'factory-particle';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-        particle.style.animationDelay = Math.random() * 5 + 's';
-        container.appendChild(particle);
-      }
-
-      for (let i = 0; i < 8; i++) {
-        const line = document.createElement('div');
-        line.className = 'circuit-line';
-        line.style.top = Math.random() * 100 + '%';
-        line.style.width = Math.random() * 150 + 100 + 'px';
-        line.style.animationDuration = Math.random() * 6 + 4 + 's';
-        line.style.animationDelay = Math.random() * 3 + 's';
-        container.appendChild(line);
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
-    }
-  </script>
 </body>
 </html>
-

@@ -7,15 +7,15 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>PLC Tag Diagnostics - Smart Factory</title>
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
-  
+
   <!-- Fonts and icons - all local (no internet required for HMI) -->
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  
+
   <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
-  
+
   <!-- PWA Manifest -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
@@ -127,276 +127,333 @@
   </style>
 </head>
 
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-plc">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/edge-device-stats.html">
-              <i class="material-icons">memory</i>
-              <p>Edge Device Stats</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+          <i class="material-icons">dashboard</i>
+          Dashboard
+        </a>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">PLC Diagnostics</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-          </button>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
         </div>
-      </nav>
-      <!-- End Navbar -->
 
-      <div class="content">
-        <div class="container-fluid">
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">PLC Tag Diagnostics - S7-1200</h4>
-                  <p class="card-category">Real-time monitoring of Siemens PLC data blocks - Start <span id="headerStartAddress">DB124.DBX0.0</span> | Connected <span id="headerConnectedAddress">DB124.DBX0.1</span></p>
-                </div>
-                <div class="card-body">
-                  <div class="db-map-grid">
-                  <!-- DB123 Configuration -->
-                  <div class="panel db-map-panel">
-                    <div class="db-map-header">
-                      <div>
-                        <h5 class="db-map-title">DB123 Main Mapping Editor</h5>
-                        <p class="db-map-copy">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
-                      </div>
-                      <div id="mainDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                    </div>
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item active" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
 
-                    <div class="db-map-controls">
-                      <div>
-                        <label>DB Number</label>
-                        <input type="number" id="mainDbNumber" min="1" max="999" value="123">
-                      </div>
-                      <div>
-                        <label>Total Size</label>
-                        <input type="number" id="mainDbTotalSize" min="1" max="512" value="80">
-                      </div>
-                      <div>
-                        <label>Enabled</label>
-                        <select id="mainDbEnabled">
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      </div>
-                    </div>
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Engineering Tools</p>
+            <h1 class="sf-topbar-title">PLC Diagnostics</h1>
+          </div>
+        </div>
 
-                    <div style="overflow-x: auto;">
-                      <table class="db-map-table">
-                        <thead>
-                          <tr>
-                            <th>Tag</th>
-                            <th>Type</th>
-                            <th>Byte</th>
-                            <th>Bit</th>
-                            <th>Address Preview</th>
-                          </tr>
-                        </thead>
-                        <tbody id="mainDbEditorBody"></tbody>
-                      </table>
-                    </div>
+        <main class="sf-content">
 
-                    <div class="db-map-actions">
-                      <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn">Save DB123 Mapping</button>
-                      <button type="button" class="btn btn-sm btn-default" id="reloadMainDbConfigBtn">Reload Saved Values</button>
-                      <button type="button" class="btn btn-sm btn-default" id="resetMainDbDefaultsBtn">Reset Defaults</button>
-                    </div>
-                  </div>
-
-                  <!-- DB124 Configuration -->
-                  <div class="panel db-map-panel">
-                    <div class="db-map-header">
-                      <div>
-                        <h5 class="db-map-title">DB124 Camera Mapping Editor</h5>
-                        <p class="db-map-copy">Edit the Pi-side DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
-                      </div>
-                      <div id="cameraDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                    </div>
-
-                    <div class="db-map-controls">
-                      <div>
-                        <label>DB Number</label>
-                        <input type="number" id="cameraDbNumber" min="1" max="999" value="124">
-                      </div>
-                      <div>
-                        <label>Total Size</label>
-                        <input type="number" id="cameraDbTotalSize" min="1" max="512" value="2">
-                      </div>
-                      <div>
-                        <label>Enabled</label>
-                        <select id="cameraDbEnabled">
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div style="overflow-x: auto;">
-                      <table class="db-map-table">
-                        <thead>
-                          <tr>
-                            <th>Tag</th>
-                            <th>Type</th>
-                            <th>Byte</th>
-                            <th>Bit</th>
-                            <th>Address Preview</th>
-                          </tr>
-                        </thead>
-                        <tbody id="cameraDbEditorBody"></tbody>
-                      </table>
-                    </div>
-
-                    <div class="db-map-actions">
-                      <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn">Save DB124 Mapping</button>
-                      <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn">Reload Saved Values</button>
-                      <button type="button" class="btn btn-sm btn-default" id="resetCameraDbDefaultsBtn">Reset Defaults</button>
-                    </div>
-                  </div>
-                  </div>
-
-                  <!-- Status Panel -->
-                  <div class="status-panel">
-                    <div class="status-row">
-                      <div class="status-label">PLC Connected:</div>
-                      <div class="status-value" id="plcConnected">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
-                      <div class="status-value" id="startBitValue">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Last Update:</div>
-                      <div class="status-value" id="lastUpdate">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Poll Interval:</div>
-                      <div class="status-value" id="pollInterval">500ms</div>
-                    </div>
-                  </div>
-
-                  <!-- Controls -->
-                  <div class="controls">
-                    <button class="btn-control" onclick="setPollInterval(250)">250ms</button>
-                    <button class="btn-control" onclick="setPollInterval(500)">500ms</button>
-                    <button class="btn-control" onclick="setPollInterval(1000)">1000ms</button>
-                    <button class="btn-control" onclick="setPollInterval(2000)">2000ms</button>
-                    <button class="btn-control" onclick="clearLog()">Clear Log</button>
-                    <button class="btn-control" onclick="togglePause()">Pause/Resume</button>
-                  </div>
-
-                  <!-- Stats Grid -->
-                  <div class="stats-grid">
-                    <div class="stat-box">
-                      <div class="stat-label">Total Reads</div>
-                      <div class="stat-value" id="totalReads">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">TRUE Count</div>
-                      <div class="stat-value" id="trueCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">FALSE Count</div>
-                      <div class="stat-value" id="falseCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">Errors</div>
-                      <div class="stat-value" id="errorCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">Uptime</div>
-                      <div class="stat-value" id="uptime">00:00</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">TRUE %</div>
-                      <div class="stat-value" id="truePercent">0%</div>
-                    </div>
-                  </div>
-
-                  <!-- Log Panel -->
-                  <div class="log-panel" id="logPanel">
-                    <div class="log-entry">Waiting for data...</div>
-                  </div>
-                </div>
+          <section class="sf-page-hero sf-page-hero--plc">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Engineering Tools</p>
+              <h2>Inspect live PLC state and edit DB123 and DB124 mappings without leaving the Matrix workspace.</h2>
+              <p>
+                The mapping editors, status monitor, poll controls, runtime statistics, and activity log stay connected to the same running backend flows while the page adopts native Matrix structure.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Focus</span>
+                <strong>Diagnostics</strong>
+              </div>
+              <div>
+                <span>Config</span>
+                <strong>Editable</strong>
+              </div>
+              <div>
+                <span>Target</span>
+                <strong>S7-1200</strong>
               </div>
             </div>
-          </div>
-        </div>
+          </section>
+
+          <!-- Section 1: Page header status -->
+          <section class="sf-stage sf-stage-1">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>PLC Tag Diagnostics - S7-1200</h3>
+                <p>
+                  DB123 start bit: <code id="headerStartAddress">DB123.DBX0.0</code> |
+                  DB124 connected bit: <code id="headerConnectedAddress">DB124.DBX0.0</code>
+                </p>
+              </header>
+            </article>
+          </section>
+
+          <!-- Section 2: DB editors row -->
+          <section class="sf-stage sf-stage-2">
+            <div class="db-map-grid">
+
+              <!-- DB123 Editor -->
+              <section class="db-map-panel">
+                <div class="db-map-header">
+                  <div>
+                    <h5 class="db-map-title">DB123 Main Mapping Editor</h5>
+                    <p class="db-map-copy">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
+                  </div>
+                  <div id="mainDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
+                </div>
+
+                <div class="db-map-controls">
+                  <div>
+                    <label>DB Number</label>
+                    <input type="number" id="mainDbNumber" min="1" max="999" value="123">
+                  </div>
+                  <div>
+                    <label>Total Size</label>
+                    <input type="number" id="mainDbTotalSize" min="1" max="512" value="80">
+                  </div>
+                  <div>
+                    <label>Enabled</label>
+                    <select id="mainDbEnabled">
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="db-map-table">
+                    <thead>
+                      <tr>
+                        <th>Tag</th>
+                        <th>Type</th>
+                        <th>Byte</th>
+                        <th>Bit</th>
+                        <th>Address Preview</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mainDbEditorBody"></tbody>
+                  </table>
+                </div>
+
+                <div class="db-map-actions">
+                  <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn">Save DB123 Mapping</button>
+                  <button type="button" class="btn btn-sm btn-default" id="reloadMainDbConfigBtn">Reload Saved Values</button>
+                  <button type="button" class="btn btn-sm btn-default" id="resetMainDbDefaultsBtn">Reset Defaults</button>
+                </div>
+              </section>
+
+              <!-- DB124 Editor -->
+              <section class="db-map-panel">
+                <div class="db-map-header">
+                  <div>
+                    <h5 class="db-map-title">DB124 Camera Mapping Editor</h5>
+                    <p class="db-map-copy">Edit the Pi-side DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
+                  </div>
+                  <div id="cameraDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
+                </div>
+
+                <div class="db-map-controls">
+                  <div>
+                    <label>DB Number</label>
+                    <input type="number" id="cameraDbNumber" min="1" max="999" value="124">
+                  </div>
+                  <div>
+                    <label>Total Size</label>
+                    <input type="number" id="cameraDbTotalSize" min="1" max="512" value="2">
+                  </div>
+                  <div>
+                    <label>Enabled</label>
+                    <select id="cameraDbEnabled">
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="db-map-table">
+                    <thead>
+                      <tr>
+                        <th>Tag</th>
+                        <th>Type</th>
+                        <th>Byte</th>
+                        <th>Bit</th>
+                        <th>Address Preview</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cameraDbEditorBody"></tbody>
+                  </table>
+                </div>
+
+                <div class="db-map-actions">
+                  <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn">Save DB124 Mapping</button>
+                  <button type="button" class="btn btn-sm btn-default" id="reloadCameraDbConfigBtn">Reload Saved Values</button>
+                  <button type="button" class="btn btn-sm btn-default" id="resetCameraDbDefaultsBtn">Reset Defaults</button>
+                </div>
+              </section>
+
+            </div>
+          </section>
+
+          <!-- Section 3: Status + Controls + Stats + Log -->
+          <section class="sf-row sf-stage sf-stage-3">
+
+            <!-- Status + Controls panel -->
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>PLC Status</h3>
+              </header>
+
+              <!-- Status Panel -->
+              <div class="status-panel">
+                <div class="status-row">
+                  <div class="status-label">PLC Connected:</div>
+                  <div class="status-value" id="plcConnected">-</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
+                  <div class="status-value" id="startBitValue">-</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Last Update:</div>
+                  <div class="status-value" id="lastUpdate">-</div>
+                </div>
+                <div class="status-row">
+                  <div class="status-label">Poll Interval:</div>
+                  <div class="status-value" id="pollInterval">500ms</div>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="controls">
+                <button class="btn-control" onclick="setPollInterval(250)">250ms</button>
+                <button class="btn-control" onclick="setPollInterval(500)">500ms</button>
+                <button class="btn-control" onclick="setPollInterval(1000)">1000ms</button>
+                <button class="btn-control" onclick="setPollInterval(2000)">2000ms</button>
+                <button class="btn-control" onclick="clearLog()">Clear Log</button>
+                <button class="btn-control" onclick="togglePause()">Pause/Resume</button>
+              </div>
+
+              <!-- Stats Grid -->
+              <div class="stats-grid">
+                <div class="stat-box">
+                  <div class="stat-label">Total Reads</div>
+                  <div class="stat-value" id="totalReads">0</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">TRUE Count</div>
+                  <div class="stat-value" id="trueCount">0</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">FALSE Count</div>
+                  <div class="stat-value" id="falseCount">0</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Errors</div>
+                  <div class="stat-value" id="errorCount">0</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">Uptime</div>
+                  <div class="stat-value" id="uptime">00:00</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-label">TRUE %</div>
+                  <div class="stat-value" id="truePercent">0%</div>
+                </div>
+              </div>
+            </article>
+
+            <!-- Log panel -->
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Activity Log</h3>
+                <p>Runtime read/write events and operator actions.</p>
+              </header>
+              <div id="logPanel" class="log-panel"></div>
+            </article>
+
+          </section>
+
+        </main>
       </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
-  <!-- Core JS Files -->
+  <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
+    <div class="spinner"></div>
+  </div>
+
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
-<script src="/assets/js/core/bootstrap-material-design.min.js"></script>
-<script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-<script src="/assets/js/material-dashboard.min.js?v=2.1.0" type="text/javascript"></script>
-<script src="/assets/js/app-shell.js"></script>
+  <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
+  <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
+  <script src="/assets/js/plugins/bootstrap-notify.js"></script>
+  <script src="/assets/js/material-dashboard.js?v=2.1.0" type="text/javascript"></script>
+  <script src="/assets/js/app-shell.js"></script>
 
   <script>
     // ========== PLC DIAGNOSTICS LOGIC ==========
     const API_BASE = window.location.origin;
+
     let pollIntervalMs = 500;
     let pollTimer = null;
     let paused = false;
@@ -983,43 +1040,5 @@
         `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }, 1000);
   </script>
-
-  <script>
-    // Animated Factory Sidebar Background
-    function initSidebarAnimation() {
-      const container = document.getElementById('sidebarAnimatedBg');
-      if (!container) return;
-
-      for (let i = 0; i < 15; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'factory-particle';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-        particle.style.animationDelay = Math.random() * 5 + 's';
-        container.appendChild(particle);
-      }
-
-      for (let i = 0; i < 8; i++) {
-        const line = document.createElement('div');
-        line.className = 'circuit-line';
-        line.style.top = Math.random() * 100 + '%';
-        line.style.width = Math.random() * 150 + 100 + 'px';
-        line.style.animationDuration = Math.random() * 6 + 4 + 's';
-        line.style.animationDelay = Math.random() * 3 + 's';
-        container.appendChild(line);
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
-    }
-  </script>
 </body>
 </html>
-
-
-

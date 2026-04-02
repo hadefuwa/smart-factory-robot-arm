@@ -64,138 +64,167 @@
     }
   </style>
 </head>
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-edge">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/edge-device-stats.html">
-              <i class="material-icons">memory</i>
-              <p>Edge Device Stats</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+          <i class="material-icons">dashboard</i>
+          Dashboard
+        </a>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">Edge Device Stats</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-          </button>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
         </div>
-      </nav>
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item active" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
 
-      <div class="content">
-        <div class="container-fluid">
-          <div class="row">
-            <div class="col-lg-8 col-md-10 col-sm-12 ml-auto mr-auto">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Raspberry Pi Runtime Stats</h4>
-                  <p class="card-category">Live CPU, memory, temperature, and uptime data from the edge node</p>
-                </div>
-                <div class="card-body">
-                  <table class="edge-stats-table">
-                    <tr>
-                      <td class="edge-stats-label">CPU Load (1 min)</td>
-                      <td class="edge-stats-value" id="cpuLoad1">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">CPU Load (5 min)</td>
-                      <td class="edge-stats-value" id="cpuLoad5">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">CPU Load (15 min)</td>
-                      <td class="edge-stats-value" id="cpuLoad15">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">CPU Cores</td>
-                      <td class="edge-stats-value" id="cpuCores">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">Memory Used</td>
-                      <td class="edge-stats-value" id="memoryUsed">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">Memory Total</td>
-                      <td class="edge-stats-value" id="memoryTotal">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">CPU Temperature</td>
-                      <td class="edge-stats-value" id="cpuTemp">-</td>
-                    </tr>
-                    <tr>
-                      <td class="edge-stats-label">Uptime</td>
-                      <td class="edge-stats-value" id="uptime">-</td>
-                    </tr>
-                  </table>
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Edge Telemetry</p>
+            <h1 class="sf-topbar-title">Edge Device Stats</h1>
+          </div>
+        </div>
 
-                  <div id="lastUpdated">Last updated: -</div>
-                  <div id="errorMessage"></div>
-                </div>
+        <main class="sf-content">
+          <section class="sf-page-hero sf-page-hero--twin">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Edge Telemetry</p>
+              <h2>Monitor Raspberry Pi health and uptime from the same Matrix operations shell.</h2>
+              <p>
+                CPU load, memory, temperature, and uptime remain wired to the same `/api/edge-device-stats` endpoint while the page body moves into native Matrix layout.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Source</span>
+                <strong>Edge Node</strong>
+              </div>
+              <div>
+                <span>Refresh</span>
+                <strong>2 Seconds</strong>
+              </div>
+              <div>
+                <span>Contract</span>
+                <strong>/api/edge-device-stats</strong>
               </div>
             </div>
-          </div>
-        </div>
+          </section>
+
+          <section class="sf-stage sf-stage-1">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Raspberry Pi Runtime Stats</h3>
+                <p>Live CPU, memory, temperature, and uptime data from the edge node. Refreshes every 2 seconds.</p>
+              </header>
+
+              <div class="overflow-x-auto">
+                <table class="edge-stats-table table table-zebra">
+                  <tr>
+                    <td class="edge-stats-label">CPU Load (1 min)</td>
+                    <td class="edge-stats-value" id="cpuLoad1">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">CPU Load (5 min)</td>
+                    <td class="edge-stats-value" id="cpuLoad5">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">CPU Load (15 min)</td>
+                    <td class="edge-stats-value" id="cpuLoad15">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">CPU Cores</td>
+                    <td class="edge-stats-value" id="cpuCores">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">Memory Used</td>
+                    <td class="edge-stats-value" id="memoryUsed">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">Memory Total</td>
+                    <td class="edge-stats-value" id="memoryTotal">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">CPU Temperature</td>
+                    <td class="edge-stats-value" id="cpuTemp">-</td>
+                  </tr>
+                  <tr>
+                    <td class="edge-stats-label">Uptime</td>
+                    <td class="edge-stats-value" id="uptime">-</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div id="lastUpdated">Last updated: -</div>
+              <div id="errorMessage"></div>
+            </article>
+          </section>
+        </main>
       </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
   <script src="/assets/js/app-shell.js"></script>
   <script>
-    // Use same-origin API to avoid CORS errors in browser.
     var STATS_URL = "/api/edge-device-stats";
 
     function formatSecondsToHMS(seconds) {
@@ -245,43 +274,8 @@
         });
     }
 
-    function initSidebarAnimation() {
-      var container = document.getElementById("sidebarAnimatedBg");
-      if (!container) {
-        return;
-      }
-
-      for (var i = 0; i < 15; i++) {
-        var particle = document.createElement("div");
-        particle.className = "factory-particle";
-        particle.style.width = Math.random() * 4 + 2 + "px";
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + "%";
-        particle.style.animationDuration = Math.random() * 10 + 8 + "s";
-        particle.style.animationDelay = Math.random() * 5 + "s";
-        container.appendChild(particle);
-      }
-
-      for (var j = 0; j < 8; j++) {
-        var line = document.createElement("div");
-        line.className = "circuit-line";
-        line.style.top = Math.random() * 100 + "%";
-        line.style.width = Math.random() * 150 + 100 + "px";
-        line.style.animationDuration = Math.random() * 6 + 4 + "s";
-        line.style.animationDelay = Math.random() * 3 + "s";
-        container.appendChild(line);
-      }
-    }
-
     fetchStats();
     setInterval(fetchStats, 2000);
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
-    }
   </script>
 </body>
 </html>
-

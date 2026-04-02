@@ -7,392 +7,350 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>Robot Arm Control - Smart Factory</title>
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
-  
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
+
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  
-  <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
-  
-  <!-- PWA Manifest -->
+
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <!-- All styles consolidated in professional-theme.css -->
 </head>
 
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper ">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-robot">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/edge-device-stats.html">
-              <i class="material-icons">memory</i>
-              <p>Edge Device Stats</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+          <i class="material-icons">dashboard</i>
+          Dashboard
+        </a>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top ">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">Robot Arm Control</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-            <span class="navbar-toggler-icon icon-bar"></span>
-          </button>
-          <div class="collapse navbar-collapse justify-content-end">
-            <ul class="navbar-nav">
-              <li class="nav-item">
-                <a class="nav-link" href="javascript:;">
-                  <i class="material-icons">notifications</i>
-                  <p class="d-lg-none d-md-block">Notifications</p>
-                </a>
-              </li>
-            </ul>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
           </div>
         </div>
-      </nav>
-      <!-- End Navbar -->
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item active" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
 
-      <div class="content">
-        <div class="container-fluid">
-          <!-- Connection Status Cards -->
-          <div class="row">
-            <div class="col-lg-6 col-md-6 col-sm-12">
-              <div class="card card-stats">
-                <div class="card-header card-header-purple card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">link</i>
-                  </div>
-                  <p class="card-category">PLC Connection</p>
-                  <h3 class="card-title">
-                    <span class="status-dot" id="plcDot"></span>
-                    <span id="plcStatus">Checking...</span>
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons">update</i>
-                    Last updated: <span id="lastUpdate">--:--:--</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-lg-6 col-md-6 col-sm-12">
-              <div class="card card-stats">
-                <div class="card-header card-header-purple card-header-icon">
-                  <div class="card-icon">
-                    <i class="material-icons">precision_manufacturing</i>
-                  </div>
-                  <p class="card-category">Dobot Status</p>
-                  <h3 class="card-title">
-                    <span class="status-dot" id="dobotDot"></span>
-                    <span id="dobotStatus">Checking...</span>
-                  </h3>
-                </div>
-                <div class="card-footer">
-                  <div class="stats">
-                    <i class="material-icons">info</i>
-                    Check connection status
-                  </div>
-                </div>
-              </div>
-            </div>
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Robot Control</p>
+            <h1 class="sf-topbar-title">Robot Arm Control</h1>
           </div>
+        </div>
 
-          <!-- Robot Position Cards -->
-          <div class="row">
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Target Position (PLC)</h4>
-                  <p class="card-category">Position from PLC DB</p>
-                </div>
-                <div class="card-body">
-                  <div class="row">
-                    <div class="col-md-4">
-                      <h5 class="card-category">X</h5>
-                      <h2 class="card-title" id="targetX">--</h2>
-                    </div>
-                    <div class="col-md-4">
-                      <h5 class="card-category">Y</h5>
-                      <h2 class="card-title" id="targetY">--</h2>
-                    </div>
-                    <div class="col-md-4">
-                      <h5 class="card-category">Z</h5>
-                      <h2 class="card-title" id="targetZ">--</h2>
-                    </div>
-                  </div>
-                  <button class="btn btn-primary btn-sm mt-3" onclick="moveToTarget()">
-                    <i class="material-icons">navigation</i> Move to Target
-                  </button>
-                </div>
+        <main class="sf-content">
+
+          <section class="sf-page-hero sf-page-hero--robot">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Robot Control</p>
+              <h2>Operate, home, and diagnose the Dobot from one production-ready control surface.</h2>
+              <p>
+                Live PLC targets, manual motion, end-effector actions, and engineering settings are all kept on the same Matrix-native page without changing any backend routes or button flows.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Mode</span>
+                <strong>Direct Control</strong>
+              </div>
+              <div>
+                <span>Backend</span>
+                <strong>Live API</strong>
+              </div>
+              <div>
+                <span>Safety</span>
+                <strong>E-Stop Ready</strong>
               </div>
             </div>
+          </section>
 
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Current Position (Dobot)</h4>
-                  <p class="card-category">Real-time robot position</p>
+          <!-- Connection Status KPI Tiles -->
+          <section class="sf-robot-status-row sf-stage sf-stage-1" aria-label="Connection status">
+            <article class="sf-kpi-tile">
+              <header><span>PLC Connection</span><i class="material-icons">link</i></header>
+              <div class="sf-kpi-value">
+                <span class="status-dot" id="plcDot"></span>
+                <span id="plcStatus">Checking...</span>
+              </div>
+              <p class="sf-kpi-sub">Last updated: <span id="lastUpdate">--:--:--</span></p>
+            </article>
+
+            <article class="sf-kpi-tile">
+              <header><span>Dobot Status</span><i class="material-icons">precision_manufacturing</i></header>
+              <div class="sf-kpi-value">
+                <span class="status-dot" id="dobotDot"></span>
+                <span id="dobotStatus">Checking...</span>
+              </div>
+              <p class="sf-kpi-sub">Check connection status</p>
+            </article>
+          </section>
+
+          <!-- Position Cards -->
+          <section class="sf-robot-position-row sf-stage sf-stage-2">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Target Position (PLC)</h3>
+                <p>Position from PLC DB</p>
+              </header>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-3 mb-4">
+                <div>
+                  <p class="sf-kpi-sub">X</p>
+                  <div class="sf-kpi-value" id="targetX">--</div>
                 </div>
-                <div class="card-body">
-                  <div class="row">
-                    <div class="col-md-3">
-                      <h5 class="card-category">X</h5>
-                      <h2 class="card-title" id="currentX">--</h2>
-                    </div>
-                    <div class="col-md-3">
-                      <h5 class="card-category">Y</h5>
-                      <h2 class="card-title" id="currentY">--</h2>
-                    </div>
-                    <div class="col-md-3">
-                      <h5 class="card-category">Z</h5>
-                      <h2 class="card-title" id="currentZ">--</h2>
-                    </div>
-                    <div class="col-md-3">
-                      <h5 class="card-category">R</h5>
-                      <h2 class="card-title" id="currentR">--</h2>
-                    </div>
-                  </div>
-                  <button class="btn btn-success btn-sm mt-3" onclick="useCurrentPosition()">
-                    <i class="material-icons">my_location</i> Use Current
-                  </button>
+                <div>
+                  <p class="sf-kpi-sub">Y</p>
+                  <div class="sf-kpi-value" id="targetY">--</div>
+                </div>
+                <div>
+                  <p class="sf-kpi-sub">Z</p>
+                  <div class="sf-kpi-value" id="targetZ">--</div>
                 </div>
               </div>
-            </div>
-          </div>
+              <button class="sf-btn sf-btn-primary" onclick="moveToTarget()">
+                <i class="material-icons">navigation</i> Move to Target
+              </button>
+            </article>
 
-          <!-- Control Cards -->
-          <div class="row">
-            <!-- PLC Control Bits -->
-            <div class="col-lg-4 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">PLC Control Bits</h4>
-                  <p class="card-category">Status from DB1</p>
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Current Position (Dobot)</h3>
+                <p>Real-time robot position</p>
+              </header>
+              <div class="grid grid-cols-2 gap-4 md:grid-cols-4 mb-4">
+                <div>
+                  <p class="sf-kpi-sub">X</p>
+                  <div class="sf-kpi-value" id="currentX">--</div>
                 </div>
-                <div class="card-body table-responsive">
-                  <table class="table">
-                    <tbody>
-                      <tr><td>Start</td><td id="bitStart" class="text-right">--</td></tr>
-                      <tr><td>Stop</td><td id="bitStop" class="text-right">--</td></tr>
-                      <tr><td>Home</td><td id="bitHome" class="text-right">--</td></tr>
-                      <tr><td>E-Stop</td><td id="bitEstop" class="text-right">--</td></tr>
-                      <tr><td>Suction</td><td id="bitSuction" class="text-right">--</td></tr>
-                      <tr><td>Ready</td><td id="bitReady" class="text-right">--</td></tr>
-                      <tr><td>Busy</td><td id="bitBusy" class="text-right">--</td></tr>
-                      <tr><td>Error</td><td id="bitError" class="text-right">--</td></tr>
-                    </tbody>
-                  </table>
+                <div>
+                  <p class="sf-kpi-sub">Y</p>
+                  <div class="sf-kpi-value" id="currentY">--</div>
+                </div>
+                <div>
+                  <p class="sf-kpi-sub">Z</p>
+                  <div class="sf-kpi-value" id="currentZ">--</div>
+                </div>
+                <div>
+                  <p class="sf-kpi-sub">R</p>
+                  <div class="sf-kpi-value" id="currentR">--</div>
                 </div>
               </div>
-            </div>
+              <button class="sf-btn sf-btn-ghost" onclick="useCurrentPosition()">
+                <i class="material-icons">my_location</i> Use Current
+              </button>
+            </article>
+          </section>
 
-            <!-- Manual Control -->
-            <div class="col-lg-4 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">Manual Control</h4>
-                  <p class="card-category">Direct position control</p>
+          <!-- Control Panels -->
+          <section class="sf-robot-control-row sf-stage sf-stage-3">
+
+            <article class="sf-panel sf-robot-bits-card">
+              <header class="sf-panel-head">
+                <h3>PLC Control Bits</h3>
+                <p>Status from DB1</p>
+              </header>
+              <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <tbody>
+                  <tr><td>Start</td>   <td class="text-right" id="bitStart">--</td></tr>
+                  <tr><td>Stop</td>    <td class="text-right" id="bitStop">--</td></tr>
+                  <tr><td>Home</td>    <td class="text-right" id="bitHome">--</td></tr>
+                  <tr><td>E-Stop</td>  <td class="text-right" id="bitEstop">--</td></tr>
+                  <tr><td>Suction</td> <td class="text-right" id="bitSuction">--</td></tr>
+                  <tr><td>Ready</td>   <td class="text-right" id="bitReady">--</td></tr>
+                  <tr><td>Busy</td>    <td class="text-right" id="bitBusy">--</td></tr>
+                  <tr><td>Error</td>   <td class="text-right" id="bitError">--</td></tr>
+                </tbody>
+              </table>
+              </div>
+            </article>
+
+            <article class="sf-panel sf-robot-manual-card">
+              <header class="sf-panel-head">
+                <h3>Manual Control</h3>
+                <p>Direct position control with the same existing motion handler.</p>
+              </header>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label class="space-y-2">
+                  <span class="sf-field-label">X Position</span>
+                  <input type="number" id="manualX" class="input input-bordered w-full sf-robot-input" placeholder="X" value="200">
+                </label>
+                <label class="space-y-2">
+                  <span class="sf-field-label">Y Position</span>
+                  <input type="number" id="manualY" class="input input-bordered w-full sf-robot-input" placeholder="Y" value="0">
+                </label>
+                <label class="space-y-2">
+                  <span class="sf-field-label">Z Position</span>
+                  <input type="number" id="manualZ" class="input input-bordered w-full sf-robot-input" placeholder="Z" value="200">
+                </label>
+                <label class="space-y-2">
+                  <span class="sf-field-label">R Rotation</span>
+                  <input type="number" id="manualR" class="input input-bordered w-full sf-robot-input" placeholder="R" value="0">
+                </label>
+              </div>
+              <button class="sf-btn sf-btn-primary w-full" onclick="moveToManual()">
+                <i class="material-icons">send</i> Move to Position
+              </button>
+            </article>
+
+            <article class="sf-panel sf-robot-quick-card">
+              <header class="sf-panel-head">
+                <h3>Quick Actions</h3>
+                <p>Common operations</p>
+              </header>
+              <div class="space-y-2">
+                <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="homeRobot()">
+                  <i class="material-icons">home</i> Home Robot
+                </button>
+                <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="moveToPreset('safe')">
+                  <i class="material-icons">safety_check</i> Safe Position
+                </button>
+                <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="moveToPreset('pickup')">
+                  <i class="material-icons">pan_tool</i> Pickup Position
+                </button>
+                <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="moveToPreset('dropoff')">
+                  <i class="material-icons">place</i> Dropoff Position
+                </button>
+                <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="testRobot()">
+                  <i class="material-icons">play_circle</i> Test Sequence
+                </button>
+                <button class="sf-btn sf-btn-danger sf-action-btn-block" onclick="emergencyStop()">
+                  <i class="material-icons">stop_circle</i> Emergency Stop
+                </button>
+              </div>
+            </article>
+
+          </section>
+
+          <!-- End Effector & System Management -->
+          <section class="sf-robot-tool-row sf-stage sf-stage-3">
+            <article class="sf-panel sf-robot-effector-card">
+              <header class="sf-panel-head">
+                <h3>End Effector Control</h3>
+                <p>Suction &amp; Gripper</p>
+              </header>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <p class="sf-kpi-sub mb-2">Suction Pump</p>
+                  <div class="space-y-2">
+                    <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="suctionOn()">
+                      <i class="material-icons">power</i> Pump ON
+                    </button>
+                    <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="suctionOff()">
+                      <i class="material-icons">power_off</i> Pump OFF
+                    </button>
+                  </div>
                 </div>
-                <div class="card-body">
-                  <div class="form-group">
-                    <label>X Position</label>
-                    <input type="number" id="manualX" class="form-control" placeholder="X" value="200">
+                <div>
+                  <p class="sf-kpi-sub mb-2">Gripper</p>
+                  <div class="space-y-2">
+                    <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="gripperOpen()">
+                      <i class="material-icons">open_in_full</i> Open
+                    </button>
+                    <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="gripperClose()">
+                      <i class="material-icons">close_fullscreen</i> Close
+                    </button>
                   </div>
-                  <div class="form-group">
-                    <label>Y Position</label>
-                    <input type="number" id="manualY" class="form-control" placeholder="Y" value="0">
-                  </div>
-                  <div class="form-group">
-                    <label>Z Position</label>
-                    <input type="number" id="manualZ" class="form-control" placeholder="Z" value="200">
-                  </div>
-                  <div class="form-group">
-                    <label>R Rotation</label>
-                    <input type="number" id="manualR" class="form-control" placeholder="R" value="0">
-                  </div>
-                  <button class="btn btn-warning btn-block" onclick="moveToManual()">
-                    <i class="material-icons">send</i> Move to Position
-                  </button>
                 </div>
               </div>
-            </div>
+            </article>
 
-            <!-- Quick Actions -->
-            <div class="col-lg-4 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">Quick Actions</h4>
-                  <p class="card-category">Common operations</p>
-                </div>
-                <div class="card-body">
-                  <button class="btn btn-info preset-btn" onclick="homeRobot()">
-                    <i class="material-icons">home</i> Home Robot
-                  </button>
-                  <button class="btn btn-success preset-btn" onclick="moveToPreset('safe')">
-                    <i class="material-icons">safety_check</i> Safe Position
-                  </button>
-                  <button class="btn btn-primary preset-btn" onclick="moveToPreset('pickup')">
-                    <i class="material-icons">pan_tool</i> Pickup Position
-                  </button>
-                  <button class="btn btn-primary preset-btn" onclick="moveToPreset('dropoff')">
-                    <i class="material-icons">place</i> Dropoff Position
-                  </button>
-                  <button class="btn btn-warning preset-btn" onclick="testRobot()">
-                    <i class="material-icons">play_circle</i> Test Sequence
-                  </button>
-                  <button class="btn btn-danger preset-btn" onclick="emergencyStop()">
-                    <i class="material-icons">stop_circle</i> Emergency Stop
-                  </button>
-                </div>
+            <article class="sf-panel sf-robot-system-card">
+              <header class="sf-panel-head">
+                <h3>System Management</h3>
+                <p>Configuration &amp; debugging</p>
+              </header>
+              <div class="space-y-2">
+                <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="openSettings()">
+                  <i class="material-icons">settings</i> System Settings
+                </button>
+                <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="debugDobot()">
+                  <i class="material-icons">bug_report</i> Debug Dobot
+                </button>
+                <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="clearLog()">
+                  <i class="material-icons">clear_all</i> Clear Log
+                </button>
               </div>
-            </div>
-          </div>
-
-          <!-- End Effector & Debug -->
-          <div class="row">
-            <!-- End Effector Controls -->
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">End Effector Control</h4>
-                  <p class="card-category">Suction & Gripper</p>
-                </div>
-                <div class="card-body">
-                  <div class="row">
-                    <div class="col-md-6">
-                      <h5>Suction Pump</h5>
-                      <button class="btn btn-success btn-block mb-2" onclick="suctionOn()">
-                        <i class="material-icons">power</i> Pump ON
-                      </button>
-                      <button class="btn btn-default btn-block" onclick="suctionOff()">
-                        <i class="material-icons">power_off</i> Pump OFF
-                      </button>
-                    </div>
-                    <div class="col-md-6">
-                      <h5>Gripper</h5>
-                      <button class="btn btn-success btn-block mb-2" onclick="gripperOpen()">
-                        <i class="material-icons">open_in_full</i> Open
-                      </button>
-                      <button class="btn btn-default btn-block" onclick="gripperClose()">
-                        <i class="material-icons">close_fullscreen</i> Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Settings & Debug -->
-            <div class="col-lg-6 col-md-12">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">System Management</h4>
-                  <p class="card-category">Configuration & debugging</p>
-                </div>
-                <div class="card-body">
-                  <button class="btn btn-primary btn-block mb-2" onclick="openSettings()">
-                    <i class="material-icons">settings</i> System Settings
-                  </button>
-                  <button class="btn btn-info btn-block mb-2" onclick="debugDobot()">
-                    <i class="material-icons">bug_report</i> Debug Dobot
-                  </button>
-                  <button class="btn btn-warning btn-block" onclick="clearLog()">
-                    <i class="material-icons">clear_all</i> Clear Log
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
           <!-- Debug Log -->
-          <div class="row">
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Debug Log</h4>
-                  <p class="card-category">Real-time system messages</p>
-                </div>
-                <div class="card-body">
-                  <div id="debugLog">
-                    <div class="log-placeholder">Waiting for commands...</div>
-                  </div>
-                </div>
+          <section class="sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Debug Log</h3>
+                <p>Real-time system messages</p>
+              </header>
+              <div id="debugLog" class="sf-template-code rounded-box border border-base-300 bg-base-100 p-4" style="font-size:13px; max-height:300px; overflow-y:auto;">
+                <div class="log-placeholder">Waiting for commands...</div>
               </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
-        </div>
+        </main>
       </div>
-
-      <footer class="footer">
-        <div class="container-fluid">
-          <div class="copyright float-right">
-            &copy; <script>document.write(new Date().getFullYear())</script> Smart Factory Control System
-          </div>
-        </div>
-      </footer>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
   <!-- Settings Modal -->
@@ -409,7 +367,6 @@
         </select>
         <small>Select the USB port for Dobot connection</small>
       </div>
-
       <div class="settings-group">
         <label>Home Position:</label>
         <div class="settings-grid-4">
@@ -446,33 +403,29 @@
         <button class="btn btn-primary" onclick="restartServer()">Restart Server</button>
         <button class="btn btn-danger" onclick="closeSettings()">Cancel</button>
       </div>
-
       <div class="settings-warning">
         ⚠️ Note: Server restart required for changes to take effect. Click "Save Settings" then restart the app.
       </div>
     </div>
   </div>
 
-  <!-- Core JS Files -->
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
   <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
-<script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-<script src="/assets/js/plugins/bootstrap-notify.js"></script>
-<script src="/assets/js/material-dashboard.js?v=2.1.0"></script>
-<script src="/assets/js/app-shell.js"></script>
-<script src="/assets/js/robot-arm-page.js"></script>
+  <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
+  <script src="/assets/js/plugins/bootstrap-notify.js"></script>
+  <script src="/assets/js/material-dashboard.js?v=2.1.0"></script>
+  <script src="/assets/js/app-shell.js"></script>
+  <script src="/assets/js/robot-arm-page.js"></script>
 
   <script>
     if (!window.__robotArmPageInitialized) {
-    // Read a CSS custom property once and cache it
     const _themeCache = {};
     function theme(name) {
       if (!_themeCache[name]) _themeCache[name] = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       return _themeCache[name];
     }
 
-    // Service Worker Registration
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then(reg => {
         console.log('Service Worker registered:', reg);
@@ -481,7 +434,6 @@
       });
     }
 
-    // Polling interval
     let pollInterval = null;
     let isPolling = false;
 
@@ -769,10 +721,10 @@
 
     async function moveToPreset(preset) {
       const presets = {
-        safe: { x: 200, y: 0, z: 200, r: 0, name: 'Safe Position' },
-        pickup: { x: 250, y: 50, z: 50, r: 0, name: 'Pickup Position' },
-        dropoff: { x: 250, y: -50, z: 50, r: 0, name: 'Dropoff Position' },
-        inspect: { x: 200, y: 0, z: 100, r: 0, name: 'Inspect Position' }
+        safe:    { x: 200, y: 0,   z: 200, r: 0, name: 'Safe Position' },
+        pickup:  { x: 250, y: 50,  z: 50,  r: 0, name: 'Pickup Position' },
+        dropoff: { x: 250, y: -50, z: 50,  r: 0, name: 'Dropoff Position' },
+        inspect: { x: 200, y: 0,   z: 100, r: 0, name: 'Inspect Position' }
       };
 
       const pos = presets[preset];
@@ -837,13 +789,13 @@
     async function openSettings() {
       try {
         addLog('⚙️ Loading settings...', 'info');
-        
+
         const response = await fetch('/api/settings');
         const settings = await response.json();
-        
+
         const usbSelect = document.getElementById('settingDobotUSB');
         usbSelect.innerHTML = '<option value="">Auto-detect (recommended)</option>';
-        
+
         if (settings.available_usb_ports && settings.available_usb_ports.length > 0) {
           addLog(`✅ Found ${settings.available_usb_ports.length} USB devices`, 'success');
           settings.available_usb_ports.forEach(port => {
@@ -859,7 +811,7 @@
           option.textContent = '/dev/ttyACM0 (fallback)';
           usbSelect.appendChild(option);
         }
-        
+
         usbSelect.value = settings.dobot.usb_path || '';
         document.getElementById('settingHomeX').value = settings.dobot.home_position.x;
         document.getElementById('settingHomeY').value = settings.dobot.home_position.y;
@@ -869,7 +821,7 @@
         document.getElementById('settingPLCRack').value = settings.plc.rack;
         document.getElementById('settingPLCSlot').value = settings.plc.slot;
         document.getElementById('settingPollInterval').value = settings.plc.poll_interval;
-        
+
         document.getElementById('settingsModal').style.display = 'block';
       } catch (error) {
         addLog('❌ Error loading settings: ' + error.message, 'error');
@@ -926,22 +878,18 @@
     }
 
     async function restartServer() {
-      if (!confirm('Are you sure you want to restart the server?')) {
-        return;
-      }
+      if (!confirm('Are you sure you want to restart the server?')) return;
 
       try {
         addLog('🔄 Restarting server...', 'info');
         const response = await fetch('/api/restart', { method: 'POST' });
         const result = await response.json();
-        
+
         if (result.success) {
           addLog('✅ ' + result.message, 'success');
           alert('✅ ' + result.message + '\n\nThe page will reload automatically.');
           closeSettings();
-          setTimeout(() => {
-            window.location.reload();
-          }, 3000);
+          setTimeout(() => { window.location.reload(); }, 3000);
         } else {
           addLog('❌ Restart failed: ' + (result.error || 'Unknown error'), 'error');
           alert('Restart failed: ' + (result.error || 'Unknown error'));
@@ -957,7 +905,7 @@
         addLog('🐛 Getting Dobot debug information...', 'info');
         const response = await fetch('/api/dobot/debug');
         const debug = await response.json();
-        
+
         addLog('📋 Dobot Debug Information:', 'info');
         addLog(`  pydobot available: ${debug.pydobot_available}`, debug.pydobot_available ? 'success' : 'error');
         addLog(`  USB enabled: ${debug.use_usb}`, debug.use_usb ? 'success' : 'warning');
@@ -965,31 +913,23 @@
         addLog(`  Actual port: ${debug.actual_port || 'None'}`, debug.actual_port ? 'success' : 'warning');
         addLog(`  Connected: ${debug.connected}`, debug.connected ? 'success' : 'error');
         addLog(`  Last error: ${debug.last_error || 'None'}`, debug.last_error ? 'error' : 'success');
-        
         addLog(`  Available ports: ${debug.available_ports.length} found`, debug.available_ports.length > 0 ? 'success' : 'error');
         debug.available_ports.forEach(port => {
           addLog(`    - ${port}`, 'info');
         });
-        
         debug.port_details.forEach(port => {
           if (port.exists) {
-            addLog(`  Port ${port.port}: permissions=${port.permissions}, readable=${port.readable}, writable=${port.writable}`, 
+            addLog(`  Port ${port.port}: permissions=${port.permissions}, readable=${port.readable}, writable=${port.writable}`,
               (port.readable && port.writable) ? 'success' : 'warning');
           } else {
             addLog(`  Port ${port.port}: ${port.error}`, 'error');
           }
         });
-        
-        if (!debug.pydobot_available) {
-          addLog('💡 To fix: pip install pydobot', 'info');
-        }
-        if (!debug.connected && debug.available_ports.length === 0) {
-          addLog('💡 Check if Dobot is connected via USB', 'info');
-        }
-        if (!debug.connected && debug.available_ports.length > 0) {
-          addLog('💡 Try: sudo chmod 666 /dev/ttyACM*', 'info');
-        }
-        
+
+        if (!debug.pydobot_available) addLog('💡 To fix: pip install pydobot', 'info');
+        if (!debug.connected && debug.available_ports.length === 0) addLog('💡 Check if Dobot is connected via USB', 'info');
+        if (!debug.connected && debug.available_ports.length > 0) addLog('💡 Try: sudo chmod 666 /dev/ttyACM*', 'info');
+
       } catch (error) {
         addLog('❌ Debug error: ' + error.message, 'error');
       }
@@ -998,49 +938,9 @@
     window.addEventListener('load', startPolling);
     window.addEventListener('beforeunload', stopPolling);
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        startPolling();
-      }
+      if (document.hidden) { stopPolling(); } else { startPolling(); }
     });
-    }
-  </script>
-
-  <script>
-    // Animated Factory Sidebar Background
-    function initSidebarAnimation() {
-      const container = document.getElementById('sidebarAnimatedBg');
-      if (!container) return;
-
-      for (let i = 0; i < 15; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'factory-particle';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-        particle.style.animationDelay = Math.random() * 5 + 's';
-        container.appendChild(particle);
-      }
-
-      for (let i = 0; i < 8; i++) {
-        const line = document.createElement('div');
-        line.className = 'circuit-line';
-        line.style.top = Math.random() * 100 + '%';
-        line.style.width = Math.random() * 150 + 100 + 'px';
-        line.style.animationDuration = Math.random() * 6 + 4 + 's';
-        line.style.animationDelay = Math.random() * 3 + 's';
-        container.appendChild(line);
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
     }
   </script>
 </body>
 </html>
-

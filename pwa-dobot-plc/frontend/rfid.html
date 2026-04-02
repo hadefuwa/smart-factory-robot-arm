@@ -3,405 +3,353 @@
 <head>
   <meta charset="utf-8" />
   <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
-  <link rel="icon" type="image/png" href="/icon-192.png">
+  <link rel="icon" type="image/png" href="/assets/img/favicon.png">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>RFID Tracking - Smart Factory</title>
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
-  
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
+
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  
-  <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
-  <link href="/assets/demo/demo.css" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
-  
-  <!-- PWA Manifest -->
+
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <!-- All styles consolidated in professional-theme.css -->
 </head>
 
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper">
-    <!-- Sidebar -->
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-rfid">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-
-          <li class="nav-item active">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/edge-device-stats.html">
-              <i class="material-icons">memory</i>
-              <p>Edge Device Stats</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+          <i class="material-icons">dashboard</i>
+          Dashboard
+        </a>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">RFID Tracking System</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
+          </div>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
           </div>
         </div>
-      </nav>
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item active" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
 
-      <!-- Content -->
-      <div class="content">
-        <div class="container-fluid">
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Tracking Surface</p>
+            <h1 class="sf-topbar-title">RFID Tracking</h1>
+          </div>
+        </div>
+
+        <main class="sf-content">
+
+          <section class="sf-page-hero sf-page-hero--rfid">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Tracking Surface</p>
+              <h2>Follow RFID-tagged parts through the line in the same Matrix production workspace.</h2>
+              <p>
+                Conveyor visualization, read metrics, tag data, product details, engineer history, and maintenance context all stay available while the page body moves into native Matrix structure.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Subsystem</span>
+                <strong>RFID</strong>
+              </div>
+              <div>
+                <span>Use Case</span>
+                <strong>Tracking</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong>Simulated Demo</strong>
+              </div>
+            </div>
+          </section>
+
           <!-- Conveyor Visualization -->
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Conveyor System</h4>
-                  <p class="card-category">Real-time RFID tag tracking</p>
-                </div>
-                <div class="card-body">
-                  <div class="conveyor-container">
-                    <div class="rfid-reader">RFID Reader</div>
-                    <div class="scan-beam"></div>
-                    <div class="conveyor-belt"></div>
-                    <div class="rfid-tag">📡</div>
-                  </div>
-                </div>
+          <section class="sf-stage sf-stage-1">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Conveyor System</h3>
+                <p>Real-time RFID tag tracking along the production conveyor.</p>
+              </header>
+              <div class="conveyor-container">
+                <div class="rfid-reader">RFID Reader</div>
+                <div class="scan-beam"></div>
+                <div class="conveyor-belt"></div>
+                <div class="rfid-tag">📡</div>
               </div>
-            </div>
-          </div>
-
-          <!-- Information Cards -->
-          <div class="row">
-            <!-- Tag Information Card -->
-            <div class="col-lg-6 col-md-6">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Tag Information</h4>
-                  <p class="card-category">RFID Tag Details</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table table-hover">
-                      <tbody>
-                        <tr>
-                          <td><strong>Tag ID</strong></td>
-                          <td class="text-right"><span class="info-value-highlight" id="tagId">RF-2024-8472</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Serial Number</strong></td>
-                          <td class="text-right" id="serialNumber">SN-847293847</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Frequency</strong></td>
-                          <td class="text-right">13.56 MHz</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Protocol</strong></td>
-                          <td class="text-right">ISO 15693</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Memory Size</strong></td>
-                          <td class="text-right">2 KB</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Status</strong></td>
-                          <td class="text-right"><span class="status-badge active" id="tagStatus">Active</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Product Information Card -->
-            <div class="col-lg-6 col-md-6">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Product Information</h4>
-                  <p class="card-category">Product Details</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table table-hover">
-                      <tbody>
-                        <tr>
-                          <td><strong>Product Name</strong></td>
-                          <td class="text-right"><span class="info-value-highlight" id="productName">Motor Assembly Unit</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Part Number</strong></td>
-                          <td class="text-right">MAU-2024-001</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Batch Number</strong></td>
-                          <td class="text-right">BATCH-8472</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Manufacturing Date</strong></td>
-                          <td class="text-right" id="manufacturingDate">2024-03-15</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Location</strong></td>
-                          <td class="text-right">Conveyor Line 3</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Quality Status</strong></td>
-                          <td class="text-right"><span class="status-badge active">Passed</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Engineer and Maintenance Info -->
-          <div class="row">
-            <!-- Engineer Information -->
-            <div class="col-lg-6 col-md-6">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">Engineer Information</h4>
-                  <p class="card-category">Reader Data</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table table-hover">
-                      <tbody>
-                        <tr>
-                          <td><strong>Last Read By</strong></td>
-                          <td class="text-right"><span class="info-value-highlight" id="lastEngineer">Sarah Chen</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Engineer ID</strong></td>
-                          <td class="text-right">ENG-2024</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Last Read Time</strong></td>
-                          <td class="text-right" id="lastReadTime">2024-12-19 14:32:15</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Read Count</strong></td>
-                          <td class="text-right"><span class="info-value-highlight" id="readCount">247</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Reader Device</strong></td>
-                          <td class="text-right">RFID-READER-03</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Signal Strength</strong></td>
-                          <td class="text-right"><span class="info-value-highlight">-42 dBm</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Maintenance Information -->
-            <div class="col-lg-6 col-md-6">
-              <div class="card">
-                <div class="card-header card-header-rose">
-                  <h4 class="card-title">Maintenance History</h4>
-                  <p class="card-category">Service Records</p>
-                </div>
-                <div class="card-body">
-                  <div class="table-responsive">
-                    <table class="table table-hover">
-                      <tbody>
-                        <tr>
-                          <td><strong>Last Maintenance</strong></td>
-                          <td class="text-right" id="lastMaintenance">2024-12-10</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Maintained By</strong></td>
-                          <td class="text-right"><span class="info-value-highlight">Mike Johnson</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Next Service</strong></td>
-                          <td class="text-right" id="nextService">2025-01-10</td>
-                        </tr>
-                        <tr>
-                          <td><strong>Service Count</strong></td>
-                          <td class="text-right"><span class="info-value-highlight">12</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Warranty Status</strong></td>
-                          <td class="text-right"><span class="status-badge active">Valid</span></td>
-                        </tr>
-                        <tr>
-                          <td><strong>Days Since Install</strong></td>
-                          <td class="text-right"><span class="info-value-highlight" id="daysSinceInstall">279</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            </article>
+          </section>
 
           <!-- Statistics -->
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Statistics</h4>
-                  <p class="card-category">RFID System Performance</p>
-                </div>
-                <div class="card-body">
-                  <div class="row">
-                    <div class="col-lg-3 col-md-6 col-sm-6">
-                      <div class="stat-card">
-                        <div class="stat-value" id="totalReads">1,247</div>
-                        <div class="stat-label">Total Reads</div>
-                      </div>
-                    </div>
-                    <div class="col-lg-3 col-md-6 col-sm-6">
-                      <div class="stat-card">
-                        <div class="stat-value" id="avgReadTime">0.23s</div>
-                        <div class="stat-label">Avg Read Time</div>
-                      </div>
-                    </div>
-                    <div class="col-lg-3 col-md-6 col-sm-6">
-                      <div class="stat-card">
-                        <div class="stat-value" id="successRate">99.8%</div>
-                        <div class="stat-label">Success Rate</div>
-                      </div>
-                    </div>
-                    <div class="col-lg-3 col-md-6 col-sm-6">
-                      <div class="stat-card">
-                        <div class="stat-value" id="uptime">99.2%</div>
-                        <div class="stat-label">Uptime</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <section class="sf-metrics sf-stage sf-stage-2" aria-label="RFID statistics">
+            <article class="sf-kpi-tile">
+              <header><span>Total Reads</span><i class="material-icons">nfc</i></header>
+              <div class="sf-kpi-value" id="totalReads">1,247</div>
+              <p class="sf-kpi-sub">All-time tag reads</p>
+            </article>
+            <article class="sf-kpi-tile">
+              <header><span>Avg Read Time</span><i class="material-icons">timer</i></header>
+              <div class="sf-kpi-value" id="avgReadTime">0.23s</div>
+              <p class="sf-kpi-sub">Per scan average</p>
+            </article>
+            <article class="sf-kpi-tile">
+              <header><span>Success Rate</span><i class="material-icons">check_circle</i></header>
+              <div class="sf-kpi-value" id="successRate">99.8%</div>
+              <p class="sf-kpi-sub">Read success ratio</p>
+            </article>
+            <article class="sf-kpi-tile">
+              <header><span>System Uptime</span><i class="material-icons">schedule</i></header>
+              <div class="sf-kpi-value" id="uptime">99.2%</div>
+              <p class="sf-kpi-sub">Reader availability</p>
+            </article>
+          </section>
 
-          <!-- Activity Log -->
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Recent Activity Log</h4>
-                  <p class="card-category">Live RFID tag tracking events</p>
-                </div>
-                <div class="card-body">
-                  <div id="historyList">
-                    <!-- History items populated by JavaScript -->
-                  </div>
-                </div>
+          <!-- Tag and Product Info -->
+          <section class="sf-row sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Tag Information</h3>
+                <p>RFID tag details for the current item.</p>
+              </header>
+              <table class="table table-zebra" style="margin:0;">
+                <tbody>
+                  <tr>
+                    <td><strong>Tag ID</strong></td>
+                    <td class="text-right"><span class="info-value-highlight" id="tagId">RF-2024-8472</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Serial Number</strong></td>
+                    <td class="text-right" id="serialNumber">SN-847293847</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Frequency</strong></td>
+                    <td class="text-right">13.56 MHz</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Protocol</strong></td>
+                    <td class="text-right">ISO 15693</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Memory Size</strong></td>
+                    <td class="text-right">2 KB</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Status</strong></td>
+                    <td class="text-right"><span class="status-badge active" id="tagStatus">Active</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Product Information</h3>
+                <p>Product details associated with the scanned tag.</p>
+              </header>
+              <table class="table table-zebra" style="margin:0;">
+                <tbody>
+                  <tr>
+                    <td><strong>Product Name</strong></td>
+                    <td class="text-right"><span class="info-value-highlight" id="productName">Motor Assembly Unit</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Part Number</strong></td>
+                    <td class="text-right">MAU-2024-001</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Batch Number</strong></td>
+                    <td class="text-right">BATCH-8472</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Manufacturing Date</strong></td>
+                    <td class="text-right" id="manufacturingDate">2024-03-15</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Location</strong></td>
+                    <td class="text-right">Conveyor Line 3</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Quality Status</strong></td>
+                    <td class="text-right"><span class="status-badge active">Passed</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+
+          <!-- Engineer and Maintenance Info -->
+          <section class="sf-row sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Engineer Information</h3>
+                <p>Reader data and last interaction details.</p>
+              </header>
+              <table class="table table-zebra" style="margin:0;">
+                <tbody>
+                  <tr>
+                    <td><strong>Last Read By</strong></td>
+                    <td class="text-right"><span class="info-value-highlight" id="lastEngineer">Sarah Chen</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Engineer ID</strong></td>
+                    <td class="text-right">ENG-2024</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Last Read Time</strong></td>
+                    <td class="text-right" id="lastReadTime">2024-12-19 14:32:15</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Read Count</strong></td>
+                    <td class="text-right"><span class="info-value-highlight" id="readCount">247</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Reader Device</strong></td>
+                    <td class="text-right">RFID-READER-03</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Signal Strength</strong></td>
+                    <td class="text-right"><span class="info-value-highlight">-42 dBm</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Maintenance History</h3>
+                <p>Service records and next scheduled maintenance.</p>
+              </header>
+              <table class="table table-zebra" style="margin:0;">
+                <tbody>
+                  <tr>
+                    <td><strong>Last Maintenance</strong></td>
+                    <td class="text-right" id="lastMaintenance">2024-12-10</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Maintained By</strong></td>
+                    <td class="text-right"><span class="info-value-highlight">Mike Johnson</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Next Service</strong></td>
+                    <td class="text-right" id="nextService">2025-01-10</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Service Count</strong></td>
+                    <td class="text-right"><span class="info-value-highlight">12</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Warranty Status</strong></td>
+                    <td class="text-right"><span class="status-badge active">Valid</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Days Since Install</strong></td>
+                    <td class="text-right"><span class="info-value-highlight" id="daysSinceInstall">279</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+
+          <!-- Recent Activity Log -->
+          <section class="sf-stage sf-stage-3">
+            <article class="sf-panel sf-alerts-panel">
+              <header class="sf-panel-head">
+                <h3>Recent Activity Log</h3>
+                <p>Live RFID tag tracking events.</p>
+              </header>
+              <div id="historyList" aria-live="polite">
+                <!-- History items populated by JavaScript -->
               </div>
-            </div>
-          </div>
-        </div>
+            </article>
+          </section>
+
+        </main>
       </div>
-
-      <!-- Footer -->
-      <footer class="footer">
-        <div class="container-fluid">
-          <div class="copyright float-right">
-            &copy; <script>document.write(new Date().getFullYear())</script> Smart Factory Control System
-          </div>
-        </div>
-      </footer>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
-  <!-- Core JS Files -->
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
   <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
   <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-  <!--  Notifications Plugin    -->
   <script src="/assets/js/plugins/bootstrap-notify.js"></script>
-  <!-- Control Center for Material Dashboard: parallax effects, scripts for the example pages etc -->
   <script src="/assets/js/material-dashboard.js?v=2.1.0" type="text/javascript"></script>
   <script src="/assets/js/app-shell.js"></script>
 
   <script>
-    // Simple JavaScript to simulate RFID tag data and updates
-    
-    // List of engineer names for simulation
     const engineers = [
-      'Sarah Chen',
-      'Mike Johnson',
-      'David Rodriguez',
-      'Emily Watson',
-      'James Park',
-      'Lisa Anderson',
-      'Robert Kim',
-      'Jennifer Lee'
+      'Sarah Chen', 'Mike Johnson', 'David Rodriguez', 'Emily Watson',
+      'James Park', 'Lisa Anderson', 'Robert Kim', 'Jennifer Lee'
     ];
-    
-    // List of actions for history log
+
     const actions = [
-      'Tag scanned successfully',
-      'Maintenance check performed',
-      'Data updated',
-      'Quality inspection completed',
-      'Tag read by engineer',
-      'System calibration',
-      'Signal strength check',
-      'Memory verification'
+      'Tag scanned successfully', 'Maintenance check performed', 'Data updated',
+      'Quality inspection completed', 'Tag read by engineer', 'System calibration',
+      'Signal strength check', 'Memory verification'
     ];
-    
-    // Function to get current date and time formatted
+
     function getCurrentDateTime() {
       const now = new Date();
       const year = now.getFullYear();
@@ -412,197 +360,141 @@
       const seconds = String(now.getSeconds()).padStart(2, '0');
       return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
-    
-    // Function to get a random item from an array
+
     function getRandomItem(array) {
       return array[Math.floor(Math.random() * array.length)];
     }
-    
-    // Function to update last read time
+
     function updateLastReadTime() {
-      const lastReadTimeElement = document.getElementById('lastReadTime');
-      if (lastReadTimeElement) {
-        lastReadTimeElement.textContent = getCurrentDateTime();
-      }
+      const el = document.getElementById('lastReadTime');
+      if (el) el.textContent = getCurrentDateTime();
     }
-    
-    // Function to update last engineer
+
     function updateLastEngineer() {
-      const lastEngineerElement = document.getElementById('lastEngineer');
-      if (lastEngineerElement) {
-        lastEngineerElement.textContent = getRandomItem(engineers);
-      }
+      const el = document.getElementById('lastEngineer');
+      if (el) el.textContent = getRandomItem(engineers);
     }
-    
-    // Function to increment read count
+
     function incrementReadCount() {
-      const readCountElement = document.getElementById('readCount');
-      if (readCountElement) {
-        const currentCount = parseInt(readCountElement.textContent) || 0;
-        readCountElement.textContent = currentCount + 1;
+      const readCountEl = document.getElementById('readCount');
+      if (readCountEl) {
+        const current = parseInt(readCountEl.textContent) || 0;
+        readCountEl.textContent = current + 1;
       }
-      
-      const totalReadsElement = document.getElementById('totalReads');
-      if (totalReadsElement) {
-        const currentTotal = parseInt(totalReadsElement.textContent.replace(',', '')) || 0;
-        totalReadsElement.textContent = (currentTotal + 1).toLocaleString();
+      const totalReadsEl = document.getElementById('totalReads');
+      if (totalReadsEl) {
+        const currentTotal = parseInt(totalReadsEl.textContent.replace(',', '')) || 0;
+        totalReadsEl.textContent = (currentTotal + 1).toLocaleString();
       }
     }
-    
-    // Function to add history item
+
     function addHistoryItem() {
       const historyList = document.getElementById('historyList');
       if (!historyList) return;
-      
+
       const historyItem = document.createElement('div');
       historyItem.className = 'history-item';
-      
+
       const icon = document.createElement('div');
       icon.className = 'history-icon';
       icon.textContent = '📡';
-      
+
       const content = document.createElement('div');
       content.className = 'history-content';
-      
+
       const action = document.createElement('div');
       action.className = 'history-action';
       action.textContent = getRandomItem(actions);
-      
+
       const details = document.createElement('div');
       details.className = 'history-details';
       details.textContent = `Engineer: ${getRandomItem(engineers)} | Device: RFID-READER-03`;
-      
+
       const time = document.createElement('div');
       time.className = 'history-time';
       time.textContent = getCurrentDateTime();
-      
+
       content.appendChild(action);
       content.appendChild(details);
-      
+
       historyItem.appendChild(icon);
       historyItem.appendChild(content);
       historyItem.appendChild(time);
-      
-      // Add to top of list
+
       historyList.insertBefore(historyItem, historyList.firstChild);
-      
-      // Keep only last 10 items
+
       while (historyList.children.length > 10) {
         historyList.removeChild(historyList.lastChild);
       }
     }
-    
-    // Function to simulate tag scan
+
     function simulateTagScan() {
       updateLastReadTime();
       updateLastEngineer();
       incrementReadCount();
       addHistoryItem();
     }
-    
-    // Initialize page with some history items
+
     function initializeHistory() {
       const historyList = document.getElementById('historyList');
       if (!historyList) return;
-      
-      // Add 5 initial history items
+
       for (let i = 0; i < 5; i++) {
         setTimeout(() => {
           const now = new Date();
           now.setMinutes(now.getMinutes() - (5 - i));
-          
+
           const historyItem = document.createElement('div');
           historyItem.className = 'history-item';
-          
+
           const icon = document.createElement('div');
           icon.className = 'history-icon';
           icon.textContent = '📡';
-          
+
           const content = document.createElement('div');
           content.className = 'history-content';
-          
+
           const action = document.createElement('div');
           action.className = 'history-action';
           action.textContent = getRandomItem(actions);
-          
+
           const details = document.createElement('div');
           details.className = 'history-details';
           details.textContent = `Engineer: ${getRandomItem(engineers)} | Device: RFID-READER-03`;
-          
+
           const time = document.createElement('div');
           time.className = 'history-time';
           const timeStr = now.toISOString().slice(0, 19).replace('T', ' ');
           time.textContent = timeStr;
-          
+
           content.appendChild(action);
           content.appendChild(details);
-          
+
           historyItem.appendChild(icon);
           historyItem.appendChild(content);
           historyItem.appendChild(time);
-          
+
           historyList.appendChild(historyItem);
         }, i * 100);
       }
     }
-    
-    // Update time display every second
+
     function updateTimeDisplay() {
-      const lastReadTimeElement = document.getElementById('lastReadTime');
-      if (lastReadTimeElement && Math.random() > 0.7) {
-        // Occasionally update the time to show activity
+      const el = document.getElementById('lastReadTime');
+      if (el && Math.random() > 0.7) {
         updateLastReadTime();
       }
     }
-    
-    // Initialize page when loaded
+
     $(document).ready(function() {
       initializeHistory();
 
-      // Simulate tag scan every 5-8 seconds
       setInterval(function() {
         simulateTagScan();
       }, 5000 + Math.random() * 3000);
 
-      // Update time display every second
       setInterval(updateTimeDisplay, 1000);
     });
   </script>
-
-  <script>
-    // Animated Factory Sidebar Background
-    function initSidebarAnimation() {
-      const container = document.getElementById('sidebarAnimatedBg');
-      if (!container) return;
-
-      for (let i = 0; i < 15; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'factory-particle';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.left = Math.random() * 100 + '%';
-        particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-        particle.style.animationDelay = Math.random() * 5 + 's';
-        container.appendChild(particle);
-      }
-
-      for (let i = 0; i < 8; i++) {
-        const line = document.createElement('div');
-        line.className = 'circuit-line';
-        line.style.top = Math.random() * 100 + '%';
-        line.style.width = Math.random() * 150 + 100 + 'px';
-        line.style.animationDuration = Math.random() * 6 + 4 + 's';
-        line.style.animationDelay = Math.random() * 3 + 's';
-        container.appendChild(line);
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-    } else {
-      initSidebarAnimation();
-    }
-  </script>
 </body>
 </html>
-

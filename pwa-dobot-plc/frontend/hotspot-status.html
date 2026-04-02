@@ -8,158 +8,203 @@
   <title>Wi‑Fi Hotspot Status - Smart Factory</title>
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no" name="viewport" />
 
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-
-  <!-- CSS Files -->
   <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
 
-  <!-- PWA Manifest -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 
-<body class="dark-edition dashboard-v2 sf-subpage-v2">
-  <div class="wrapper">
-    <div class="sidebar" data-color="purple" data-background-color="black" data-image="">
-      <div class="sidebar-animated-bg" id="sidebarAnimatedBg"></div>
-      <div class="logo">
-        <a href="/" class="simple-text logo-normal">
-          <i class="material-icons">factory</i>
-          Smart Factory
+<body class="dark-edition dashboard-v2 sf-page-hotspot">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sidebar-wrapper">
-        <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              <p>Dashboard</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/robot-arm.html">
-              <i class="material-icons">precision_manufacturing</i>
-              <p>Robot Arm</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/vision-system-new.html">
-              <i class="material-icons">visibility</i>
-              <p>Vision System</p>
-            </a>
-          </li>
-
-          <li class="nav-item">
-            <a class="nav-link" href="/rfid.html">
-              <i class="material-icons">nfc</i>
-              <p>RFID Tracking</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/plc-diagnostics.html">
-              <i class="material-icons">analytics</i>
-              <p>PLC Diagnostics</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/io-link.html">
-              <i class="material-icons">settings_input_component</i>
-              <p>IO-Link Master</p>
-            </a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link" href="/hotspot-status.html">
-              <i class="material-icons">wifi</i>
-              <p>Wi‑Fi Hotspot</p>
-            </a>
-          </li>
-        </ul>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Matrix Operations UI</span>
       </div>
-    </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
+          <i class="material-icons">dashboard</i>
+          Dashboard
+        </a>
+      </div>
+    </header>
 
-    <div class="main-panel">
-      <!-- Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-transparent navbar-absolute fixed-top">
-        <div class="container-fluid">
-          <div class="navbar-wrapper">
-            <a class="navbar-brand" href="javascript:;">Wi‑Fi Hotspot Status</a>
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Utility Pages</strong>
+          </div>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
           </div>
         </div>
-      </nav>
-      <!-- End Navbar -->
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item active" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
 
-      <div class="content">
-        <div class="container-fluid">
-          <div class="row">
-            <div class="col-md-12">
-              <div class="card">
-                <div class="card-header card-header-purple">
-                  <h4 class="card-title">Raspberry Pi Wi‑Fi Hotspot</h4>
-                  <p class="card-category">
-                    Simple check that your Pi access point is running so phones can connect.
-                  </p>
-                </div>
-                <div class="card-body">
-                  <div id="statusSummary" class="alert alert-info">
-                    Checking hotspot status...
-                  </div>
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Network Utilities</p>
+            <h1 class="sf-topbar-title">Wi‑Fi Hotspot Status</h1>
+          </div>
+        </div>
 
-                  <div class="row">
-                    <div class="col-md-6">
-                      <h5>Service Status</h5>
-                      <ul class="list-group">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                          hostapd (Wi‑Fi Access Point)
-                          <span id="hostapdStatus" class="badge badge-secondary badge-pill">-</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                          dnsmasq (DHCP Server)
-                          <span id="dnsmasqStatus" class="badge badge-secondary badge-pill">-</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                          wlan0 IP (should be 192.168.4.1)
-                          <span id="wlanStatus" class="badge badge-secondary badge-pill">-</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                          Connected Devices (DHCP leases)
-                          <span id="leasesCount" class="badge badge-secondary badge-pill">-</span>
-                        </li>
-                      </ul>
-                    </div>
-                    <div class="col-md-6">
-                      <h5>How to Use</h5>
-                      <ol>
-                        <li>Make sure you already ran <code>scripts/setup_wifi_access_point.sh</code> on the Pi.</li>
-                        <li>Check that all three items above are green.</li>
-                        <li>On your phone, connect to Wi‑Fi network <strong>SmartFactory</strong> with password <strong>matrix123</strong>.</li>
-                        <li>Open a browser and go to <code>http://192.168.4.1:8080</code>.</li>
-                      </ol>
-                      <button class="btn btn-primary" id="refreshButton">Refresh Status</button>
-                    </div>
-                  </div>
-
-                  <div id="errorBox" class="alert alert-danger" style="display:none; margin-top:20px;">
-                  </div>
-                </div>
+        <main class="sf-content">
+          <section class="sf-page-hero sf-page-hero--twin">
+            <div class="sf-page-hero-copy">
+              <p class="sf-page-kicker">Support Utility</p>
+              <h2>Check hotspot health and guide operators back onto the Raspberry Pi network quickly.</h2>
+              <p>
+                The service checks, DHCP lease count, and existing refresh flow stay connected to the same backend endpoint while the page adopts native Matrix utility structure.
+              </p>
+            </div>
+            <div class="sf-page-hero-chips">
+              <div>
+                <span>Category</span>
+                <strong>Utility</strong>
+              </div>
+              <div>
+                <span>Network</span>
+                <strong>Wi-Fi AP</strong>
+              </div>
+              <div>
+                <span>Contract</span>
+                <strong>/api/hotspot/status</strong>
               </div>
             </div>
-          </div>
-        </div>
+          </section>
+          <section class="sf-stage sf-stage-1">
+
+            <div id="statusSummary" class="alert alert-info shadow-sm mb-4">
+              Checking hotspot status...
+            </div>
+
+            <div class="sf-row">
+              <article class="sf-panel">
+                <header class="sf-panel-head">
+                  <h3>Service Status</h3>
+                  <p>Raspberry Pi Wi‑Fi access point health check.</p>
+                </header>
+
+                <table class="table table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Service Check</th>
+                      <th class="text-right">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="padding:10px 4px; font-size:13px;">hostapd (Wi‑Fi Access Point)</td>
+                      <td class="text-right">
+                        <span id="hostapdStatus" class="badge badge-neutral">-</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-sm">dnsmasq (DHCP Server)</td>
+                      <td class="text-right">
+                        <span id="dnsmasqStatus" class="badge badge-neutral">-</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-sm">wlan0 IP (should be 192.168.4.1)</td>
+                      <td class="text-right">
+                        <span id="wlanStatus" class="badge badge-neutral">-</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-sm">Connected Devices (DHCP leases)</td>
+                      <td class="text-right">
+                        <span id="leasesCount" class="badge badge-neutral">-</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </article>
+
+              <article class="sf-panel">
+                <header class="sf-panel-head">
+                  <h3>How to Use</h3>
+                  <p>Steps to connect a phone to the Pi hotspot.</p>
+                </header>
+                <ol class="list-decimal pl-5 space-y-2 text-sm text-base-content/80">
+                  <li>Make sure you already ran <code>scripts/setup_wifi_access_point.sh</code> on the Pi.</li>
+                  <li>Check that all three service items are green.</li>
+                  <li>On your phone, connect to Wi‑Fi network <strong>SmartFactory</strong> with password <strong>matrix123</strong>.</li>
+                  <li>Open a browser and go to <code>http://192.168.4.1:8080</code>.</li>
+                </ol>
+                <div class="mt-4">
+                  <button class="btn btn-primary" id="refreshButton">
+                    <i class="material-icons">refresh</i>
+                    Refresh Status
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <div id="errorBox" class="alert alert-error mt-4 hidden"></div>
+
+          </section>
+        </main>
       </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
-  <!--   Core JS Files   -->
   <script src="/assets/js/core/jquery.min.js"></script>
   <script src="/assets/js/core/popper.min.js"></script>
   <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
   <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-  <script src="/assets/js/material-dashboard.min.js?v=2.1.0"></script>
   <script src="/assets/js/material-dashboard.js"></script>
   <script src="/assets/js/app-shell.js"></script>
 
@@ -169,17 +214,17 @@
       if (!el) return;
 
       el.textContent = isOk ? textIfOk : textIfNotOk;
-      el.classList.remove('badge-secondary', 'badge-success', 'badge-danger');
-      el.classList.add(isOk ? 'badge-success' : 'badge-danger');
+      el.classList.remove('badge-neutral', 'badge-success', 'badge-error');
+      el.classList.add(isOk ? 'badge-success' : 'badge-error');
     }
 
     function updateHotspotStatus() {
       var statusSummary = document.getElementById('statusSummary');
       var errorBox = document.getElementById('errorBox');
 
-      statusSummary.className = 'alert alert-info';
+      statusSummary.className = 'alert alert-info shadow-sm mb-4';
       statusSummary.textContent = 'Checking hotspot status...';
-      errorBox.style.display = 'none';
+      errorBox.className = 'alert alert-error mt-4 hidden';
       errorBox.textContent = '';
 
       fetch('/api/hotspot/status')
@@ -197,22 +242,22 @@
           var leasesEl = document.getElementById('leasesCount');
           if (leasesEl) {
             leasesEl.textContent = typeof data.leases_count === 'number' ? data.leases_count : '-';
-            leasesEl.classList.remove('badge-secondary');
+            leasesEl.classList.remove('badge-neutral', 'badge-success', 'badge-error');
             leasesEl.classList.add('badge-info');
           }
 
           if (data.ok) {
-            statusSummary.className = 'alert alert-success';
+            statusSummary.className = 'alert alert-success shadow-sm mb-4';
             statusSummary.textContent = '✅ Hotspot looks good. Phones should be able to connect to Wi‑Fi and reach http://192.168.4.1:8080.';
           } else {
-            statusSummary.className = 'alert alert-warning';
+            statusSummary.className = 'alert alert-warning shadow-sm mb-4';
             statusSummary.textContent = '⚠️ Hotspot is not fully healthy yet. Check the red items above.';
           }
         })
         .catch(function (err) {
-          statusSummary.className = 'alert alert-danger';
+          statusSummary.className = 'alert alert-error shadow-sm mb-4';
           statusSummary.textContent = 'Error checking hotspot status.';
-          errorBox.style.display = 'block';
+          errorBox.className = 'alert alert-error mt-4';
           errorBox.textContent = 'Details: ' + err.message + '. Is the backend running on the Raspberry Pi?';
         });
     }
@@ -229,5 +274,3 @@
   </script>
 </body>
 </html>
-
-
