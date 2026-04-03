@@ -31,7 +31,7 @@
         </a>
       </div>
       <div class="sf-template-header-center flex-1 flex justify-center">
-        <span class="sf-template-shell-title">Matrix Operations UI</span>
+        <span class="sf-template-shell-title">Smart Factory 2</span>
       </div>
       <div class="sf-template-header-right flex-none flex items-center gap-4">
         <label class="sf-theme-wrap label cursor-pointer gap-2">
@@ -113,6 +113,7 @@
         <div class="sf-warning alert alert-warning shadow-sm hidden" id="sfSoftWarning" role="status" aria-live="polite"></div>
 
         <section class="sf-hero sf-stage sf-stage-1 card bg-base-200 shadow-xl border border-base-300">
+          <div class="card-body gap-6 lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
           <div class="sf-hero-copy">
             <p class="sf-eyebrow">Live Industrial Telemetry</p>
             <h2>Command, monitor, and diagnose the line in real time.</h2>
@@ -130,7 +131,7 @@
               </button>
             </div>
           </div>
-          <div class="sf-hero-chips grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="sf-hero-chips grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
             <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm">
               <div class="stat-title">System Mode</div>
               <div class="stat-value text-lg" data-bind="meta.mode">AUTONOMOUS</div>
@@ -143,10 +144,11 @@
               <div class="stat-title">Last Refresh</div>
               <div class="stat-value text-lg" data-bind="meta.lastRefresh">--:--:--</div>
             </div>
-            <button class="sf-btn sf-btn-danger sf-hero-estop btn btn-error sm:col-span-3" type="button" data-action="emergencyStop">
+            <button class="sf-btn sf-btn-danger sf-hero-estop btn btn-error sm:col-span-3 lg:col-span-1" type="button" data-action="emergencyStop">
               <i class="material-icons">warning</i>
               Emergency Stop
             </button>
+          </div>
           </div>
         </section>
 
@@ -236,6 +238,7 @@
 
         <section class="sf-row sf-stage sf-stage-3">
           <article class="sf-panel sf-actions-panel card bg-base-200 shadow-xl border border-base-300">
+            <div class="card-body gap-4">
             <header class="sf-panel-head">
               <h3>Quick Actions</h3>
               <p>Execute operational controls without leaving the dashboard.</p>
@@ -267,9 +270,11 @@
               <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="writePLC"><i class="material-icons">edit</i><span>Write Data</span></button>
               <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="openPLC"><i class="material-icons">open_in_new</i><span>Diagnostics</span></button>
             </div>
+            </div>
           </article>
 
           <article class="sf-panel sf-alerts-panel card bg-base-200 shadow-xl border border-base-300">
+            <div class="card-body gap-4">
             <header class="sf-panel-head">
               <h3>System Alerts</h3>
               <p>Recent events and state transitions.</p>
@@ -284,11 +289,13 @@
                 </div>
               </div>
             </div>
+            </div>
           </article>
         </section>
 
         <section class="sf-row sf-quality-row sf-stage sf-stage-3">
           <article class="sf-panel card bg-base-200 shadow-xl border border-base-300">
+            <div class="card-body gap-4">
             <header class="sf-panel-head">
               <h3>Fault Overview</h3>
               <p>Real-time quality anomaly monitoring.</p>
@@ -307,9 +314,11 @@
 
             <p class="sf-kpi-sub" data-bind="faults.summary">Monitoring...</p>
             <div class="sf-fault-list space-y-3" id="faultList"></div>
+            </div>
           </article>
 
           <article class="sf-panel card bg-base-200 shadow-xl border border-base-300">
+            <div class="card-body gap-4">
             <header class="sf-panel-head">
               <h3>Quality Performance</h3>
               <p>Line efficiency and pass-rate trend.</p>
@@ -328,6 +337,7 @@
             </div>
 
             <p class="sf-kpi-sub" data-bind="quality.subtitle">Defects: 0 items</p>
+            </div>
           </article>
         </section>
 
