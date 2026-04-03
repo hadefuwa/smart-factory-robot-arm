@@ -5,11 +5,10 @@
  <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
  <link rel="icon" type="image/png" href="/assets/img/favicon.png">
  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
- <title>Vision System - Smart Factory</title>
+ <title>Vision System (Legacy) - Smart Factory</title>
  <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
  
- <!-- Fonts and icons -->
-  <!-- Fonts and icons - all local (no internet required for HMI) -->
+ <!-- Fonts and icons (local) -->
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
  
  <!-- CSS Files -->
@@ -48,6 +47,10 @@
             <option value="dark">Dark</option>
           </select>
         </label>
+        <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/vision-system-new.html">
+          <i class="material-icons">visibility</i>
+          New vision UI
+        </a>
         <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
           <i class="material-icons">dashboard</i>
           Dashboard
@@ -62,7 +65,7 @@
         <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
           <div>
             <p class="sf-template-sidebar-kicker">Workspace</p>
-            <strong>Legacy Access</strong>
+            <strong>Production Pages</strong>
           </div>
           <div class="sf-template-sidebar-actions flex items-center gap-2">
             <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
@@ -95,7 +98,7 @@
         <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Legacy View</p>
-            <h1 class="sf-topbar-title">Vision System</h1>
+            <h1 class="sf-topbar-title">Vision System (Legacy)</h1>
           </div>
         </div>
 
@@ -396,14 +399,9 @@
           </label>
           <input type="range" id="yoloCropBottomSlider" min="0" max="50" step="5" value="0" oninput="updateYoloParams()" style="width: 100%; height: 6px; accent-color: #9c27b0;">
           <div style="color: #757575; font-size: 9px; margin-top: 4px;">Ignore bottom portion of frame</div>
-        </main>
+        </div>
       </div>
     </div>
-
-    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
-      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
-      <a href="/">Smart Factory Home</a>
-    </footer>
   </div>
 
   <!-- --------------------------------------------------------------- -->
@@ -706,7 +704,7 @@
 
  <h4 style="color: var(--primary-pink); margin-top: 24px; margin-bottom: 12px;">Camera Snapshots</h4>
  <ul style="margin-left: 24px; margin-bottom: 16px;">
- <li>USB camera (index 0) captures a JPEG every second at 640480</li>
+ <li>USB camera (index 0) captures a JPEG every second at 640×480</li>
  <li>The raw snapshot feeds the analyzed image and the saved counter crops</li>
  <li>The analyzed image you see is refreshed once per second (no stream required)</li>
  </ul>
@@ -753,9 +751,14 @@
  </div>
  </div>
 
-        </div>
+        </main>
       </div>
     </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
   </div>
 
   <!-- Core JS Files -->
@@ -2778,41 +2781,6 @@
  await updatePlcConnectionStatus();
  await updateDb40StartBit();
  }
- </script>
-
- <script>
-   // Animated Factory Sidebar Background
-   function initSidebarAnimation() {
-     const container = document.getElementById('sidebarAnimatedBg');
-     if (!container) return;
-
-     for (let i = 0; i < 15; i++) {
-       const particle = document.createElement('div');
-       particle.className = 'factory-particle';
-       particle.style.width = Math.random() * 4 + 2 + 'px';
-       particle.style.height = particle.style.width;
-       particle.style.left = Math.random() * 100 + '%';
-       particle.style.animationDuration = Math.random() * 10 + 8 + 's';
-       particle.style.animationDelay = Math.random() * 5 + 's';
-       container.appendChild(particle);
-     }
-
-     for (let i = 0; i < 8; i++) {
-       const line = document.createElement('div');
-       line.className = 'circuit-line';
-       line.style.top = Math.random() * 100 + '%';
-       line.style.width = Math.random() * 150 + 100 + 'px';
-       line.style.animationDuration = Math.random() * 6 + 4 + 's';
-       line.style.animationDelay = Math.random() * 3 + 's';
-       container.appendChild(line);
-     }
-   }
-
-   if (document.readyState === 'loading') {
-     document.addEventListener('DOMContentLoaded', initSidebarAnimation);
-   } else {
-     initSidebarAnimation();
-   }
  </script>
 </body>
 </html>

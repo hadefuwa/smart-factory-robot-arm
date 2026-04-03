@@ -23,6 +23,91 @@
 
   <!-- All styles consolidated in professional-theme.css -->
   <style>
+    body.sf-page-plc .sf-content {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-plc .sf-section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 0 -0.15rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    body.sf-page-plc .sf-section-label::before {
+      content: "";
+      width: 2.25rem;
+      height: 1px;
+      background: linear-gradient(90deg, var(--sf-warning-ui), transparent);
+    }
+
+    body.sf-page-plc .sf-page-hero {
+      margin-bottom: 0;
+    }
+
+    body.sf-page-plc .sf-page-hero-copy {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-plc .sf-page-hero-copy p:last-child {
+      max-width: 66ch;
+    }
+
+    body.sf-page-plc .sf-page-hero-chips {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
+    }
+
+    body.sf-page-plc .sf-page-hero-chips > div {
+      display: grid;
+      gap: 0.2rem;
+      min-height: 5.25rem;
+      align-content: center;
+    }
+
+    body.sf-page-plc .sf-panel {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-plc .sf-panel-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    body.sf-page-plc .sf-panel-head::after {
+      content: "";
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 0.95rem;
+      border: 1px solid var(--sf-base-300);
+      background:
+        radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--sf-warning-ui) 24%, transparent), transparent 60%),
+        var(--sf-base-200);
+      flex: 0 0 auto;
+    }
+
+    body.sf-page-plc .sf-plc-summary-card code {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.45rem;
+      margin-inline: 0.2rem;
+      border-radius: 0.55rem;
+      border: 1px solid var(--sf-base-300);
+      background: var(--sf-base-100);
+      color: var(--sf-base-content);
+      font-size: 0.82rem;
+    }
+
     .db-map-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -31,13 +116,38 @@
       margin-bottom: 12px;
     }
 
+    .sf-page-plc .sf-plc-editor-stage {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .sf-page-plc .sf-plc-editor-note {
+      display: grid;
+      gap: 0.25rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 1rem;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 92%, transparent), color-mix(in srgb, var(--sf-base-200) 85%, transparent));
+    }
+
+    .sf-page-plc .sf-plc-editor-note strong {
+      font-size: 0.92rem;
+      color: var(--sf-base-content);
+    }
+
+    .sf-page-plc .sf-plc-editor-note span {
+      font-size: 0.82rem;
+      color: var(--sf-base-muted);
+      line-height: 1.5;
+    }
+
     .db-map-panel {
       margin-bottom: 0;
-      padding: 10px;
-      background: var(--sf-base-100);
+      padding: 1rem;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 94%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
       border: 1px solid var(--sf-base-300);
-      border-radius: 12px;
-      box-shadow: none;
+      border-radius: 16px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     .db-map-panel .db-map-header {
@@ -51,13 +161,13 @@
 
     .db-map-panel .db-map-title {
       margin: 0 0 4px 0;
-      font-size: 12px;
-      color: var(--sf-primary);
+      font-size: 0.95rem;
+      color: var(--sf-base-content);
     }
 
     .db-map-panel .db-map-copy {
       color: var(--sf-base-muted);
-      font-size: 10px;
+      font-size: 0.78rem;
       line-height: 1.35;
       margin: 0;
       max-width: 720px;
@@ -80,12 +190,13 @@
     .db-map-panel .db-map-controls input,
     .db-map-panel .db-map-controls select {
       width: 100%;
-      padding: 5px 7px;
+      padding: 0.55rem 0.7rem;
       background: var(--sf-base-100);
       border: 1px solid var(--sf-base-300);
       color: var(--sf-base-content);
       font-size: 12px;
       border-radius: 8px;
+      min-height: 2.5rem;
     }
 
     .db-map-panel .db-map-table {
@@ -93,6 +204,8 @@
       border-collapse: collapse;
       min-width: 0;
       table-layout: fixed;
+      border-radius: 12px;
+      overflow: hidden;
     }
 
     .db-map-panel .db-map-table th {
@@ -137,7 +250,7 @@
       width: 100%;
       min-width: 64px;
       max-width: 84px;
-      padding: 6px 8px;
+      padding: 0.45rem 0.55rem;
       border-radius: 8px;
       border: 1px solid var(--sf-base-300);
       background: var(--sf-base-100);
@@ -168,28 +281,151 @@
     }
 
     .db-map-panel .db-map-actions {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       margin-top: 10px;
     }
 
     .db-map-panel .db-map-actions .btn {
-      padding: 6px 10px !important;
+      padding: 0.75rem 0.85rem !important;
       margin: 0;
       font-size: 11px;
       line-height: 1.2;
+      border-radius: 0.9rem;
+    }
+
+    .sf-page-plc .sf-plc-ops-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 1rem;
+    }
+
+    .sf-page-plc .sf-plc-status-panel {
+      padding: 1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 1rem;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 94%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
+    }
+
+    .sf-page-plc .status-panel {
+      margin-bottom: 0;
+    }
+
+    .sf-page-plc .status-row {
+      grid-template-columns: minmax(0, 180px) 1fr;
+      padding: 0.9rem 0;
+      border-color: var(--sf-base-300);
+    }
+
+    .sf-page-plc .controls {
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    .sf-page-plc .btn-control {
+      width: 100%;
+      min-height: 2.9rem;
+      padding: 0.8rem 0.95rem;
+      border-radius: 0.95rem;
+      font-size: 0.82rem;
+    }
+
+    .sf-page-plc .stats-grid {
+      margin-top: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.8rem;
+    }
+
+    .sf-page-plc .stat-box {
+      margin: 0;
+      border-radius: 1rem;
+      padding: 1rem 0.9rem;
+      text-align: left;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 96%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
+      border: 1px solid var(--sf-base-300);
+      box-shadow: none;
+    }
+
+    .sf-page-plc .stat-value {
+      font-size: clamp(1.05rem, 2vw, 1.45rem);
+    }
+
+    .sf-page-plc .sf-plc-control-stack {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .sf-page-plc .sf-plc-control-block {
+      display: grid;
+      gap: 0.75rem;
+      padding: 1rem;
+      border-radius: 1rem;
+      border: 1px solid var(--sf-base-300);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 96%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
+    }
+
+    .sf-page-plc .sf-plc-control-block h4 {
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--sf-base-content);
+    }
+
+    .sf-page-plc .sf-plc-control-block p {
+      margin: 0;
+      color: var(--sf-base-muted) !important;
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .sf-page-plc .sf-plc-log {
+      min-height: 24rem;
+      border-radius: 1rem;
+      border: 1px solid var(--sf-base-300);
+      background: var(--sf-base-100);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     @media (max-width: 1200px) {
       .db-map-grid {
         grid-template-columns: 1fr;
       }
+
+      .sf-page-plc .sf-plc-ops-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .sf-page-plc .sf-page-hero-chips,
+      .sf-page-plc .stats-grid,
+      .sf-page-plc .controls,
+      .db-map-panel .db-map-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body.sf-page-plc .sf-panel-head {
+        flex-direction: column;
+      }
+
+      body.sf-page-plc .sf-panel-head::after {
+        display: none;
+      }
+
+      .sf-page-plc .status-row {
+        grid-template-columns: 1fr;
+        gap: 0.35rem;
+      }
     }
   </style>
 </head>
 
-<body class="dashboard-v2 sf-page-plc">
+<body class="dashboard-v2 sf-page-plc sf-subpage-v2">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">
@@ -291,21 +527,27 @@
             </div>
           </section>
 
-          <!-- Section 1: Page header status -->
+          <p class="sf-section-label">Address Summary</p>
           <section class="sf-stage sf-stage-1">
-            <article class="sf-panel">
+            <article class="sf-panel sf-plc-summary-card">
               <header class="sf-panel-head">
-                <h3>PLC Tag Diagnostics - S7-1200</h3>
-                <p>
-                  DB123 start bit: <code id="headerStartAddress">DB123.DBX0.0</code> |
-                  DB124 connected bit: <code id="headerConnectedAddress">DB124.DBX0.0</code>
-                </p>
+                <div>
+                  <h3>PLC Tag Diagnostics - S7-1200</h3>
+                  <p>
+                    DB123 start bit: <code id="headerStartAddress">DB123.DBX0.0</code> |
+                    DB124 connected bit: <code id="headerConnectedAddress">DB124.DBX0.0</code>
+                  </p>
+                </div>
               </header>
             </article>
           </section>
 
-          <!-- Section 2: DB editors row -->
-          <section class="sf-stage sf-stage-2">
+          <p class="sf-section-label">DB Mapping Editors</p>
+          <section class="sf-stage sf-stage-2 sf-plc-editor-stage">
+            <div class="sf-plc-editor-note">
+              <strong>Runtime-safe mapping updates</strong>
+              <span>Both editors below keep their existing IDs and save flows, but now read as clearer engineering panels with better separation between metadata, offsets, and save actions.</span>
+            </div>
             <div class="db-map-grid">
 
               <!-- DB123 Editor -->
@@ -411,81 +653,93 @@
             </div>
           </section>
 
-          <!-- Section 3: Status + Controls + Stats + Log -->
-          <section class="sf-row sf-stage sf-stage-3">
+          <p class="sf-section-label">Live Diagnostics</p>
+          <section class="sf-plc-ops-grid sf-stage sf-stage-3">
 
-            <!-- Status + Controls panel -->
             <article class="sf-panel">
               <header class="sf-panel-head">
-                <h3>PLC Status</h3>
+                <div>
+                  <h3>PLC Status</h3>
+                  <p>Connection, active bit state, polling controls, and runtime counters.</p>
+                </div>
               </header>
 
-              <!-- Status Panel -->
-              <div class="status-panel">
-                <div class="status-row">
-                  <div class="status-label">PLC Connected:</div>
-                  <div class="status-value" id="plcConnected">-</div>
+              <div class="sf-plc-control-stack">
+                <div class="sf-plc-status-panel">
+                  <div class="status-panel">
+                    <div class="status-row">
+                      <div class="status-label">PLC Connected:</div>
+                      <div class="status-value" id="plcConnected">-</div>
+                    </div>
+                    <div class="status-row">
+                      <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
+                      <div class="status-value" id="startBitValue">-</div>
+                    </div>
+                    <div class="status-row">
+                      <div class="status-label">Last Update:</div>
+                      <div class="status-value" id="lastUpdate">-</div>
+                    </div>
+                    <div class="status-row">
+                      <div class="status-label">Poll Interval:</div>
+                      <div class="status-value" id="pollInterval">500ms</div>
+                    </div>
+                  </div>
                 </div>
-                <div class="status-row">
-                  <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
-                  <div class="status-value" id="startBitValue">-</div>
-                </div>
-                <div class="status-row">
-                  <div class="status-label">Last Update:</div>
-                  <div class="status-value" id="lastUpdate">-</div>
-                </div>
-                <div class="status-row">
-                  <div class="status-label">Poll Interval:</div>
-                  <div class="status-value" id="pollInterval">500ms</div>
-                </div>
-              </div>
 
-              <!-- Controls -->
-              <div class="controls">
-                <button class="btn-control" onclick="setPollInterval(250)">250ms</button>
-                <button class="btn-control" onclick="setPollInterval(500)">500ms</button>
-                <button class="btn-control" onclick="setPollInterval(1000)">1000ms</button>
-                <button class="btn-control" onclick="setPollInterval(2000)">2000ms</button>
-                <button class="btn-control" onclick="clearLog()">Clear Log</button>
-                <button class="btn-control" onclick="togglePause()">Pause/Resume</button>
-              </div>
+                <div class="sf-plc-control-block">
+                  <h4>Polling Controls</h4>
+                  <p>Switch between faster troubleshooting intervals or slower long-running monitoring without leaving the diagnostics page.</p>
+                  <div class="controls">
+                    <button class="btn-control" onclick="setPollInterval(250)">250ms</button>
+                    <button class="btn-control" onclick="setPollInterval(500)">500ms</button>
+                    <button class="btn-control" onclick="setPollInterval(1000)">1000ms</button>
+                    <button class="btn-control" onclick="setPollInterval(2000)">2000ms</button>
+                    <button class="btn-control" onclick="clearLog()">Clear Log</button>
+                    <button class="btn-control" onclick="togglePause()">Pause/Resume</button>
+                  </div>
+                </div>
 
-              <!-- Stats Grid -->
-              <div class="stats-grid">
-                <div class="stat-box">
-                  <div class="stat-label">Total Reads</div>
-                  <div class="stat-value" id="totalReads">0</div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">TRUE Count</div>
-                  <div class="stat-value" id="trueCount">0</div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">FALSE Count</div>
-                  <div class="stat-value" id="falseCount">0</div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">Errors</div>
-                  <div class="stat-value" id="errorCount">0</div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">Uptime</div>
-                  <div class="stat-value" id="uptime">00:00</div>
-                </div>
-                <div class="stat-box">
-                  <div class="stat-label">TRUE %</div>
-                  <div class="stat-value" id="truePercent">0%</div>
+                <div class="sf-plc-control-block">
+                  <h4>Runtime Statistics</h4>
+                  <p>Quick counters for read activity, bit distribution, errors, and session uptime.</p>
+                  <div class="stats-grid">
+                    <div class="stat-box">
+                      <div class="stat-label">Total Reads</div>
+                      <div class="stat-value" id="totalReads">0</div>
+                    </div>
+                    <div class="stat-box">
+                      <div class="stat-label">TRUE Count</div>
+                      <div class="stat-value" id="trueCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                      <div class="stat-label">FALSE Count</div>
+                      <div class="stat-value" id="falseCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                      <div class="stat-label">Errors</div>
+                      <div class="stat-value" id="errorCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                      <div class="stat-label">Uptime</div>
+                      <div class="stat-value" id="uptime">00:00</div>
+                    </div>
+                    <div class="stat-box">
+                      <div class="stat-label">TRUE %</div>
+                      <div class="stat-value" id="truePercent">0%</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>
 
-            <!-- Log panel -->
             <article class="sf-panel">
               <header class="sf-panel-head">
-                <h3>Activity Log</h3>
-                <p>Runtime read/write events and operator actions.</p>
+                <div>
+                  <h3>Activity Log</h3>
+                  <p>Runtime read/write events and operator actions.</p>
+                </div>
               </header>
-              <div id="logPanel" class="log-panel"></div>
+              <div id="logPanel" class="log-panel sf-plc-log"></div>
             </article>
 
           </section>

@@ -5,7 +5,7 @@
   <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
   <link rel="icon" type="image/png" href="/assets/img/favicon.png">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-  <title>Wi‑Fi Hotspot Status - Smart Factory</title>
+  <title>Wi-Fi Hotspot Status - Smart Factory</title>
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no" name="viewport" />
 
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
@@ -43,6 +43,10 @@
             <option value="dark">Dark</option>
           </select>
         </label>
+        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" onclick="updateHotspotStatus()">
+          <i class="material-icons">refresh</i>
+          Refresh
+        </button>
         <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
           <i class="material-icons">dashboard</i>
           Dashboard
@@ -57,7 +61,7 @@
         <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
           <div>
             <p class="sf-template-sidebar-kicker">Workspace</p>
-            <strong>Utility Pages</strong>
+            <strong>Production Pages</strong>
           </div>
           <div class="sf-template-sidebar-actions flex items-center gap-2">
             <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
@@ -90,7 +94,7 @@
         <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Network Utilities</p>
-            <h1 class="sf-topbar-title">Wi‑Fi Hotspot Status</h1>
+            <h1 class="sf-topbar-title">Wi-Fi Hotspot Status</h1>
           </div>
         </div>
 
@@ -120,7 +124,7 @@
           </section>
           <section class="sf-stage sf-stage-1">
 
-            <div id="statusSummary" class="alert alert-info shadow-sm mb-4">
+            <div id="statusSummary" class="alert alert-info shadow-sm mb-4" role="status" aria-live="polite">
               Checking hotspot status...
             </div>
 
@@ -128,7 +132,7 @@
               <article class="sf-panel">
                 <header class="sf-panel-head">
                   <h3>Service Status</h3>
-                  <p>Raspberry Pi Wi‑Fi access point health check.</p>
+                  <p>Raspberry Pi Wi-Fi access point health check.</p>
                 </header>
 
                 <table class="table table-zebra">
@@ -140,7 +144,7 @@
                   </thead>
                   <tbody>
                     <tr>
-                      <td style="padding:10px 4px; font-size:13px;">hostapd (Wi‑Fi Access Point)</td>
+                      <td class="py-2.5 px-1 text-sm">hostapd (Wi-Fi access point)</td>
                       <td class="text-right">
                         <span id="hostapdStatus" class="badge badge-neutral">-</span>
                       </td>
@@ -175,13 +179,13 @@
                 <ol class="list-decimal pl-5 space-y-2 text-sm text-base-content/80">
                   <li>Make sure you already ran <code>scripts/setup_wifi_access_point.sh</code> on the Pi.</li>
                   <li>Check that all three service items are green.</li>
-                  <li>On your phone, connect to Wi‑Fi network <strong>SmartFactory</strong> with password <strong>matrix123</strong>.</li>
+                  <li>On your phone, connect to Wi-Fi network <strong>SmartFactory</strong> with password <strong>matrix123</strong>.</li>
                   <li>Open a browser and go to <code>http://192.168.4.1:8080</code>.</li>
                 </ol>
                 <div class="mt-4">
-                  <button class="btn btn-primary" id="refreshButton">
-                    <i class="material-icons">refresh</i>
-                    Refresh Status
+                  <button class="btn btn-primary inline-flex items-center gap-2" type="button" id="refreshButton">
+                    <i class="material-icons text-base">refresh</i>
+                    Refresh status
                   </button>
                 </div>
               </article>
@@ -235,17 +239,26 @@
 
           var leasesEl = document.getElementById('leasesCount');
           if (leasesEl) {
-            leasesEl.textContent = typeof data.leases_count === 'number' ? data.leases_count : '-';
-            leasesEl.classList.remove('badge-neutral', 'badge-success', 'badge-error');
-            leasesEl.classList.add('badge-info');
+            var count = data.leases_count;
+            if (typeof count === 'number') {
+              leasesEl.textContent = String(count);
+              leasesEl.classList.remove('badge-neutral', 'badge-success', 'badge-error', 'badge-info');
+              leasesEl.classList.add('badge-info');
+            } else {
+              leasesEl.textContent = '-';
+              leasesEl.classList.remove('badge-success', 'badge-error', 'badge-info');
+              leasesEl.classList.add('badge-neutral');
+            }
           }
 
           if (data.ok) {
             statusSummary.className = 'alert alert-success shadow-sm mb-4';
-            statusSummary.textContent = '✅ Hotspot looks good. Phones should be able to connect to Wi‑Fi and reach http://192.168.4.1:8080.';
+            statusSummary.textContent =
+              'Hotspot looks good. Phones should be able to connect to Wi-Fi and reach http://192.168.4.1:8080.';
           } else {
             statusSummary.className = 'alert alert-warning shadow-sm mb-4';
-            statusSummary.textContent = '⚠️ Hotspot is not fully healthy yet. Check the red items above.';
+            statusSummary.textContent =
+              'Hotspot is not fully healthy yet. Check the red items in the table above.';
           }
         })
         .catch(function (err) {

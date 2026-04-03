@@ -12,14 +12,29 @@
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
   <style>
-    .port-active, .port-active td, .port-active th, .port-active code { color: #1a1a1a !important; }
+    /* Active IO-Link row: keep text readable on success-tinted row in light and dark */
+    tr.port-active td,
+    tr.port-active th,
+    tr.port-active code {
+      color: var(--sf-base-content) !important;
+      font-weight: 600;
+    }
 
-    /* Chart container styling */
+    .io-link-product-img {
+      max-height: 200px;
+      width: 100%;
+      object-fit: contain;
+    }
+
+    .io-link-placeholder-icon {
+      font-size: 4.5rem;
+      line-height: 1;
+    }
+
+    /* Chart container (background/border also tuned in professional-theme for .sf-page-iolink) */
     .chart-container {
-      padding: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 8px;
-      margin-bottom: 10px;
+      border-radius: 0.5rem;
+      margin-bottom: 0.5rem;
       min-height: 300px;
     }
 
@@ -82,11 +97,16 @@
       stroke-width: 8px;
     }
 
-    /* Chart labels - responsive and readable */
-    .ct-label {
-      color: rgba(255, 255, 255, 0.7);
+    /* Chart labels follow theme */
+    html[data-theme='light'] body.sf-page-iolink .ct-label {
+      color: color-mix(in srgb, var(--sf-base-content) 72%, transparent);
       font-size: 10px;
-      fill: rgba(255, 255, 255, 0.7);
+      fill: color-mix(in srgb, var(--sf-base-content) 72%, transparent);
+    }
+    html[data-theme='dark'] body.sf-page-iolink .ct-label {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 10px;
+      fill: rgba(255, 255, 255, 0.72);
     }
 
     /* X-axis labels - better spacing and readability */
@@ -108,9 +128,12 @@
       clip-path: inset(0 0 10% 0);
     }
 
-    /* Chart grid */
-    .ct-grid {
-      stroke: rgba(255, 255, 255, 0.1);
+    html[data-theme='light'] body.sf-page-iolink .ct-grid {
+      stroke: color-mix(in srgb, var(--sf-base-300) 85%, transparent);
+      stroke-width: 1px;
+    }
+    html[data-theme='dark'] body.sf-page-iolink .ct-grid {
+      stroke: rgba(255, 255, 255, 0.12);
       stroke-width: 1px;
     }
 
@@ -150,11 +173,11 @@
             <option value="dark">Dark</option>
           </select>
         </label>
-        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" data-action="refreshNow">
+        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" onclick="refreshNow()">
           <i class="material-icons">refresh</i>
           Refresh
         </button>
-        <button class="sf-btn sf-btn-danger btn btn-error btn-sm" type="button" data-action="emergencyStop">
+        <button class="sf-btn sf-btn-danger btn btn-error btn-sm" type="button" onclick="ioLinkEmergencyStop()">
           <i class="material-icons">stop_circle</i>
           E-Stop
         </button>
@@ -244,12 +267,11 @@
                     id="productImage"
                     src="/assets/img/AL1300.png"
                     alt="IO-Link Master"
-                    class="rounded-box border border-base-300"
-                    style="max-height:200px; object-fit:contain; width:100%;"
+                    class="rounded-box border border-base-300 io-link-product-img w-full"
                     onerror="this.onerror=null; this.src='/api/io-link/product-image';"
                   >
-                  <div id="productImagePlaceholder" class="sf-vision-placeholder" style="display:none; padding:20px;">
-                    <i class="material-icons" style="font-size:80px;">settings_input_component</i>
+                  <div id="productImagePlaceholder" class="sf-vision-placeholder hidden p-5 text-center">
+                    <i class="material-icons io-link-placeholder-icon">settings_input_component</i>
                     <p>AL1300 IO-Link Master</p>
                   </div>
                 </div>
@@ -321,15 +343,15 @@
               </header>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <div class="chart-container">
-                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Current (mA)</h6>
+                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Current (mA)</h6>
                   <div class="ct-chart ct-perfect-fourth" id="chartCurrent"></div>
                 </div>
                 <div class="chart-container">
-                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Voltage (mV)</h6>
+                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Voltage (mV)</h6>
                   <div class="ct-chart ct-perfect-fourth" id="chartVoltage"></div>
                 </div>
                 <div class="chart-container">
-                  <h6 style="text-align:center; font-weight:bold; margin-bottom:8px;">Temperature (°C)</h6>
+                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Temperature (°C)</h6>
                   <div class="ct-chart ct-perfect-fourth" id="chartTemp"></div>
                 </div>
               </div>
@@ -374,7 +396,7 @@
                 <p>Process data and decoded device status</p>
               </header>
               <div id="portDetailsContainer">
-                <p style="text-align:center;">Loading...</p>
+                <p class="text-center text-sm text-base-content/70">Loading…</p>
               </div>
             </article>
           </section>
@@ -413,6 +435,21 @@
 
     function refreshNow() {
       fetchIoLinkStatus();
+    }
+
+    async function ioLinkEmergencyStop() {
+      if (!window.confirm('Send emergency stop to the robot?')) {
+        return;
+      }
+      try {
+        const response = await fetch(`${API_BASE}/api/robot/emergency-stop`, { method: 'POST' });
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          throw new Error(text || 'HTTP ' + response.status);
+        }
+      } catch (error) {
+        window.alert('E-stop request failed: ' + (error.message || String(error)));
+      }
     }
 
     let lastGoodData = null;
@@ -460,12 +497,12 @@
           const placeholder = document.getElementById('productImagePlaceholder');
           if (data.device_icon_url) {
             img.src = data.device_icon_url;
-            img.style.display = '';
-            placeholder.style.display = 'none';
+            img.classList.remove('hidden');
+            placeholder.classList.add('hidden');
           } else {
             img.src = '/assets/img/AL1300.png';
-            img.style.display = '';
-            placeholder.style.display = 'none';
+            img.classList.remove('hidden');
+            placeholder.classList.add('hidden');
             img.onerror = function() { this.onerror = null; this.src = '/api/io-link/product-image'; };
           }
         } else {
@@ -545,64 +582,6 @@
       }
 
       document.getElementById('portDetailsContainer').innerHTML = html || '<div class="rounded-box border border-base-300 bg-base-100 p-4 text-center text-sm text-base-content/70">No port details available</div>';
-    }
-
-    function generatePortDetailsHTML(port) {
-      let html = `<div class="port-detail-card" style="border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: rgba(255,255,255,0.02);">`;
-      html += `<h5 class="text-info">Port ${port.port} - ${escapeHtml(port.name || 'Unknown Device')}</h5>`;
-
-      // Device Info
-      html += '<div class="row mb-2">';
-      html += `<div class="col-md-3"><small><strong>Vendor ID:</strong> ${escapeHtml(port.vendor_id || '-')}</small></div>`;
-      html += `<div class="col-md-3"><small><strong>Device ID:</strong> ${escapeHtml(port.device_id || '-')}</small></div>`;
-      html += `<div class="col-md-3"><small><strong>Serial:</strong> ${escapeHtml(port.serial || '-')}</small></div>`;
-      html += `<div class="col-md-3"><small><strong>Mode:</strong> ${escapeHtml(port.mode || '-')}</small></div>`;
-      html += '</div>';
-
-      // Process Data Out (PLC to Device)
-      html += '<div class="row mt-3"><div class="col-12"><h6 class="text-success" style="font-size: 14px;">Process Data Out (PLC → Device)</h6></div></div>';
-      html += '<div class="row">';
-      if (port.pdout && port.pdout.raw) {
-        html += `<div class="col-md-4"><small><strong>Raw:</strong> <code>${escapeHtml(port.pdout.raw)}</code></small></div>`;
-        html += `<div class="col-md-4"><small><strong>Hex:</strong> <code>${escapeHtml(port.pdout.hex)}</code></small></div>`;
-        html += `<div class="col-md-4"><small><strong>Bytes:</strong> <code>[${port.pdout.bytes.join(', ')}]</code></small></div>`;
-
-        // Decoded LED status
-        if (port.pdout.decoded && Object.keys(port.pdout.decoded).length > 0) {
-          html += '<div class="col-12 mt-2">';
-          const dec = port.pdout.decoded;
-          html += '<div class="row">';
-          html += `<div class="col-md-12 mb-2"><strong>LED Status:</strong> <span class="badge badge-${dec.led_on ? 'success' : 'secondary'}">${dec.led_on ? 'ON' : 'OFF'}</span></div>`;
-          html += `<div class="col-md-6"><strong>Color 1:</strong> <span class="badge badge-primary">${dec.color1}</span> <span class="badge badge-secondary">${dec.color1_intensity}</span></div>`;
-          html += `<div class="col-md-6"><strong>Color 2:</strong> <span class="badge badge-primary">${dec.color2}</span> <span class="badge badge-secondary">${dec.color2_intensity}</span></div>`;
-          html += `<div class="col-md-4"><strong>Animation:</strong> <span class="badge badge-info">${dec.animation}</span></div>`;
-          html += `<div class="col-md-4"><strong>Pattern:</strong> <span class="badge badge-info">${dec.pulse_pattern}</span></div>`;
-          html += `<div class="col-md-4"><strong>Speed:</strong> <span class="badge badge-info">${dec.speed}</span></div>`;
-          if (dec.audible_state && dec.audible_state !== 'Off') {
-            html += `<div class="col-md-12 mt-1"><strong>Audible:</strong> <span class="badge badge-warning">${dec.audible_state}</span></div>`;
-          }
-          html += '</div>';
-          html += '</div>';
-        }
-      } else {
-        html += '<div class="col-12"><small><em>No process data out</em></small></div>';
-      }
-      html += '</div>';
-
-      // Process Data In (Device to PLC)
-      html += '<div class="row mt-2"><div class="col-12"><h6 class="text-warning" style="font-size: 14px;">Process Data In (Device → PLC)</h6></div></div>';
-      html += '<div class="row">';
-      if (port.pdin && port.pdin.raw) {
-        html += `<div class="col-md-4"><small><strong>Raw:</strong> <code>${escapeHtml(port.pdin.raw)}</code></small></div>`;
-        html += `<div class="col-md-4"><small><strong>Hex:</strong> <code>${escapeHtml(port.pdin.hex)}</code></small></div>`;
-        html += `<div class="col-md-4"><small><strong>Bytes:</strong> <code>[${port.pdin.bytes.join(', ')}]</code></small></div>`;
-      } else {
-        html += '<div class="col-12"><small><em>No process data in</em></small></div>';
-      }
-      html += '</div>';
-
-      html += '</div>';
-      return html;
     }
 
     function generatePortDetailsHTML(port) {

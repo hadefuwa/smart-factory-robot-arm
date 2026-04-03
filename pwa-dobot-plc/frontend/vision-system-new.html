@@ -310,6 +310,31 @@
     font-size: 0.875rem;
     font-weight: 600;
   }
+
+  /* Live status tiles: theme-aware (replaces hard-coded rgba in JS) */
+  .sf-vision-status-card {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .sf-vision-status-card--neutral {
+    background: var(--sf-base-100);
+    border-color: var(--sf-base-300);
+  }
+
+  .sf-vision-status-card--good {
+    background: color-mix(in srgb, var(--sf-success-ui) 14%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-success-ui) 42%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--warn {
+    background: color-mix(in srgb, var(--sf-warning-ui) 14%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-warning-ui) 42%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--bad {
+    background: color-mix(in srgb, var(--sf-danger-ui) 12%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-danger-ui) 40%, var(--sf-base-300));
+  }
  </style>
  
  <!-- PWA Manifest -->
@@ -427,47 +452,47 @@
               <span id="statusLastRefresh" class="text-xs text-base-content/60">Updating...</span>
             </div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              <div id="statusPlcStartCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusPlcStartCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">PLC Start Bit</div>
                 <div id="statusPlcStartValue" class="text-lg font-bold">--</div>
                 <div id="statusPlcStartMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusCameraCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusCameraCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Camera</div>
                 <div id="statusCameraValue" class="text-lg font-bold">--</div>
                 <div id="statusCameraMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusVisionCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusVisionCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Vision Cycle</div>
                 <div id="statusVisionValue" class="text-lg font-bold">--</div>
                 <div id="statusVisionMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusUptimeCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusUptimeCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">System Uptime</div>
                 <div id="statusUptimeValue" class="text-lg font-bold">--</div>
                 <div id="statusUptimeMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusBackendCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusBackendCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Backend</div>
                 <div id="statusBackendValue" class="text-lg font-bold">--</div>
                 <div id="statusBackendMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusYellowCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusYellowCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Yellow Bit (32.0)</div>
                 <div id="statusYellowValue" class="text-lg font-bold">--</div>
                 <div id="statusYellowMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusWhiteCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusWhiteCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">White Bit (32.1)</div>
                 <div id="statusWhiteValue" class="text-lg font-bold">--</div>
                 <div id="statusWhiteMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusSteelCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusSteelCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Steel Bit (32.2)</div>
                 <div id="statusSteelValue" class="text-lg font-bold">--</div>
                 <div id="statusSteelMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
-              <div id="statusAlluminiumCard" class="rounded-box border border-base-300 bg-base-100 p-4">
+              <div id="statusAlluminiumCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">Alluminium Bit (32.3)</div>
                 <div id="statusAlluminiumValue" class="text-lg font-bold">--</div>
                 <div id="statusAlluminiumMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
@@ -592,8 +617,8 @@
 
                   <!-- Crop Settings (hidden) -->
                   <div class="sf-settings-panel rounded-box border border-info/40 bg-info/10 p-4 space-y-3 sf-vision-hidden">
-                    <h5 style="color: #64b5f6; font-size: 14px; margin-bottom: 12px; font-weight: 600;">
-                      📐 Camera Crop/Zoom
+                    <h5 class="mb-3 text-sm font-semibold text-info">
+                      Camera crop / zoom
                     </h5>
                     <div class="text-xs text-base-content/70">
                       Draw a rectangle on the camera image to define the crop area. Only this area will be used for detection.
@@ -794,18 +819,20 @@
       const card = document.getElementById(cardId);
       if (!card) return;
 
+      card.classList.remove(
+        'sf-vision-status-card--good',
+        'sf-vision-status-card--warn',
+        'sf-vision-status-card--bad',
+        'sf-vision-status-card--neutral'
+      );
       if (tone === 'good') {
-        card.style.background = 'rgba(76, 175, 80, 0.16)';
-        card.style.borderColor = 'rgba(76, 175, 80, 0.55)';
+        card.classList.add('sf-vision-status-card--good');
       } else if (tone === 'bad') {
-        card.style.background = 'rgba(244, 67, 54, 0.16)';
-        card.style.borderColor = 'rgba(244, 67, 54, 0.55)';
+        card.classList.add('sf-vision-status-card--bad');
       } else if (tone === 'warn') {
-        card.style.background = 'rgba(255, 179, 0, 0.16)';
-        card.style.borderColor = 'rgba(255, 179, 0, 0.55)';
+        card.classList.add('sf-vision-status-card--warn');
       } else {
-        card.style.background = 'rgba(255,255,255,0.04)';
-        card.style.borderColor = 'rgba(255,255,255,0.12)';
+        card.classList.add('sf-vision-status-card--neutral');
       }
     }
 
@@ -814,7 +841,17 @@
       const metaEl = document.getElementById(metaId);
       if (valueEl) {
         valueEl.textContent = valueText;
-        valueEl.style.color = valueColor;
+        valueEl.style.color = '';
+        valueEl.classList.remove('text-success', 'text-warning', 'text-error', 'text-base-content');
+        if (tone === 'good') {
+          valueEl.classList.add('text-success');
+        } else if (tone === 'bad') {
+          valueEl.classList.add('text-error');
+        } else if (tone === 'warn') {
+          valueEl.classList.add('text-warning');
+        } else {
+          valueEl.classList.add('text-base-content');
+        }
       }
       if (metaEl) {
         metaEl.textContent = metaText;
@@ -861,7 +898,7 @@
           <div class="sf-vision-result-meta"><strong>Status:</strong> ${cycle.message || 'n/a'}</div>
         </div>
       `;
-      resultsDiv.style.display = 'block';
+      resultsDiv.classList.remove('sf-vision-hidden');
     }
 
     async function updateLiveStatus() {
@@ -1457,7 +1494,7 @@
           <div class="sf-vision-loading-copy">This takes about 1 second</div>
         </div>
       `;
-      resultsDiv.style.display = 'block';
+      resultsDiv.classList.remove('sf-vision-hidden');
 
       try {
         const response = await fetch(`${API_BASE}/api/vision/test-color-voting`, {
@@ -1493,15 +1530,7 @@
         console.error('Error during analysis:', error);
         addDebugLog('startAnalysis exception', error.message, 'error');
         resultsContent.innerHTML = renderAnalysisError(error);
-        return;
-        resultsContent.innerHTML = `
-          <div style="padding: 20px; text-align: center; color: #f44336; background: rgba(244, 67, 54, 0.1); border: 2px solid #f44336; border-radius: 8px;">
-            <i class="material-icons" style="font-size: 48px; margin-bottom: 16px;">error_outline</i>
-            <div style="font-size: 18px; font-weight: bold; margin-bottom: 8px;">Analysis Failed</div>
-            <div style="font-size: 14px; color: #ef5350;">${error.message}</div>
-            ${error.message.includes('Camera') ? '<div style="margin-top: 12px; font-size: 12px; color: #ffab91;">💡 The camera system is initializing in the background. Please wait 10-20 seconds and try again.</div>' : ''}
-          </div>
-        `;
+        resultsDiv.classList.remove('sf-vision-hidden');
       }
     }
 
@@ -1510,97 +1539,13 @@
       const resultsDiv = document.getElementById('results');
       const resultsContent = document.getElementById('resultsContent');
       resultsContent.innerHTML = renderVotingResultCard(result);
-      resultsDiv.style.display = 'block';
+      resultsDiv.classList.remove('sf-vision-hidden');
       addDebugLog('displayVotingResult called', {
         color: result?.color || null,
         confidence: result?.confidence || 0,
         hasAnnotatedImage: Boolean(result?.annotated_image)
       });
 
-      if (result.annotated_image) {
-        const annotatedImg = document.getElementById('annotatedImage');
-        const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
-        const imageFormat = (result.annotated_image_format || 'jpeg').toLowerCase();
-
-        annotatedImg.src = `data:image/${imageFormat};base64,${result.annotated_image}`;
-        annotatedImg.style.display = 'block';
-        if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
-        addDebugLog('final result image rendered', `base64 length ${result.annotated_image.length}`);
-      } else {
-        addDebugLog('no annotated_image in voting result', 'trying /api/vision/annotated-result fallback', 'warn');
-        refreshAnnotatedResultImage('voting-fallback');
-      }
-      return;
-
-      // Color styling
-      let colorBadge = '';
-      let borderColor = '';
-
-      if (color === 'yellow') {
-        colorBadge = 'background: rgba(255, 235, 59, 0.3); border: 2px solid #ffeb3b; color: #ffeb3b;';
-        borderColor = '#ffeb3b';
-      } else if (color === 'white') {
-        colorBadge = 'background: rgba(255, 255, 255, 0.3); border: 2px solid #ffffff; color: #ffffff;';
-        borderColor = '#ffffff';
-      } else if (color === 'metal') {
-        colorBadge = 'background: rgba(158, 158, 158, 0.3); border: 2px solid #9e9e9e; color: #9e9e9e;';
-        borderColor = '#9e9e9e';
-      } else {
-        colorBadge = 'background: rgba(244, 67, 54, 0.3); border: 2px solid #f44336; color: #f44336;';
-        borderColor = '#f44336';
-      }
-
-      let html = `
-        <div style="border-left: 6px solid ${borderColor}; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
-            <div style="flex: 1;">
-              <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">FINAL RESULT</div>
-              <div style="display: inline-block; padding: 8px 20px; border-radius: 6px; font-weight: 700; font-size: 20px; ${colorBadge}">
-                ${color === 'none' ? 'NO CUBE' : color.toUpperCase()}
-              </div>
-            </div>
-          </div>
-
-          <div style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 4px;">
-            <div style="margin-bottom: 8px;"><strong>Confidence:</strong> ${confidence.toFixed(1)}%</div>
-            <div style="margin-bottom: 8px;"><strong>Color Code:</strong> ${colorCode} ${colorCode > 0 ? '(Ready for PLC)' : ''}</div>
-            <div style="margin-bottom: 8px;"><strong>Total Samples:</strong> ${result.total_samples || 10}</div>
-          </div>
-
-          <div style="margin-top: 16px;">
-            <div style="color: #ffeb3b; font-size: 12px; font-weight: 600; margin-bottom: 8px;">📊 Vote Breakdown:</div>
-      `;
-
-      for (const [voteColor, count] of Object.entries(voteCounts)) {
-        const displayColor = voteColor === 'null' ? 'none' : voteColor;
-        const percentage = (count / result.total_samples) * 100;
-        html += `
-          <div style="margin-bottom: 6px;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
-              <span>${displayColor.toUpperCase()}</span>
-              <span>${count} votes (${percentage.toFixed(0)}%)</span>
-            </div>
-            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px;">
-              <div style="width: ${percentage}%; height: 100%; background: ${borderColor}; border-radius: 3px;"></div>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `
-          </div>
-        </div>
-      `;
-
-      resultsContent.innerHTML = html;
-      resultsDiv.style.display = 'block';
-      addDebugLog('displayVotingResult called', {
-        color: result?.color || null,
-        confidence: result?.confidence || 0,
-        hasAnnotatedImage: Boolean(result?.annotated_image)
-      });
-
-      // Display annotated image if available
       if (result.annotated_image) {
         const annotatedImg = document.getElementById('annotatedImage');
         const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
@@ -1745,77 +1690,7 @@
 
       if (!resultsDiv || !resultsContent) return;
       resultsContent.innerHTML = renderDetectionResultsCard(results);
-      resultsDiv.style.display = 'block';
-      return;
-
-      const objectCount = results.object_count || 0;
-      const objects = results.objects || [];
-      const debug = results.debug || {};
-
-      let html = `<div style="margin-bottom: 12px;"><strong>Cubes Detected: ${objectCount}</strong></div>`;
-
-      if (objects.length > 0) {
-        html += '<div style="margin-top: 12px;">';
-        objects.forEach((obj, idx) => {
-          const color = obj.color || 'unknown';
-          const center = obj.center || [0, 0];
-          const area = obj.area || 0;
-
-          // Color badge styling
-          let colorBadge = '';
-          let colorEmoji = '';
-          if (color === 'yellow') {
-            colorBadge = 'background: rgba(255, 235, 59, 0.2); border: 2px solid #ffeb3b; color: #ffeb3b;';
-            colorEmoji = '🟡';
-          } else if (color === 'white') {
-            colorBadge = 'background: rgba(255, 255, 255, 0.2); border: 2px solid #ffffff; color: #ffffff;';
-            colorEmoji = '⚪';
-          } else if (color === 'metal') {
-            colorBadge = 'background: rgba(158, 158, 158, 0.2); border: 2px solid #9e9e9e; color: #9e9e9e;';
-            colorEmoji = '⚫';
-          } else {
-            colorBadge = 'background: rgba(244, 67, 54, 0.2); border: 2px solid #f44336; color: #f44336;';
-            colorEmoji = '❓';
-          }
-
-          html += `<div style="margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid ${color === 'yellow' ? '#ffeb3b' : color === 'white' ? '#ffffff' : color === 'metal' ? '#9e9e9e' : '#f44336'};">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-              <div style="font-size: 32px;">${colorEmoji}</div>
-              <div>
-                <div style="font-size: 18px; font-weight: bold; margin-bottom: 4px;">Cube ${idx + 1}</div>
-                <div style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 600; ${colorBadge}">
-                  ${color.toUpperCase()}
-                </div>
-              </div>
-            </div>
-            <div style="color: #b0bec5; font-size: 12px;">
-              Center: (${center[0]}, ${center[1]}) • Area: ${area.toFixed(0)}px²
-            </div>
-          </div>`;
-        });
-        html += '</div>';
-      } else {
-        html += '<div style="color: #f44336; margin-top: 12px;">No cubes detected</div>';
-      }
-
-      // Add debug info
-      if (Object.keys(debug).length > 0) {
-        html += '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 3px solid #ffeb3b;">';
-        html += '<div style="color: #ffeb3b; font-size: 12px; font-weight: 600; margin-bottom: 8px;">🔍 Debug Info:</div>';
-        Object.keys(debug).forEach(color => {
-          const info = debug[color];
-          if (info.pixels !== undefined) {
-            html += `<div style="color: #b0bec5; font-size: 11px; margin-bottom: 4px;">${color.toUpperCase()}: ${info.pixels} pixels matched, ${info.objects || 0} objects</div>`;
-          }
-          if (info.contours) {
-            html += `<div style="color: #b0bec5; font-size: 11px; margin-bottom: 4px;">${color.toUpperCase()} Contours: ${info.contours.total} total, ${info.contours.rejected_small} too small, ${info.contours.rejected_large} too large, ${info.contours.accepted} accepted</div>`;
-          }
-        });
-        html += '</div>';
-      }
-
-      resultsContent.innerHTML = html;
-      resultsDiv.style.display = 'block';
+      resultsDiv.classList.remove('sf-vision-hidden');
     }
 
     // Start continuous detection

@@ -16,9 +16,277 @@
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    body.sf-page-rfid .sf-content {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-rfid .sf-section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 0 -0.15rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    body.sf-page-rfid .sf-section-label::before {
+      content: "";
+      width: 2.25rem;
+      height: 1px;
+      background: linear-gradient(90deg, var(--sf-success-ui), transparent);
+    }
+
+    body.sf-page-rfid .sf-page-hero {
+      margin-bottom: 0;
+    }
+
+    body.sf-page-rfid .sf-page-hero-copy {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-rfid .sf-page-hero-copy p:last-child {
+      max-width: 65ch;
+    }
+
+    body.sf-page-rfid .sf-page-hero-chips {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
+    }
+
+    body.sf-page-rfid .sf-page-hero-chips > div {
+      display: grid;
+      gap: 0.2rem;
+      min-height: 5.25rem;
+      align-content: center;
+    }
+
+    body.sf-page-rfid .sf-panel {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-rfid .sf-panel-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    body.sf-page-rfid .sf-panel-head::after {
+      content: "";
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 0.95rem;
+      border: 1px solid var(--sf-base-300);
+      background:
+        radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--sf-success-ui) 24%, transparent), transparent 60%),
+        var(--sf-base-200);
+      flex: 0 0 auto;
+    }
+
+    body.sf-page-rfid .sf-kpi-tile {
+      min-height: 10rem;
+    }
+
+    body.sf-page-rfid .sf-rfid-conveyor-card {
+      overflow: hidden;
+    }
+
+    body.sf-page-rfid .sf-rfid-conveyor-shell {
+      display: grid;
+      grid-template-columns: 1.35fr 0.9fr;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    body.sf-page-rfid .sf-rfid-status-list {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    body.sf-page-rfid .sf-rfid-status-item {
+      border: 1px solid var(--sf-base-300);
+      border-radius: 1rem;
+      padding: 0.95rem 1rem;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 88%, transparent), color-mix(in srgb, var(--sf-base-200) 82%, transparent));
+    }
+
+    body.sf-page-rfid .sf-rfid-status-item span {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    body.sf-page-rfid .sf-rfid-status-item strong {
+      display: block;
+      color: var(--sf-base-content);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    body.sf-page-rfid .conveyor-container {
+      margin: 0;
+      min-height: 16rem;
+      border: 1px solid var(--sf-base-300);
+      background:
+        radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--sf-success-ui) 12%, transparent), transparent 30%),
+        linear-gradient(180deg, color-mix(in srgb, var(--sf-base-200) 85%, transparent), color-mix(in srgb, var(--sf-base-100) 95%, transparent));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    body.sf-page-rfid .conveyor-belt {
+      height: 4.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    body.sf-page-rfid .rfid-reader {
+      top: 1rem;
+      width: 8.5rem;
+      border-color: color-mix(in srgb, var(--sf-warning-ui) 70%, white 15%);
+      color: color-mix(in srgb, var(--sf-warning-ui) 72%, white 20%) !important;
+      background: color-mix(in srgb, var(--sf-base-200) 72%, black 28%);
+    }
+
+    body.sf-page-rfid .rfid-reader::before {
+      border-top-color: color-mix(in srgb, var(--sf-warning-ui) 70%, white 15%);
+    }
+
+    body.sf-page-rfid .scan-beam {
+      width: 0.2rem;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-warning-ui) 70%, white 15%), transparent);
+      filter: drop-shadow(0 0 10px color-mix(in srgb, var(--sf-warning-ui) 30%, transparent));
+    }
+
+    body.sf-page-rfid .rfid-tag {
+      width: 5.5rem;
+      height: 3.4rem;
+      border-radius: 1rem;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2), transparent 45%),
+        linear-gradient(135deg, color-mix(in srgb, var(--sf-success-ui) 50%, var(--sf-primary-ui)), color-mix(in srgb, var(--sf-primary-ui) 62%, black 12%));
+      border: 1px solid color-mix(in srgb, var(--sf-success-ui) 35%, var(--sf-base-300));
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: transparent;
+      box-shadow: 0 18px 30px rgba(15, 23, 42, 0.2);
+    }
+
+    body.sf-page-rfid .rfid-tag::after {
+      content: "RF";
+      color: white;
+    }
+
+    body.sf-page-rfid .sf-rfid-data-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    body.sf-page-rfid .sf-rfid-data-card {
+      overflow: hidden;
+    }
+
+    body.sf-page-rfid .sf-rfid-data-card .table {
+      border-radius: 1rem;
+      overflow: hidden;
+    }
+
+    body.sf-page-rfid .sf-rfid-data-card .table td {
+      padding-block: 0.9rem;
+    }
+
+    body.sf-page-rfid .sf-rfid-data-card .table td:first-child {
+      color: var(--sf-base-muted);
+      width: 48%;
+    }
+
+    body.sf-page-rfid .status-badge {
+      border-radius: 999px;
+      padding: 0.38rem 0.85rem;
+      letter-spacing: 0.08em;
+    }
+
+    body.sf-page-rfid .info-value-highlight {
+      font-weight: 700;
+    }
+
+    body.sf-page-rfid .sf-rfid-history {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-rfid .history-item {
+      margin-bottom: 0;
+      border: 1px solid var(--sf-base-300);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 92%, transparent), color-mix(in srgb, var(--sf-base-200) 84%, transparent));
+    }
+
+    body.sf-page-rfid .history-item:hover {
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-success-ui) 10%, var(--sf-base-100)), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
+      border-color: color-mix(in srgb, var(--sf-success-ui) 30%, var(--sf-base-300));
+      transform: translateY(-1px);
+    }
+
+    body.sf-page-rfid .history-icon {
+      width: 2.6rem;
+      height: 2.6rem;
+      display: grid;
+      place-items: center;
+      border-radius: 0.85rem;
+      font-size: 0.9rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      background: color-mix(in srgb, var(--sf-success-ui) 12%, transparent);
+      color: var(--sf-success-ui) !important;
+    }
+
+    body.sf-page-rfid .history-time {
+      align-self: center;
+    }
+
+    @media (max-width: 1100px) {
+      body.sf-page-rfid .sf-rfid-conveyor-shell,
+      body.sf-page-rfid .sf-rfid-data-grid,
+      body.sf-page-rfid .sf-page-hero-chips {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body.sf-page-rfid .sf-panel-head {
+        flex-direction: column;
+      }
+
+      body.sf-page-rfid .sf-panel-head::after {
+        display: none;
+      }
+
+      body.sf-page-rfid .history-item {
+        grid-template-columns: auto 1fr;
+      }
+
+      body.sf-page-rfid .history-time {
+        grid-column: 2;
+        text-align: left;
+      }
+    }
+  </style>
 </head>
 
-<body class="dashboard-v2 sf-page-rfid">
+<body class="dashboard-v2 sf-page-rfid sf-subpage-v2">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
 
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
@@ -120,23 +388,41 @@
             </div>
           </section>
 
-          <!-- Conveyor Visualization -->
+          <p class="sf-section-label">Live Flow</p>
           <section class="sf-stage sf-stage-1">
-            <article class="sf-panel">
+            <article class="sf-panel sf-rfid-conveyor-card">
               <header class="sf-panel-head">
-                <h3>Conveyor System</h3>
-                <p>Real-time RFID tag tracking along the production conveyor.</p>
+                <div>
+                  <h3>Conveyor System</h3>
+                  <p>Real-time RFID tag tracking along the production conveyor.</p>
+                </div>
               </header>
-              <div class="conveyor-container">
-                <div class="rfid-reader">RFID Reader</div>
-                <div class="scan-beam"></div>
-                <div class="conveyor-belt"></div>
+              <div class="sf-rfid-conveyor-shell">
+                <div class="conveyor-container">
+                  <div class="rfid-reader">RFID Reader</div>
+                  <div class="scan-beam"></div>
+                  <div class="conveyor-belt"></div>
                 <div class="rfid-tag">📡</div>
+                </div>
+                <div class="sf-rfid-status-list">
+                  <div class="sf-rfid-status-item">
+                    <span>Reader Zone</span>
+                    <strong>Conveyor Line 3 / Antenna A</strong>
+                  </div>
+                  <div class="sf-rfid-status-item">
+                    <span>Current Tag</span>
+                    <strong id="sfCurrentTagSummary">RF-2024-8472 ready for verification</strong>
+                  </div>
+                  <div class="sf-rfid-status-item">
+                    <span>Operating Mode</span>
+                    <strong>Continuous scan with production traceability</strong>
+                  </div>
+                </div>
               </div>
             </article>
           </section>
 
-          <!-- Statistics -->
+          <p class="sf-section-label">Performance Snapshot</p>
           <section class="sf-metrics sf-stage sf-stage-2" aria-label="RFID statistics">
             <article class="sf-kpi-tile">
               <header><span>Total Reads</span><i class="material-icons">nfc</i></header>
@@ -160,12 +446,14 @@
             </article>
           </section>
 
-          <!-- Tag and Product Info -->
-          <section class="sf-row sf-stage sf-stage-3">
-            <article class="sf-panel">
+          <p class="sf-section-label">Traceability Records</p>
+          <section class="sf-rfid-data-grid sf-stage sf-stage-3">
+            <article class="sf-panel sf-rfid-data-card">
               <header class="sf-panel-head">
-                <h3>Tag Information</h3>
-                <p>RFID tag details for the current item.</p>
+                <div>
+                  <h3>Tag Information</h3>
+                  <p>RFID tag details for the current item.</p>
+                </div>
               </header>
               <table class="table table-zebra" style="margin:0;">
                 <tbody>
@@ -197,10 +485,12 @@
               </table>
             </article>
 
-            <article class="sf-panel">
+            <article class="sf-panel sf-rfid-data-card">
               <header class="sf-panel-head">
-                <h3>Product Information</h3>
-                <p>Product details associated with the scanned tag.</p>
+                <div>
+                  <h3>Product Information</h3>
+                  <p>Product details associated with the scanned tag.</p>
+                </div>
               </header>
               <table class="table table-zebra" style="margin:0;">
                 <tbody>
@@ -233,12 +523,13 @@
             </article>
           </section>
 
-          <!-- Engineer and Maintenance Info -->
-          <section class="sf-row sf-stage sf-stage-3">
-            <article class="sf-panel">
+          <section class="sf-rfid-data-grid sf-stage sf-stage-3">
+            <article class="sf-panel sf-rfid-data-card">
               <header class="sf-panel-head">
-                <h3>Engineer Information</h3>
-                <p>Reader data and last interaction details.</p>
+                <div>
+                  <h3>Engineer Information</h3>
+                  <p>Reader data and last interaction details.</p>
+                </div>
               </header>
               <table class="table table-zebra" style="margin:0;">
                 <tbody>
@@ -270,10 +561,12 @@
               </table>
             </article>
 
-            <article class="sf-panel">
+            <article class="sf-panel sf-rfid-data-card">
               <header class="sf-panel-head">
-                <h3>Maintenance History</h3>
-                <p>Service records and next scheduled maintenance.</p>
+                <div>
+                  <h3>Maintenance History</h3>
+                  <p>Service records and next scheduled maintenance.</p>
+                </div>
               </header>
               <table class="table table-zebra" style="margin:0;">
                 <tbody>
@@ -306,14 +599,16 @@
             </article>
           </section>
 
-          <!-- Recent Activity Log -->
+          <p class="sf-section-label">Recent Reads</p>
           <section class="sf-stage sf-stage-3">
             <article class="sf-panel sf-alerts-panel">
               <header class="sf-panel-head">
-                <h3>Recent Activity Log</h3>
-                <p>Live RFID tag tracking events.</p>
+                <div>
+                  <h3>Recent Activity Log</h3>
+                  <p>Live RFID tag tracking events.</p>
+                </div>
               </header>
-              <div id="historyList" aria-live="polite">
+              <div id="historyList" class="sf-rfid-history" aria-live="polite">
                 <!-- History items populated by JavaScript -->
               </div>
             </article>
@@ -390,7 +685,7 @@
 
       const icon = document.createElement('div');
       icon.className = 'history-icon';
-      icon.textContent = '📡';
+      icon.textContent = 'RF';
 
       const content = document.createElement('div');
       content.className = 'history-content';
@@ -442,7 +737,7 @@
 
           const icon = document.createElement('div');
           icon.className = 'history-icon';
-          icon.textContent = '📡';
+          icon.textContent = 'RF';
 
           const content = document.createElement('div');
           content.className = 'history-content';
