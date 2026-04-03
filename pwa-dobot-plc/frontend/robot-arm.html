@@ -16,9 +16,300 @@
   <meta name="theme-color" content="#030c1d">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <style>
+    body.sf-page-robot .sf-content {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-robot .sf-section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 0 -0.15rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    body.sf-page-robot .sf-section-label::before {
+      content: "";
+      width: 2.25rem;
+      height: 1px;
+      background: linear-gradient(90deg, var(--sf-primary-ui), transparent);
+    }
+
+    body.sf-page-robot .sf-page-hero {
+      margin-bottom: 0;
+    }
+
+    body.sf-page-robot .sf-page-hero-copy {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-robot .sf-page-hero-copy p:last-child {
+      max-width: 64ch;
+    }
+
+    body.sf-page-robot .sf-page-hero-chips {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
+    }
+
+    body.sf-page-robot .sf-page-hero-chips > div {
+      display: grid;
+      gap: 0.2rem;
+      min-height: 5.25rem;
+      align-content: center;
+    }
+
+    body.sf-page-robot .sf-robot-status-row {
+      align-items: stretch;
+    }
+
+    body.sf-page-robot .sf-kpi-tile {
+      min-height: 10.5rem;
+      display: grid;
+      gap: 0.8rem;
+      align-content: start;
+    }
+
+    body.sf-page-robot .sf-kpi-value {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-robot .status-dot {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--sf-danger-ui) 75%, white 25%);
+      box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--sf-danger-ui) 16%, transparent);
+      flex: 0 0 auto;
+      transition: background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    }
+
+    body.sf-page-robot .status-dot.connected {
+      background: color-mix(in srgb, var(--sf-success-ui) 75%, white 25%);
+      box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--sf-success-ui) 18%, transparent);
+      transform: scale(1.04);
+    }
+
+    body.sf-page-robot .sf-panel {
+      display: grid;
+      gap: 1rem;
+    }
+
+    body.sf-page-robot .sf-panel-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    body.sf-page-robot .sf-panel-head::after {
+      content: "";
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 0.95rem;
+      border: 1px solid var(--sf-base-300);
+      background:
+        radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--sf-primary-ui) 22%, transparent), transparent 60%),
+        var(--sf-base-200);
+      flex: 0 0 auto;
+    }
+
+    body.sf-page-robot .sf-robot-metric-grid {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    body.sf-page-robot .sf-robot-metric-grid--three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body.sf-page-robot .sf-robot-metric-grid--four {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    body.sf-page-robot .sf-robot-metric-card {
+      border: 1px solid var(--sf-base-300);
+      border-radius: 1rem;
+      padding: 0.9rem 1rem;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 82%, transparent), color-mix(in srgb, var(--sf-base-200) 85%, transparent));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    body.sf-page-robot .sf-robot-metric-card .sf-kpi-sub {
+      margin-top: 0;
+      margin-bottom: 0.4rem;
+    }
+
+    body.sf-page-robot .sf-robot-metric-card .sf-kpi-value {
+      font-size: clamp(1.25rem, 2vw, 1.65rem);
+      line-height: 1;
+    }
+
+    body.sf-page-robot .sf-robot-input {
+      border-radius: 0.95rem;
+      border-color: var(--sf-base-300);
+      background: var(--sf-base-100);
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+
+    body.sf-page-robot .sf-robot-input:focus,
+    body.sf-page-robot .settings-input:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--sf-primary-ui) 50%, var(--sf-base-300));
+      box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--sf-primary-ui) 15%, transparent);
+    }
+
+    body.sf-page-robot .sf-action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    body.sf-page-robot .sf-action-stack {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    body.sf-page-robot .sf-action-btn-block {
+      min-height: 3rem;
+      border-radius: 0.95rem;
+      padding-inline: 1rem;
+      font-weight: 600;
+    }
+
+    body.sf-page-robot .sf-robot-effector-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    body.sf-page-robot .sf-robot-subpanel {
+      display: grid;
+      gap: 0.85rem;
+      padding: 1rem;
+      border-radius: 1rem;
+      border: 1px solid var(--sf-base-300);
+      background: color-mix(in srgb, var(--sf-base-200) 72%, transparent);
+    }
+
+    body.sf-page-robot .sf-robot-subpanel > .sf-kpi-sub {
+      margin: 0;
+    }
+
+    body.sf-page-robot .table tbody tr:last-child td,
+    body.sf-page-robot .table tbody tr:last-child th {
+      border-bottom-width: 0;
+    }
+
+    body.sf-page-robot .table td {
+      padding-block: 0.85rem;
+    }
+
+    body.sf-page-robot .sf-robot-bits-card .table td:last-child {
+      font-weight: 700;
+    }
+
+    body.sf-page-robot .sf-robot-log {
+      font-family: var(--font-mono);
+      min-height: 18rem;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    body.sf-page-robot .log-placeholder {
+      color: var(--sf-base-muted);
+    }
+
+    body.sf-page-robot .settings-modal.sf-matrix-modal .settings-content {
+      width: min(52rem, calc(100vw - 2rem));
+      margin: 3rem auto;
+      padding: 1.5rem;
+    }
+
+    body.sf-page-robot .settings-content {
+      position: relative;
+    }
+
+    body.sf-page-robot .settings-content .settings-close {
+      position: sticky;
+      top: 0;
+      float: none;
+      margin-left: auto;
+      width: 2.25rem;
+      height: 2.25rem;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--sf-base-200);
+      border: 1px solid var(--sf-base-300);
+    }
+
+    body.sf-page-robot .settings-input {
+      border-radius: 0.85rem;
+      border: 1px solid var(--sf-base-300);
+      background: var(--sf-base-100);
+      color: var(--sf-base-content);
+    }
+
+    body.sf-page-robot .settings-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body.sf-page-robot .settings-actions .btn {
+      min-height: 2.9rem;
+      border-radius: 0.9rem;
+      font-weight: 700;
+    }
+
+    body.sf-page-robot .settings-warning {
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1100px) {
+      body.sf-page-robot .sf-page-hero-chips,
+      body.sf-page-robot .sf-robot-metric-grid--four {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body.sf-page-robot .sf-page-hero-chips,
+      body.sf-page-robot .sf-robot-metric-grid--three,
+      body.sf-page-robot .sf-robot-metric-grid--four,
+      body.sf-page-robot .sf-action-grid,
+      body.sf-page-robot .sf-robot-effector-grid,
+      body.sf-page-robot .settings-actions {
+        grid-template-columns: 1fr;
+      }
+
+      body.sf-page-robot .sf-panel-head {
+        flex-direction: column;
+      }
+
+      body.sf-page-robot .sf-panel-head::after {
+        display: none;
+      }
+
+      body.sf-page-robot .settings-modal.sf-matrix-modal .settings-content {
+        margin: 1rem auto;
+        max-height: calc(100vh - 2rem);
+      }
+    }
+  </style>
 </head>
 
-<body class="dashboard-v2 sf-page-robot">
+<body class="dashboard-v2 sf-page-robot sf-subpage-v2">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
 
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
@@ -120,7 +411,7 @@
             </div>
           </section>
 
-          <!-- Connection Status KPI Tiles -->
+          <p class="sf-section-label">Live Status</p>
           <section class="sf-robot-status-row sf-stage sf-stage-1" aria-label="Connection status">
             <article class="sf-kpi-tile">
               <header><span>PLC Connection</span><i class="material-icons">link</i></header>
@@ -141,51 +432,55 @@
             </article>
           </section>
 
-          <!-- Position Cards -->
+          <p class="sf-section-label">Motion Workspace</p>
           <section class="sf-robot-position-row sf-stage sf-stage-2">
             <article class="sf-panel">
               <header class="sf-panel-head">
-                <h3>Target Position (PLC)</h3>
-                <p>Position from PLC DB</p>
-              </header>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-3 mb-4">
                 <div>
+                  <h3>Target Position (PLC)</h3>
+                  <p>Position from PLC DB</p>
+                </div>
+              </header>
+              <div class="sf-robot-metric-grid sf-robot-metric-grid--three">
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">X</p>
                   <div class="sf-kpi-value" id="targetX">--</div>
                 </div>
-                <div>
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">Y</p>
                   <div class="sf-kpi-value" id="targetY">--</div>
                 </div>
-                <div>
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">Z</p>
                   <div class="sf-kpi-value" id="targetZ">--</div>
                 </div>
               </div>
-              <button class="sf-btn sf-btn-primary" onclick="moveToTarget()">
+              <button class="sf-btn sf-btn-primary w-full" onclick="moveToTarget()">
                 <i class="material-icons">navigation</i> Move to Target
               </button>
             </article>
 
             <article class="sf-panel">
               <header class="sf-panel-head">
-                <h3>Current Position (Dobot)</h3>
-                <p>Real-time robot position</p>
-              </header>
-              <div class="grid grid-cols-2 gap-4 md:grid-cols-4 mb-4">
                 <div>
+                  <h3>Current Position (Dobot)</h3>
+                  <p>Real-time robot position</p>
+                </div>
+              </header>
+              <div class="sf-robot-metric-grid sf-robot-metric-grid--four">
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">X</p>
                   <div class="sf-kpi-value" id="currentX">--</div>
                 </div>
-                <div>
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">Y</p>
                   <div class="sf-kpi-value" id="currentY">--</div>
                 </div>
-                <div>
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">Z</p>
                   <div class="sf-kpi-value" id="currentZ">--</div>
                 </div>
-                <div>
+                <div class="sf-robot-metric-card">
                   <p class="sf-kpi-sub">R</p>
                   <div class="sf-kpi-value" id="currentR">--</div>
                 </div>
@@ -196,13 +491,15 @@
             </article>
           </section>
 
-          <!-- Control Panels -->
+          <p class="sf-section-label">Command Center</p>
           <section class="sf-robot-control-row sf-stage sf-stage-3">
 
             <article class="sf-panel sf-robot-bits-card">
               <header class="sf-panel-head">
-                <h3>PLC Control Bits</h3>
-                <p>Status from DB1</p>
+                <div>
+                  <h3>PLC Control Bits</h3>
+                  <p>Status from DB1</p>
+                </div>
               </header>
               <div class="overflow-x-auto">
               <table class="table table-zebra">
@@ -222,8 +519,10 @@
 
             <article class="sf-panel sf-robot-manual-card">
               <header class="sf-panel-head">
-                <h3>Manual Control</h3>
-                <p>Direct position control with the same existing motion handler.</p>
+                <div>
+                  <h3>Manual Control</h3>
+                  <p>Direct position control with the same existing motion handler.</p>
+                </div>
               </header>
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label class="space-y-2">
@@ -250,10 +549,12 @@
 
             <article class="sf-panel sf-robot-quick-card">
               <header class="sf-panel-head">
-                <h3>Quick Actions</h3>
-                <p>Common operations</p>
+                <div>
+                  <h3>Quick Actions</h3>
+                  <p>Common operations</p>
+                </div>
               </header>
-              <div class="space-y-2">
+              <div class="sf-action-grid">
                 <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="homeRobot()">
                   <i class="material-icons">home</i> Home Robot
                 </button>
@@ -269,7 +570,7 @@
                 <button class="sf-btn sf-btn-ghost sf-action-btn-block" onclick="testRobot()">
                   <i class="material-icons">play_circle</i> Test Sequence
                 </button>
-                <button class="sf-btn sf-btn-danger sf-action-btn-block" onclick="emergencyStop()">
+                <button class="sf-btn sf-btn-danger sf-action-btn-block col-span-full" onclick="emergencyStop()">
                   <i class="material-icons">stop_circle</i> Emergency Stop
                 </button>
               </div>
@@ -277,17 +578,19 @@
 
           </section>
 
-          <!-- End Effector & System Management -->
+          <p class="sf-section-label">Tools And Recovery</p>
           <section class="sf-robot-tool-row sf-stage sf-stage-3">
             <article class="sf-panel sf-robot-effector-card">
               <header class="sf-panel-head">
-                <h3>End Effector Control</h3>
-                <p>Suction &amp; Gripper</p>
-              </header>
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <p class="sf-kpi-sub mb-2">Suction Pump</p>
-                  <div class="space-y-2">
+                  <h3>End Effector Control</h3>
+                  <p>Suction &amp; Gripper</p>
+                </div>
+              </header>
+              <div class="sf-robot-effector-grid">
+                <div class="sf-robot-subpanel">
+                  <p class="sf-kpi-sub">Suction Pump</p>
+                  <div class="sf-action-stack">
                     <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="suctionOn()">
                       <i class="material-icons">power</i> Pump ON
                     </button>
@@ -296,9 +599,9 @@
                     </button>
                   </div>
                 </div>
-                <div>
-                  <p class="sf-kpi-sub mb-2">Gripper</p>
-                  <div class="space-y-2">
+                <div class="sf-robot-subpanel">
+                  <p class="sf-kpi-sub">Gripper</p>
+                  <div class="sf-action-stack">
                     <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="gripperOpen()">
                       <i class="material-icons">open_in_full</i> Open
                     </button>
@@ -312,10 +615,12 @@
 
             <article class="sf-panel sf-robot-system-card">
               <header class="sf-panel-head">
-                <h3>System Management</h3>
-                <p>Configuration &amp; debugging</p>
+                <div>
+                  <h3>System Management</h3>
+                  <p>Configuration &amp; debugging</p>
+                </div>
               </header>
-              <div class="space-y-2">
+              <div class="sf-action-stack">
                 <button class="sf-btn sf-btn-primary sf-action-btn-block" onclick="openSettings()">
                   <i class="material-icons">settings</i> System Settings
                 </button>
@@ -329,14 +634,16 @@
             </article>
           </section>
 
-          <!-- Debug Log -->
+          <p class="sf-section-label">Diagnostics</p>
           <section class="sf-stage sf-stage-3">
             <article class="sf-panel">
               <header class="sf-panel-head">
-                <h3>Debug Log</h3>
-                <p>Real-time system messages</p>
+                <div>
+                  <h3>Debug Log</h3>
+                  <p>Real-time system messages</p>
+                </div>
               </header>
-              <div id="debugLog" class="sf-template-code rounded-box border border-base-300 bg-base-100 p-4" style="font-size:13px; max-height:300px; overflow-y:auto;">
+              <div id="debugLog" class="sf-template-code sf-robot-log rounded-box border border-base-300 bg-base-100 p-4" style="font-size:13px; max-height:300px; overflow-y:auto;">
                 <div class="log-placeholder">Waiting for commands...</div>
               </div>
             </article>
@@ -353,7 +660,7 @@
   </div>
 
   <!-- Settings Modal -->
-  <div id="settingsModal" class="settings-modal">
+  <div id="settingsModal" class="settings-modal sf-matrix-modal">
     <div class="settings-content">
       <span class="settings-close" onclick="closeSettings()">&times;</span>
       <h2>System Settings</h2>

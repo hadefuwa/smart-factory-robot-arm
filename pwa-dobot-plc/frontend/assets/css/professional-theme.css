@@ -1840,6 +1840,12 @@ body.dashboard-v2 .sf-hero h2 {
   color: var(--sf-text-strong) !important;
 }
 
+body.dashboard-v2 .sf-hero.sf-hero-home .sf-hero-copy h2 {
+  font-size: clamp(1.45rem, 3.2vw, 1.9rem);
+  line-height: 1.2;
+  margin: 0;
+}
+
 body.dashboard-v2 .sf-hero p {
   margin: 0;
   color: var(--sf-text-soft) !important;
@@ -1857,6 +1863,22 @@ body.dashboard-v2 .sf-hero-chips {
   display: grid;
   gap: 10px;
   align-content: start;
+}
+
+/* Home dashboard hero: section is a Daisy card with a single .card-body. The legacy
+   .sf-hero two-column grid only saw that one child and left an empty column—squashing
+   the layout. Use full-width block so the inner lg:grid spans the whole card. */
+body.dashboard-v2 .sf-hero.sf-hero-home.card {
+  display: block;
+  padding: 0;
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+
+body.dashboard-v2 .sf-hero.sf-hero-home .sf-hero-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 body.dashboard-v2 .sf-hero-estop {
@@ -3207,6 +3229,21 @@ html[data-theme='dark'] body.dashboard-v2 .sf-page-notice {
 html[data-theme='light'] body.dashboard-v2 .sf-hero,
 html[data-theme='dark'] body.dashboard-v2 .sf-hero {
   gap: 16px;
+}
+
+/* Home hero: restore a light accent gradient instead of a flat panel */
+html[data-theme='light'] body.dashboard-v2 .sf-hero-home.card,
+html[data-theme='dark'] body.dashboard-v2 .sf-hero-home.card {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--sf-primary) 12%, var(--sf-base-100)) 0%,
+    var(--sf-base-200) 38%,
+    color-mix(in srgb, var(--sf-base-100) 90%, var(--sf-primary) 10%) 100%
+  ) !important;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.05),
+    0 10px 28px -6px rgb(15 23 42 / 0.12) !important;
+  border-color: color-mix(in srgb, var(--sf-primary) 22%, var(--sf-base-300)) !important;
 }
 
 html[data-theme='light'] body.dashboard-v2 .sf-hero h2,

@@ -112,43 +112,50 @@
         <main class="sf-content">
         <div class="sf-warning alert alert-warning shadow-sm hidden" id="sfSoftWarning" role="status" aria-live="polite"></div>
 
-        <section class="sf-hero sf-stage sf-stage-1 card bg-base-200 shadow-xl border border-base-300">
-          <div class="card-body gap-6 lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
-          <div class="sf-hero-copy">
-            <p class="sf-eyebrow">Live Industrial Telemetry</p>
-            <h2>Command, monitor, and diagnose the line in real time.</h2>
-            <p>
-              This dashboard aggregates robot, PLC, vision, and quality systems into a single cinematic command surface.
-            </p>
-            <div class="sf-hero-actions flex flex-wrap gap-3">
-              <button class="sf-btn sf-btn-primary btn btn-success" type="button" data-action="pickPlace">
-                <i class="material-icons">play_arrow</i>
-                Start Pick & Place
+        <section class="sf-hero sf-hero-home sf-stage sf-stage-1 card border border-base-300 shadow-lg">
+          <div class="card-body gap-8 p-6 sm:p-8 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] lg:items-stretch lg:gap-10">
+            <div class="sf-hero-copy flex flex-col justify-center gap-4">
+              <p class="sf-eyebrow text-xs font-semibold uppercase tracking-wider text-primary">Live industrial telemetry</p>
+              <h2 class="text-2xl sm:text-3xl font-bold leading-tight tracking-tight text-base-content">
+                Command, monitor, and diagnose the line in real time.
+              </h2>
+              <p class="text-sm sm:text-base leading-relaxed text-base-content/70 max-w-xl">
+                Robot, PLC, vision, and quality in one place—no tab-hopping on the floor.
+              </p>
+              <div class="sf-hero-actions flex flex-wrap gap-3 pt-1">
+                <button class="sf-btn sf-btn-primary btn btn-success gap-2" type="button" data-action="pickPlace">
+                  <i class="material-icons text-lg">play_arrow</i>
+                  Start Pick &amp; Place
+                </button>
+                <button class="sf-btn sf-btn-ghost btn btn-outline gap-2" type="button" data-action="homeRobot">
+                  <i class="material-icons text-lg">home</i>
+                  Home Robot
+                </button>
+              </div>
+            </div>
+            <div class="sf-hero-chips flex flex-col gap-3">
+              <div class="rounded-xl bg-base-100 border border-base-300 p-4 shadow-sm">
+                <p class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-3">At a glance</p>
+                <ul class="divide-y divide-base-200">
+                  <li class="flex items-start justify-between gap-3 py-3 first:pt-0">
+                    <span class="text-sm text-base-content/60">System mode</span>
+                    <span class="text-sm font-semibold font-mono text-right text-base-content tabular-nums" data-bind="meta.mode">AUTONOMOUS</span>
+                  </li>
+                  <li id="sfBackendChip" class="sf-chip flex items-start justify-between gap-3 py-3 rounded-md px-1 -mx-1">
+                    <span class="text-sm text-base-content/60">Backend health</span>
+                    <span class="text-sm font-semibold font-mono text-right text-base-content tabular-nums" data-bind="meta.backendHealth">CHECKING</span>
+                  </li>
+                  <li class="flex items-start justify-between gap-3 py-3 last:pb-0">
+                    <span class="text-sm text-base-content/60">Last refresh</span>
+                    <span class="text-sm font-semibold font-mono text-right text-base-content tabular-nums" data-bind="meta.lastRefresh">--:--:--</span>
+                  </li>
+                </ul>
+              </div>
+              <button class="sf-btn sf-btn-danger sf-hero-estop btn btn-error btn-block gap-2 min-h-12" type="button" data-action="emergencyStop">
+                <i class="material-icons text-lg">warning</i>
+                Emergency stop
               </button>
-              <button class="sf-btn sf-btn-ghost btn btn-outline" type="button" data-action="homeRobot">
-                <i class="material-icons">home</i>
-                Home Robot
-              </button>
             </div>
-          </div>
-          <div class="sf-hero-chips grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm">
-              <div class="stat-title">System Mode</div>
-              <div class="stat-value text-lg" data-bind="meta.mode">AUTONOMOUS</div>
-            </div>
-            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm" id="sfBackendChip">
-              <div class="stat-title">Backend Health</div>
-              <div class="stat-value text-lg" data-bind="meta.backendHealth">CHECKING</div>
-            </div>
-            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm">
-              <div class="stat-title">Last Refresh</div>
-              <div class="stat-value text-lg" data-bind="meta.lastRefresh">--:--:--</div>
-            </div>
-            <button class="sf-btn sf-btn-danger sf-hero-estop btn btn-error sm:col-span-3 lg:col-span-1" type="button" data-action="emergencyStop">
-              <i class="material-icons">warning</i>
-              Emergency Stop
-            </button>
-          </div>
           </div>
         </section>
 
