@@ -109,12 +109,13 @@ body.dark-edition,
   background-color: var(--bg-page) !important;
 }
 
-.navbar {
+.main-panel .navbar {
   background-color: var(--bg-page) !important;
   border-bottom: 1px solid var(--border) !important;
 }
 
-.footer {
+.main-panel .footer,
+.wrapper > .footer:not(.sf-template-footer) {
   background-color: var(--bg-page) !important;
   border-top: 1px solid var(--border) !important;
   color: var(--text-secondary) !important;
@@ -248,14 +249,14 @@ body.dark-edition,
 /* ================================================================
    TYPOGRAPHY
    ================================================================ */
-body,
-.card-body, .card-title, .card-category,
-p, span, div, td, th, label {
+.main-panel,
+.main-panel .card-body, .main-panel .card-title, .main-panel .card-category,
+.main-panel p, .main-panel span, .main-panel div, .main-panel td, .main-panel th, .main-panel label {
   color: var(--text-primary) !important;
   font-weight: 400 !important;
 }
 
-h1, h2, h3, h4, h5, h6 {
+.main-panel h1, .main-panel h2, .main-panel h3, .main-panel h4, .main-panel h5, .main-panel h6 {
   color: var(--text-primary) !important;
   font-weight: 600 !important;
 }
@@ -281,8 +282,8 @@ h1, h2, h3, h4, h5, h6 {
 /* ================================================================
    CARDS
    ================================================================ */
-.card,
-.dark-edition .card {
+.main-panel .card,
+.dark-edition .main-panel .card {
   background: linear-gradient(127.09deg, rgba(6, 11, 40, 0.94) 19.41%, rgba(10, 14, 35, 0.49) 76.65%) !important;
   backdrop-filter: blur(120px);
   -webkit-backdrop-filter: blur(120px);
@@ -291,8 +292,8 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05) !important;
 }
 
-.card:hover,
-.dark-edition .card:hover {
+.main-panel .card:hover,
+.dark-edition .main-panel .card:hover {
   background: linear-gradient(127.09deg, rgba(10, 14, 35, 0.96) 19.41%, rgba(15, 21, 53, 0.55) 76.65%) !important;
   border-color: rgba(67, 24, 255, 0.25) !important;
   transform: translateY(-3px);
@@ -302,11 +303,11 @@ h1, h2, h3, h4, h5, h6 {
 
 /* card headers — transparent, no coloured bars, no raised -20px margin.
    Match MD's [class*="card-header-"] patterns to override them. */
-.card-header,
-.card .card-header,
-.dark-edition .card .card-header,
-.card [class*="card-header-"],
-.card [class*="card-header-"]:not(.card-header-icon):not(.card-header-text):not(.card-header-image) {
+.main-panel .card-header,
+.main-panel .card .card-header,
+.dark-edition .main-panel .card .card-header,
+.main-panel .card [class*="card-header-"],
+.main-panel .card [class*="card-header-"]:not(.card-header-icon):not(.card-header-text):not(.card-header-image) {
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
@@ -318,9 +319,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ── stat-card icon layout: icon-box left, text right ── */
-.card-stats .card-header,
-.card-stats .card-header.card-header-icon,
-.card-stats .card-header.card-header-text {
+.main-panel .card-stats .card-header,
+.main-panel .card-stats .card-header.card-header-icon,
+.main-panel .card-stats .card-header.card-header-text {
   display: grid !important;
   grid-template-columns: 48px 1fr !important;
   grid-template-rows: auto auto !important;
@@ -339,9 +340,9 @@ h1, h2, h3, h4, h5, h6 {
 
 /* coloured icon box — override MD's float:left, background:#999, margin-top:-20px.
    Match MD's exact selectors: .card [class*="card-header-"] .card-icon */
-.card-stats .card-icon,
-.card [class*="card-header-"] .card-icon,
-.dark-edition .card [class*="card-header-"] .card-icon {
+.main-panel .card-stats .card-icon,
+.main-panel .card [class*="card-header-"] .card-icon,
+.dark-edition .main-panel .card [class*="card-header-"] .card-icon {
   grid-row: 1 / 3 !important;
   grid-column: 1 !important;
   width: 48px !important;
@@ -361,9 +362,9 @@ h1, h2, h3, h4, h5, h6 {
   margin-right: 0 !important;
   padding: 0 !important;
 }
-.card-stats .card-icon i,
-.card-stats .card-icon i.material-icons,
-.card [class*="card-header-"] .card-icon i {
+.main-panel .card-stats .card-icon i,
+.main-panel .card-stats .card-icon i.material-icons,
+.main-panel .card [class*="card-header-"] .card-icon i {
   color: #ffffff !important;
   font-size: 24px !important;
   line-height: 1 !important;
@@ -374,9 +375,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* category & title placed in the grid */
-.card-stats .card-header .card-category,
-.card-stats .card-header.card-header-icon .card-category,
-.card-stats .card-header.card-header-icon > .card-category {
+.main-panel .card-stats .card-header .card-category,
+.main-panel .card-stats .card-header.card-header-icon .card-category,
+.main-panel .card-stats .card-header.card-header-icon > .card-category {
   grid-row: 1 !important;
   grid-column: 2 !important;
   align-self: end !important;
@@ -388,9 +389,9 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap !important;
   min-width: 0 !important;
 }
-.card-stats .card-header .card-title,
-.card-stats .card-header.card-header-icon .card-title,
-.card-stats .card-header.card-header-icon > .card-title {
+.main-panel .card-stats .card-header .card-title,
+.main-panel .card-stats .card-header.card-header-icon .card-title,
+.main-panel .card-stats .card-header.card-header-icon > .card-title {
   grid-row: 2 !important;
   grid-column: 2 !important;
   align-self: start !important;
@@ -406,43 +407,43 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* reset MD's +.card-category / +.card-title padding-top:10px */
-.card-stats .card-header .card-icon + .card-category,
-.card-stats .card-header .card-icon + .card-title {
+.main-panel .card-stats .card-header .card-icon + .card-category,
+.main-panel .card-stats .card-header .card-icon + .card-title {
   padding-top: 0 !important;
 }
 
 /* stat-card footer */
-.card-stats .card-footer,
-.card-stats .card-header + .card-footer,
-.dark-edition .card-stats .card-header + .card-footer {
+.main-panel .card-stats .card-footer,
+.main-panel .card-stats .card-header + .card-footer,
+.dark-edition .main-panel .card-stats .card-header + .card-footer {
   padding: 12px 22px !important;
   border-top: 1px solid var(--border) !important;
   margin-top: 0 !important;
 }
-.card-stats .card-footer .stats,
-.dark-edition .card-stats .card-footer .stats {
+.main-panel .card-stats .card-footer .stats,
+.dark-edition .main-panel .card-stats .card-footer .stats {
   display: block !important;
   color: var(--text-muted) !important;
   font-size: 12px !important;
   overflow: hidden !important;
 }
-.card-stats .card-footer .stats i,
-.card-stats .card-footer .stats i.material-icons {
+.main-panel .card-stats .card-footer .stats i,
+.main-panel .card-stats .card-footer .stats i.material-icons {
   font-size: 16px !important;
   color: var(--text-muted) !important;
   vertical-align: middle;
   margin-right: 4px;
 }
-.card-stats .card-footer .stats small {
+.main-panel .card-stats .card-footer .stats small {
   color: var(--text-muted) !important;
   font-size: 11px !important;
 }
 
 /* dark-edition card-stats category colour override */
-.dark-edition .card-stats .card-header .card-category:not([class*="text-"]) {
+.dark-edition .main-panel .card-stats .card-header .card-category:not([class*="text-"]) {
   color: var(--text-muted) !important;
 }
-.dark-edition .card .card-header.card-header-icon .card-title {
+.dark-edition .main-panel .card .card-header.card-header-icon .card-title {
   color: var(--text-white) !important;
 }
 
@@ -468,20 +469,20 @@ h1, h2, h3, h4, h5, h6 {
 .btn-info:hover             { background-color: #0062d6 !important;               box-shadow: 0 8px 9px -5px rgba(0, 117, 255, 0.4) !important; }
 
 /* override dark-edition card body / footer colours */
-.dark-edition .card .card-body {
+.dark-edition .main-panel .card .card-body {
   color: var(--text-primary) !important;
 }
-.dark-edition .card .card-body .card-category,
-.dark-edition .card .card-body .card-title {
+.dark-edition .main-panel .card .card-body .card-category,
+.dark-edition .main-panel .card .card-body .card-title {
   color: var(--text-primary) !important;
 }
-.dark-edition .card .card-footer .stats a {
+.dark-edition .main-panel .card .card-footer .stats a {
   background-image: none !important;
   -webkit-background-clip: unset !important;
   background-clip: unset !important;
   color: var(--status-info) !important;
 }
-.dark-edition .card-stats .card-body {
+.dark-edition .main-panel .card-stats .card-body {
   text-align: right !important;
 }
 
@@ -509,8 +510,8 @@ h1, h2, h3, h4, h5, h6 {
 /* ================================================================
    TABLES
    ================================================================ */
-.table                      { color: var(--text-primary) !important; }
-.table-hover tbody tr:hover { background-color: rgba(67, 24, 255, 0.08) !important; }
+.main-panel .table                      { color: var(--text-primary) !important; }
+.main-panel .table-hover tbody tr:hover { background-color: rgba(67, 24, 255, 0.08) !important; }
 
 /* ================================================================
    NOTIFICATION BADGE
@@ -1183,7 +1184,7 @@ h1, h2, h3, h4, h5, h6 {
 .control-buttons button:active { transform: translateY(0); }
 
 /* --- form inputs (shared dark styling) --- */
-.form-control {
+.main-panel .form-control {
   background-color: var(--bg-input) !important;
   border-color: var(--border-input) !important;
   color: var(--text-primary) !important;
@@ -1192,7 +1193,8 @@ h1, h2, h3, h4, h5, h6 {
 /* ================================================================
    PANEL (generic glass card — vision-system, settings sections)
    ================================================================ */
-.panel {
+.main-panel .panel,
+body.sf-page-vision-legacy .panel {
   background: linear-gradient(127.09deg, rgba(6, 11, 40, 0.94) 19.41%, rgba(10, 14, 35, 0.49) 76.65%);
   backdrop-filter: blur(120px);
   -webkit-backdrop-filter: blur(120px);
@@ -1201,13 +1203,15 @@ h1, h2, h3, h4, h5, h6 {
   padding: 20px;
   margin-bottom: 16px;
 }
-.panel h4 {
+.main-panel .panel h4,
+body.sf-page-vision-legacy .panel h4 {
   color: var(--text-primary) !important;
   font-size: 15px !important;
   font-weight: 600 !important;
   margin: 0 0 14px 0 !important;
 }
-.panel h5 {
+.main-panel .panel h5,
+body.sf-page-vision-legacy .panel h5 {
   color: var(--text-secondary) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
@@ -2939,6 +2943,29 @@ body.dashboard-v2.sf-subpage-v2 .sf-page-content .badge-info {
    ================================================================ */
 
 html[data-theme='light'] {
+  --bg-page: #f4f6fb;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #eef2f7;
+  --bg-input: #ffffff;
+  --bg-log: #eef2f7;
+  --bg-overlay: rgba(244, 246, 251, 0.88);
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #94a3b8;
+  --text-white: #ffffff;
+  --border: rgba(31, 41, 55, 0.12);
+  --border-input: rgba(31, 41, 55, 0.18);
+  --particle-color: rgba(37, 99, 235, 0.08);
+  --bg-panel: rgba(255, 255, 255, 0.92);
+  --border-color: rgba(31, 41, 55, 0.12);
+  --darker-bg: #e7ebf3;
+  --md-sys-color-primary: #2563eb;
+  --md-sys-color-on-surface: #1f2937;
+  --md-sys-color-on-surface-variant: #6b7280;
+  --md-sys-color-outline-variant: rgba(31, 41, 55, 0.12);
+  --md-sys-color-surface-container: rgba(255, 255, 255, 0.92);
+  --md-sys-color-surface-container-low: rgba(244, 246, 251, 0.92);
   --sf-base-100: #f4f6fb;
   --sf-base-200: #ffffff;
   --sf-base-300: #e7ebf3;
@@ -2954,6 +2981,29 @@ html[data-theme='light'] {
 }
 
 html[data-theme='dark'] {
+  --bg-page: #111827;
+  --bg-sidebar: #1f2937;
+  --bg-card: #1f2937;
+  --bg-card-hover: #273244;
+  --bg-input: #1f2937;
+  --bg-log: #111827;
+  --bg-overlay: rgba(17, 24, 39, 0.85);
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --text-white: #ffffff;
+  --border: rgba(243, 244, 246, 0.12);
+  --border-input: rgba(243, 244, 246, 0.18);
+  --particle-color: rgba(96, 165, 250, 0.12);
+  --bg-panel: rgba(31, 41, 55, 0.85);
+  --border-color: rgba(243, 244, 246, 0.12);
+  --darker-bg: #111827;
+  --md-sys-color-primary: #60a5fa;
+  --md-sys-color-on-surface: #f3f4f6;
+  --md-sys-color-on-surface-variant: #9ca3af;
+  --md-sys-color-outline-variant: rgba(243, 244, 246, 0.12);
+  --md-sys-color-surface-container: rgba(31, 41, 55, 0.85);
+  --md-sys-color-surface-container-low: rgba(17, 24, 39, 0.85);
   --sf-base-100: #111827;
   --sf-base-200: #1f2937;
   --sf-base-300: #374151;
@@ -3887,6 +3937,7 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-logo-link {
   color: var(--sf-base-content);
 }
 
+body.dashboard-v2 .sf-template-body,
 html[data-theme='light'] body.dashboard-v2 .sf-template-body,
 html[data-theme='dark'] body.dashboard-v2 .sf-template-body {
   display: grid;
@@ -3896,6 +3947,7 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-body {
   background: var(--sf-base-100);
 }
 
+body.dashboard-v2 .sf-template-sidebar,
 html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar,
 html[data-theme='dark'] body.dashboard-v2 .sf-template-sidebar {
   position: sticky;
@@ -3908,6 +3960,7 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-sidebar {
   overflow-y: auto;
 }
 
+body.dashboard-v2 .sf-template-sidebar-head,
 html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar-head,
 html[data-theme='dark'] body.dashboard-v2 .sf-template-sidebar-head {
   display: flex;
@@ -4100,11 +4153,13 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-pagehead {
 }
 
 @media (max-width: 767px) {
+  body.dashboard-v2 .sf-template-body,
   html[data-theme='light'] body.dashboard-v2 .sf-template-body,
   html[data-theme='dark'] body.dashboard-v2 .sf-template-body {
     display: block;
   }
 
+  body.dashboard-v2 .sf-template-sidebar,
   html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar,
   html[data-theme='dark'] body.dashboard-v2 .sf-template-sidebar {
     position: fixed;
@@ -4117,6 +4172,7 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-pagehead {
     transition: transform 220ms ease;
   }
 
+  body.dashboard-v2.sf-mobile-nav-open .sf-template-sidebar,
   html[data-theme='light'] body.dashboard-v2.sf-mobile-nav-open .sf-template-sidebar,
   html[data-theme='dark'] body.dashboard-v2.sf-mobile-nav-open .sf-template-sidebar {
     transform: translateX(0);

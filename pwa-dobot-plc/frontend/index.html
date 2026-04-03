@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
@@ -9,8 +9,6 @@
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
 
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
-  <link href="/assets/demo/demo.css" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
 
@@ -19,7 +17,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body class="dark-edition dashboard-v2">
+<body class="dashboard-v2 sf-page-home">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">
@@ -53,6 +51,18 @@
         </button>
       </div>
     </header>
+
+    <div class="bg-base-200 border-b border-base-300 px-4 py-2 shadow-sm">
+      <div class="flex flex-wrap items-center justify-center gap-2 text-sm">
+        <span class="font-medium">Connection Status:</span>
+        <span class="badge badge-success badge-sm" id="sfConnectionBadge">
+          <span data-bind="meta.backendHealth">ONLINE</span>
+        </span>
+        <span class="text-base-content/50">•</span>
+        <span class="text-base-content/70">Last refresh:</span>
+        <span class="font-medium" data-bind="meta.lastRefresh">--:--:--</span>
+      </div>
+    </div>
 
     <div class="sf-template-body flex flex-1 bg-base-100 relative">
       <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
@@ -100,143 +110,173 @@
         </div>
 
         <main class="sf-content">
-        <div class="sf-warning" id="sfSoftWarning" role="status" aria-live="polite"></div>
+        <div class="sf-warning alert alert-warning shadow-sm hidden" id="sfSoftWarning" role="status" aria-live="polite"></div>
 
-        <section class="sf-hero sf-stage sf-stage-1">
+        <section class="sf-hero sf-stage sf-stage-1 card bg-base-200 shadow-xl border border-base-300">
           <div class="sf-hero-copy">
             <p class="sf-eyebrow">Live Industrial Telemetry</p>
             <h2>Command, monitor, and diagnose the line in real time.</h2>
             <p>
               This dashboard aggregates robot, PLC, vision, and quality systems into a single cinematic command surface.
             </p>
-            <div class="sf-hero-actions">
-              <button class="sf-btn sf-btn-primary" type="button" data-action="pickPlace">
+            <div class="sf-hero-actions flex flex-wrap gap-3">
+              <button class="sf-btn sf-btn-primary btn btn-success" type="button" data-action="pickPlace">
                 <i class="material-icons">play_arrow</i>
                 Start Pick & Place
               </button>
-              <button class="sf-btn sf-btn-ghost" type="button" data-action="homeRobot">
+              <button class="sf-btn sf-btn-ghost btn btn-outline" type="button" data-action="homeRobot">
                 <i class="material-icons">home</i>
                 Home Robot
               </button>
             </div>
           </div>
-          <div class="sf-hero-chips">
-            <div class="sf-chip">
-              <span>System Mode</span>
-              <strong data-bind="meta.mode">AUTONOMOUS</strong>
+          <div class="sf-hero-chips grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm">
+              <div class="stat-title">System Mode</div>
+              <div class="stat-value text-lg" data-bind="meta.mode">AUTONOMOUS</div>
             </div>
-            <div class="sf-chip" id="sfBackendChip">
-              <span>Backend Health</span>
-              <strong data-bind="meta.backendHealth">CHECKING</strong>
+            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm" id="sfBackendChip">
+              <div class="stat-title">Backend Health</div>
+              <div class="stat-value text-lg" data-bind="meta.backendHealth">CHECKING</div>
             </div>
-            <div class="sf-chip">
-              <span>Last Refresh</span>
-              <strong data-bind="meta.lastRefresh">--:--:--</strong>
+            <div class="sf-chip stat bg-base-100 rounded-lg border border-base-300 shadow-sm">
+              <div class="stat-title">Last Refresh</div>
+              <div class="stat-value text-lg" data-bind="meta.lastRefresh">--:--:--</div>
             </div>
-            <button class="sf-btn sf-btn-danger sf-hero-estop" type="button" data-action="emergencyStop">
+            <button class="sf-btn sf-btn-danger sf-hero-estop btn btn-error sm:col-span-3" type="button" data-action="emergencyStop">
               <i class="material-icons">warning</i>
               Emergency Stop
             </button>
           </div>
         </section>
 
-        <section class="sf-metrics sf-stage sf-stage-2" aria-label="Live metrics">
-          <article class="sf-kpi-tile" data-state="online">
-            <header><span>Robot Status</span><i class="material-icons">precision_manufacturing</i></header>
-            <div class="sf-kpi-value" data-bind="robot.status">READY</div>
-            <p class="sf-kpi-sub" data-bind="robot.positionText">Position: (0, 0, 0)</p>
-            <span class="sf-status-dot" data-bind="robot.connectedState"></span>
+        <section class="sf-metrics sf-stage sf-stage-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" aria-label="Live metrics">
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="online">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">precision_manufacturing</i>
+            </div>
+            <div class="stat-title">Robot Status</div>
+            <div class="stat-value text-2xl" data-bind="robot.status">READY</div>
+            <div class="stat-desc flex items-center gap-2">
+              <span class="sf-status-dot" data-bind="robot.connectedState"></span>
+              <span data-bind="robot.positionText">Position: (0, 0, 0)</span>
+            </div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="online">
-            <header><span>Vision System</span><i class="material-icons">visibility</i></header>
-            <div class="sf-kpi-value" data-bind="vision.status">ACTIVE</div>
-            <p class="sf-kpi-sub"><span data-bind="vision.fps">0</span> FPS live throughput</p>
-            <span class="sf-status-dot" data-bind="vision.activeState"></span>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="online">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">visibility</i>
+            </div>
+            <div class="stat-title">Vision System</div>
+            <div class="stat-value text-2xl" data-bind="vision.status">ACTIVE</div>
+            <div class="stat-desc flex items-center gap-2">
+              <span class="sf-status-dot" data-bind="vision.activeState"></span>
+              <span><span data-bind="vision.fps">0</span> FPS live throughput</span>
+            </div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="pending">
-            <header><span>PLC Connection</span><i class="material-icons">router</i></header>
-            <div class="sf-kpi-value" data-bind="plc.status">CHECKING</div>
-            <p class="sf-kpi-sub" data-bind="plc.ip">192.168.0.1</p>
-            <span class="sf-status-dot" data-bind="plc.connectedState"></span>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="pending">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">router</i>
+            </div>
+            <div class="stat-title">PLC Connection</div>
+            <div class="stat-value text-2xl" data-bind="plc.status">CHECKING</div>
+            <div class="stat-desc flex items-center gap-2">
+              <span class="sf-status-dot" data-bind="plc.connectedState"></span>
+              <span data-bind="plc.ip">192.168.0.1</span>
+            </div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="neutral">
-            <header><span>RFID Scans</span><i class="material-icons">nfc</i></header>
-            <div class="sf-kpi-value" data-bind="production.rfidCount">0</div>
-            <p class="sf-kpi-sub">Last scan: <span data-bind="production.rfidLast">Never</span></p>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="neutral">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">nfc</i>
+            </div>
+            <div class="stat-title">RFID Scans</div>
+            <div class="stat-value text-2xl" data-bind="production.rfidCount">0</div>
+            <div class="stat-desc">Last scan: <span data-bind="production.rfidLast">Never</span></div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="online">
-            <header><span>Production Counter</span><i class="material-icons">inventory_2</i></header>
-            <div class="sf-kpi-value" data-bind="production.counter">0</div>
-            <p class="sf-kpi-sub">Items processed</p>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="online">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">inventory_2</i>
+            </div>
+            <div class="stat-title">Production Counter</div>
+            <div class="stat-value text-2xl" data-bind="production.counter">0</div>
+            <div class="stat-desc">Items processed</div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="pending">
-            <header><span>Conveyor System</span><i class="material-icons">conveyor_belt</i></header>
-            <div class="sf-kpi-value" data-bind="line.conveyorStatus">UNKNOWN</div>
-            <p class="sf-kpi-sub" data-bind="line.conveyorLabel">Status: checking</p>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="pending">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">conveyor_belt</i>
+            </div>
+            <div class="stat-title">Conveyor System</div>
+            <div class="stat-value text-2xl" data-bind="line.conveyorStatus">UNKNOWN</div>
+            <div class="stat-desc" data-bind="line.conveyorLabel">Status: checking</div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="pending">
-            <header><span>Gantry Robot</span><i class="material-icons">engineering</i></header>
-            <div class="sf-kpi-value" data-bind="line.gantryStatus">UNKNOWN</div>
-            <p class="sf-kpi-sub" data-bind="line.gantryLabel">Status: checking</p>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="pending">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">engineering</i>
+            </div>
+            <div class="stat-title">Gantry Robot</div>
+            <div class="stat-value text-2xl" data-bind="line.gantryStatus">UNKNOWN</div>
+            <div class="stat-desc" data-bind="line.gantryLabel">Status: checking</div>
           </article>
 
-          <article class="sf-kpi-tile" data-state="online">
-            <header><span>System Uptime</span><i class="material-icons">schedule</i></header>
-            <div class="sf-kpi-value"><span data-bind="uptime.percent">0.0</span>%</div>
-            <p class="sf-kpi-sub" data-bind="uptime.duration">0h 0m</p>
+          <article class="stat sf-kpi-tile bg-base-200 shadow-lg rounded-lg" data-state="online">
+            <div class="stat-figure text-base-content/70">
+              <i class="material-icons">schedule</i>
+            </div>
+            <div class="stat-title">System Uptime</div>
+            <div class="stat-value text-2xl"><span data-bind="uptime.percent">0.0</span>%</div>
+            <div class="stat-desc" data-bind="uptime.duration">0h 0m</div>
             <div class="sf-progress-track"><div class="sf-progress-fill" id="uptimeFill"></div></div>
           </article>
         </section>
 
         <section class="sf-row sf-stage sf-stage-3">
-          <article class="sf-panel sf-actions-panel">
+          <article class="sf-panel sf-actions-panel card bg-base-200 shadow-xl border border-base-300">
             <header class="sf-panel-head">
               <h3>Quick Actions</h3>
               <p>Execute operational controls without leaving the dashboard.</p>
             </header>
 
-            <div class="sf-segmented" role="tablist" aria-label="Action groups">
-              <button class="active" type="button" role="tab" aria-selected="true" data-segment-target="segment-robot">Robot</button>
-              <button type="button" role="tab" aria-selected="false" data-segment-target="segment-vision">Vision</button>
-              <button type="button" role="tab" aria-selected="false" data-segment-target="segment-plc">PLC</button>
+            <div class="sf-segmented tabs tabs-boxed bg-base-100 border border-base-300" role="tablist" aria-label="Action groups">
+              <button class="active tab tab-active" type="button" role="tab" aria-selected="true" data-segment-target="segment-robot">Robot</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-segment-target="segment-vision">Vision</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-segment-target="segment-plc">PLC</button>
             </div>
 
-            <div class="sf-action-group active" id="segment-robot" role="tabpanel">
-              <button class="sf-action-btn" type="button" data-action="homeRobot"><i class="material-icons">home</i><span>Home</span></button>
-              <button class="sf-action-btn" type="button" data-action="pickPlace"><i class="material-icons">vertical_align_center</i><span>Pick & Place</span></button>
-              <button class="sf-action-btn danger" type="button" data-action="emergencyStop"><i class="material-icons">stop</i><span>E-Stop</span></button>
-              <button class="sf-action-btn" type="button" data-action="openRobot"><i class="material-icons">open_in_new</i><span>Full Control</span></button>
+            <div class="sf-action-group active grid gap-3 sm:grid-cols-2" id="segment-robot" role="tabpanel">
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="homeRobot"><i class="material-icons">home</i><span>Home</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="pickPlace"><i class="material-icons">vertical_align_center</i><span>Pick & Place</span></button>
+              <button class="sf-action-btn danger btn btn-error justify-start" type="button" data-action="emergencyStop"><i class="material-icons">stop</i><span>E-Stop</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="openRobot"><i class="material-icons">open_in_new</i><span>Full Control</span></button>
             </div>
 
-            <div class="sf-action-group" id="segment-vision" role="tabpanel">
-              <button class="sf-action-btn" type="button" data-action="startVision"><i class="material-icons">videocam</i><span>Start Camera</span></button>
-              <button class="sf-action-btn" type="button" data-action="captureImage"><i class="material-icons">camera</i><span>Capture</span></button>
-              <button class="sf-action-btn" type="button" data-action="runInspection"><i class="material-icons">search</i><span>Inspect</span></button>
-              <button class="sf-action-btn" type="button" data-action="openVision"><i class="material-icons">open_in_new</i><span>Full Interface</span></button>
+            <div class="sf-action-group grid gap-3 sm:grid-cols-2" id="segment-vision" role="tabpanel">
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="startVision"><i class="material-icons">videocam</i><span>Start Camera</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="captureImage"><i class="material-icons">camera</i><span>Capture</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="runInspection"><i class="material-icons">search</i><span>Inspect</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="openVision"><i class="material-icons">open_in_new</i><span>Full Interface</span></button>
             </div>
 
-            <div class="sf-action-group" id="segment-plc" role="tabpanel">
-              <button class="sf-action-btn" type="button" data-action="connectPLC"><i class="material-icons">link</i><span>Connect</span></button>
-              <button class="sf-action-btn" type="button" data-action="readPLC"><i class="material-icons">refresh</i><span>Read Status</span></button>
-              <button class="sf-action-btn" type="button" data-action="writePLC"><i class="material-icons">edit</i><span>Write Data</span></button>
-              <button class="sf-action-btn" type="button" data-action="openPLC"><i class="material-icons">open_in_new</i><span>Diagnostics</span></button>
+            <div class="sf-action-group grid gap-3 sm:grid-cols-2" id="segment-plc" role="tabpanel">
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="connectPLC"><i class="material-icons">link</i><span>Connect</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="readPLC"><i class="material-icons">refresh</i><span>Read Status</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="writePLC"><i class="material-icons">edit</i><span>Write Data</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="openPLC"><i class="material-icons">open_in_new</i><span>Diagnostics</span></button>
             </div>
           </article>
 
-          <article class="sf-panel sf-alerts-panel">
+          <article class="sf-panel sf-alerts-panel card bg-base-200 shadow-xl border border-base-300">
             <header class="sf-panel-head">
               <h3>System Alerts</h3>
               <p>Recent events and state transitions.</p>
             </header>
 
-            <div class="sf-alerts-list" id="alertsTimeline" aria-live="polite">
-              <div class="sf-alert-item success">
+            <div class="sf-alerts-list space-y-3" id="alertsTimeline" aria-live="polite">
+              <div class="sf-alert-item alert alert-success shadow-sm">
                 <i class="material-icons">check_circle</i>
                 <div>
                   <strong>System initialized successfully</strong>
@@ -248,40 +288,40 @@
         </section>
 
         <section class="sf-row sf-quality-row sf-stage sf-stage-3">
-          <article class="sf-panel">
+          <article class="sf-panel card bg-base-200 shadow-xl border border-base-300">
             <header class="sf-panel-head">
               <h3>Fault Overview</h3>
               <p>Real-time quality anomaly monitoring.</p>
             </header>
 
-            <div class="sf-fault-grid">
-              <div class="sf-mini-stat">
-                <span>Total Faults</span>
-                <strong data-bind="faults.total">0</strong>
+            <div class="sf-fault-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div class="sf-mini-stat stat bg-base-100 rounded-lg border border-base-300">
+                <div class="stat-title">Total Faults</div>
+                <div class="stat-value text-2xl" data-bind="faults.total">0</div>
               </div>
-              <div class="sf-mini-stat">
-                <span>Active Faults</span>
-                <strong data-bind="faults.active">0</strong>
+              <div class="sf-mini-stat stat bg-base-100 rounded-lg border border-base-300">
+                <div class="stat-title">Active Faults</div>
+                <div class="stat-value text-2xl" data-bind="faults.active">0</div>
               </div>
             </div>
 
             <p class="sf-kpi-sub" data-bind="faults.summary">Monitoring...</p>
-            <div class="sf-fault-list" id="faultList"></div>
+            <div class="sf-fault-list space-y-3" id="faultList"></div>
           </article>
 
-          <article class="sf-panel">
+          <article class="sf-panel card bg-base-200 shadow-xl border border-base-300">
             <header class="sf-panel-head">
               <h3>Quality Performance</h3>
               <p>Line efficiency and pass-rate trend.</p>
             </header>
 
             <div class="sf-metric-stack">
-              <div class="sf-progress-block">
+              <div class="sf-progress-block rounded-box border border-base-300 bg-base-100 p-4">
                 <div class="sf-progress-head"><span>Efficiency</span><strong><span data-bind="efficiency.percent">0.0</span>%</strong></div>
                 <div class="sf-progress-track"><div class="sf-progress-fill" id="efficiencyFill"></div></div>
               </div>
 
-              <div class="sf-progress-block">
+              <div class="sf-progress-block rounded-box border border-base-300 bg-base-100 p-4">
                 <div class="sf-progress-head"><span>Quality Pass Rate</span><strong><span data-bind="quality.percent">0.0</span>%</strong></div>
                 <div class="sf-progress-track"><div class="sf-progress-fill" id="qualityFill"></div></div>
               </div>
@@ -305,12 +345,6 @@
     <div class="spinner"></div>
   </div>
 
-  <script src="/assets/js/core/jquery.min.js"></script>
-  <script src="/assets/js/core/popper.min.js"></script>
-  <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
-  <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
-  <script src="/assets/js/plugins/bootstrap-notify.js"></script>
-  <script src="/assets/js/material-dashboard.js?v=2.1.0" type="text/javascript"></script>
   <script src="/assets/js/app-shell.js"></script>
   <script src="/assets/js/dashboard-v2.js"></script>
 </body>

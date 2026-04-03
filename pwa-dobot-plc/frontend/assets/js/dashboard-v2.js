@@ -25,7 +25,9 @@
     alertsTimeline: document.getElementById('alertsTimeline'),
     faultList: document.getElementById('faultList'),
     backendChip: document.getElementById('sfBackendChip'),
+    connectionBadge: document.getElementById('sfConnectionBadge'),
     kpiTiles: Array.from(document.querySelectorAll('.sf-kpi-tile')),
+    toastHost: null,
     progress: {
       uptime: document.getElementById('uptimeFill'),
       efficiency: document.getElementById('efficiencyFill'),
@@ -254,14 +256,14 @@
       const list = domRefs.faultList;
       if (!list) return;
       if (snapshot.faults.list.length === 0) {
-        list.innerHTML = '<div class="sf-fault-item clear">No active faults</div>';
+        list.innerHTML = '<div class="sf-fault-item clear alert alert-success shadow-sm">No active faults</div>';
         return;
       }
 
       list.innerHTML = '';
       snapshot.faults.list.forEach((fault, idx) => {
         const item = document.createElement('div');
-        item.className = 'sf-fault-item critical';
+        item.className = 'sf-fault-item critical alert alert-error shadow-sm';
         item.style.animationDelay = `${idx * 60}ms`;
         item.innerHTML = `<span class="sf-pulse-ring"></span><span>${fault}</span>`;
         list.appendChild(item);
@@ -290,18 +292,24 @@
       if (!domRefs.backendChip) return;
       domRefs.backendChip.classList.remove('is-online', 'is-warning', 'is-offline');
       domRefs.backendChip.classList.add(`is-${state}`);
+      if (domRefs.connectionBadge) {
+        domRefs.connectionBadge.classList.remove('badge-success', 'badge-warning', 'badge-error', 'badge-neutral');
+        domRefs.connectionBadge.classList.add(state === 'online' ? 'badge-success' : state === 'warning' ? 'badge-warning' : 'badge-error');
+      }
       setBound('meta.backendHealth', label);
     },
 
     setWarning(message) {
       if (!domRefs.softWarning) return;
       domRefs.softWarning.textContent = message;
+      domRefs.softWarning.classList.remove('hidden');
       domRefs.softWarning.classList.add('active');
     },
 
     clearWarning() {
       if (!domRefs.softWarning) return;
       domRefs.softWarning.classList.remove('active');
+      domRefs.softWarning.classList.add('hidden');
       domRefs.softWarning.textContent = '';
     },
   };
@@ -496,7 +504,7 @@
     };
 
     const item = document.createElement('div');
-    item.className = `sf-alert-item ${level}`;
+    item.className = `sf-alert-item ${level} alert shadow-sm ${level === 'success' ? 'alert-success' : level === 'warning' ? 'alert-warning' : level === 'danger' ? 'alert-error' : 'alert-info'}`;
     item.innerHTML = `
       <i class="material-icons">${iconMap[level] || 'notifications'}</i>
       <div>
@@ -520,7 +528,41 @@
       });
       return;
     }
-    console.log(`[${type}] ${message}`);
+    const palette = {
+      success: 'alert-success',
+      danger: 'alert-error',
+      warning: 'alert-warning',
+      info: 'alert-info',
+    };
+    const iconMap = {
+      success: 'check_circle',
+      danger: 'error',
+      warning: 'warning',
+      info: 'info',
+    };
+
+    if (!domRefs.toastHost) {
+      const host = document.createElement('div');
+      host.className = 'toast toast-top toast-end z-[100]';
+      document.body.appendChild(host);
+      domRefs.toastHost = host;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `alert ${palette[type] || 'alert-info'} shadow-lg`;
+    toast.innerHTML = `
+      <i class="material-icons">${iconMap[type] || 'notifications'}</i>
+      <span>${message}</span>
+    `;
+
+    domRefs.toastHost.appendChild(toast);
+    window.setTimeout(() => {
+      toast.remove();
+      if (domRefs.toastHost && domRefs.toastHost.children.length === 0) {
+        domRefs.toastHost.remove();
+        domRefs.toastHost = null;
+      }
+    }, 3200);
   }
 
   async function withLoading(fn) {
@@ -561,6 +603,7 @@
         domRefs.segmentedButtons.forEach((item) => {
           const active = item === button;
           item.classList.toggle('active', active);
+          item.classList.toggle('tab-active', active);
           item.setAttribute('aria-selected', String(active));
         });
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
@@ -9,7 +9,6 @@
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
 
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
-  <link href="/assets/css/material-dashboard.min.css?v=2.1.0" rel="stylesheet" />
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
   <style>
@@ -127,7 +126,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body class="dark-edition dashboard-v2 sf-page-iolink">
+<body class="dashboard-v2 sf-page-iolink">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">
@@ -390,12 +389,7 @@
     </footer>
   </div>
 
-  <script src="/assets/js/core/jquery.min.js"></script>
-  <script src="/assets/js/core/popper.min.js"></script>
-  <script src="/assets/js/core/bootstrap-material-design.min.js"></script>
-  <script src="/assets/js/plugins/perfect-scrollbar.jquery.min.js"></script>
   <script src="/assets/js/plugins/chartist.min.js"></script>
-  <script src="/assets/js/material-dashboard.min.js?v=2.1.0" type="text/javascript"></script>
   <script src="/assets/js/app-shell.js"></script>
 
   <script>
@@ -529,7 +523,7 @@
       const activePorts = ports.filter(p => (p.mode || '').toLowerCase().includes('io-link'));
 
       if (activePorts.length === 0) {
-        document.getElementById('portDetailsContainer').innerHTML = '<p class="text-center">No active IO-Link ports</p>';
+        document.getElementById('portDetailsContainer').innerHTML = '<div class="rounded-box border border-base-300 bg-base-100 p-4 text-center text-sm text-base-content/70">No active IO-Link ports</div>';
         return;
       }
 
@@ -542,15 +536,15 @@
           if (data.success && data.port) {
             html += generatePortDetailsHTML(data.port);
           } else {
-            html += `<div class="alert alert-warning">Port ${port.port}: No data available</div>`;
+            html += `<div class="alert alert-warning shadow-sm">Port ${port.port}: No data available</div>`;
           }
         } catch (error) {
           console.error(`Port ${port.port} error:`, error);
-          html += `<div class="alert alert-warning">Port ${port.port}: ${error.name === 'TimeoutError' ? 'Request timed out (30s)' : 'Error loading details'}</div>`;
+          html += `<div class="alert alert-warning shadow-sm">Port ${port.port}: ${error.name === 'TimeoutError' ? 'Request timed out (30s)' : 'Error loading details'}</div>`;
         }
       }
 
-      document.getElementById('portDetailsContainer').innerHTML = html || '<p class="text-center">No port details available</p>';
+      document.getElementById('portDetailsContainer').innerHTML = html || '<div class="rounded-box border border-base-300 bg-base-100 p-4 text-center text-sm text-base-content/70">No port details available</div>';
     }
 
     function generatePortDetailsHTML(port) {
@@ -608,6 +602,74 @@
       html += '</div>';
 
       html += '</div>';
+      return html;
+    }
+
+    function generatePortDetailsHTML(port) {
+      const pdOut = port.pdout || {};
+      const pdIn = port.pdin || {};
+      const dec = pdOut.decoded || {};
+      const hasDecoded = Object.keys(dec).length > 0;
+      const pdOutBytes = Array.isArray(pdOut.bytes) ? pdOut.bytes.join(', ') : '-';
+      const pdInBytes = Array.isArray(pdIn.bytes) ? pdIn.bytes.join(', ') : '-';
+
+      let html = `<article class="sf-panel rounded-box border border-base-300 bg-base-100 p-4 mb-4">`;
+      html += `<header class="sf-panel-head mb-4"><h3>Port ${port.port} - ${escapeHtml(port.name || 'Unknown Device')}</h3><p>Live decoded process data for the active IO-Link device.</p></header>`;
+      html += '<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">';
+      html += `<div class="rounded-box border border-base-300 bg-base-200 p-3"><div class="text-xs uppercase tracking-wide text-base-content/60">Vendor ID</div><div class="text-sm font-semibold">${escapeHtml(port.vendor_id || '-')}</div></div>`;
+      html += `<div class="rounded-box border border-base-300 bg-base-200 p-3"><div class="text-xs uppercase tracking-wide text-base-content/60">Device ID</div><div class="text-sm font-semibold">${escapeHtml(port.device_id || '-')}</div></div>`;
+      html += `<div class="rounded-box border border-base-300 bg-base-200 p-3"><div class="text-xs uppercase tracking-wide text-base-content/60">Serial</div><div class="text-sm font-semibold">${escapeHtml(port.serial || '-')}</div></div>`;
+      html += `<div class="rounded-box border border-base-300 bg-base-200 p-3"><div class="text-xs uppercase tracking-wide text-base-content/60">Mode</div><div class="text-sm font-semibold">${escapeHtml(port.mode || '-')}</div></div>`;
+      html += '</div>';
+
+      html += '<div class="grid gap-4 xl:grid-cols-2">';
+      html += '<section class="rounded-box border border-success/30 bg-success/5 p-4">';
+      html += '<div class="mb-3"><h4 class="text-sm font-semibold text-success">Process Data Out (PLC to Device)</h4></div>';
+      if (pdOut.raw) {
+        html += '<div class="grid gap-3 md:grid-cols-3 mb-3">';
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Raw</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">${escapeHtml(pdOut.raw)}</code></div>`;
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Hex</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">${escapeHtml(pdOut.hex || '-')}</code></div>`;
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Bytes</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">[${escapeHtml(pdOutBytes)}]</code></div>`;
+        html += '</div>';
+
+        if (hasDecoded) {
+          html += '<div class="rounded-box border border-base-300 bg-base-100 p-3">';
+          html += '<div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">Decoded Output</div>';
+          html += '<div class="flex flex-wrap gap-2">';
+          html += `<span class="badge ${dec.led_on ? 'badge-success' : 'badge-neutral'}">LED ${dec.led_on ? 'ON' : 'OFF'}</span>`;
+          html += `<span class="badge badge-primary">${escapeHtml(dec.color1 || '-')}</span>`;
+          html += `<span class="badge badge-neutral">${escapeHtml(dec.color1_intensity || '-')}</span>`;
+          html += `<span class="badge badge-primary">${escapeHtml(dec.color2 || '-')}</span>`;
+          html += `<span class="badge badge-neutral">${escapeHtml(dec.color2_intensity || '-')}</span>`;
+          html += `<span class="badge badge-info">${escapeHtml(dec.animation || '-')}</span>`;
+          html += `<span class="badge badge-info">${escapeHtml(dec.pulse_pattern || '-')}</span>`;
+          html += `<span class="badge badge-info">${escapeHtml(dec.speed || '-')}</span>`;
+          if (dec.audible_state && dec.audible_state !== 'Off') {
+            html += `<span class="badge badge-warning">${escapeHtml(dec.audible_state)}</span>`;
+          }
+          html += '</div>';
+          html += '</div>';
+        }
+      } else {
+        html += '<div class="text-sm text-base-content/60">No process data out</div>';
+      }
+      html += '</section>';
+
+      html += '<section class="rounded-box border border-warning/30 bg-warning/5 p-4">';
+      html += '<div class="mb-3"><h4 class="text-sm font-semibold text-warning">Process Data In (Device to PLC)</h4></div>';
+      if (pdIn.raw) {
+        html += '<div class="grid gap-3 md:grid-cols-3">';
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Raw</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">${escapeHtml(pdIn.raw)}</code></div>`;
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Hex</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">${escapeHtml(pdIn.hex || '-')}</code></div>`;
+        html += `<div><div class="text-xs text-base-content/60 mb-1">Bytes</div><code class="block rounded-box border border-base-300 bg-base-100 p-2 text-xs">[${escapeHtml(pdInBytes)}]</code></div>`;
+        html += '</div>';
+      } else {
+        html += '<div class="text-sm text-base-content/60">No process data in</div>';
+      }
+      html += '</section>';
+      html += '</div>';
+
+      html += '</article>';
       return html;
     }
 

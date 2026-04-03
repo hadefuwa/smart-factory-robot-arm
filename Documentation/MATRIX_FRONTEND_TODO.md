@@ -14,13 +14,13 @@ Finish the Smart Factory frontend migration so the app genuinely fits with other
 ## Priority 1: Main Production Pages
 
 - [x] Rebuild [robot-arm.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/robot-arm.html) into Matrix-native body markup.
-- [ ] Finish the remaining nested settings/help cleanup in [vision-system-new.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/vision-system-new.html).
-- [ ] Finish the remaining dynamic port-detail cleanup in [io-link.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/io-link.html).
+- [ ] Finish the browser polish and final minor text/encoding cleanup in [vision-system-new.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/vision-system-new.html).
+- [ ] Finish the browser polish pass for dynamic port details in [io-link.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/io-link.html).
 
 ## Priority 2: Remaining Production/Support Pages
 
 - [x] Rebuild [rfid.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/rfid.html) into Matrix-native page structure.
-- [ ] Finish the DB editor/internal cleanup in [plc-diagnostics.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/plc-diagnostics.html) while preserving DB editor values and behavior.
+- [ ] Finish the browser polish pass for [plc-diagnostics.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/plc-diagnostics.html) while preserving DB editor values and behavior.
 - [x] Rebuild [edge-device-stats.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/edge-device-stats.html) into Matrix-native page structure.
 - [ ] Finish the final text/encoding cleanup in [hotspot-status.html](C:/Users/HamedA/Documents/sf2/pwa-dobot-plc/frontend/hotspot-status.html).
 
@@ -39,9 +39,9 @@ Finish the Smart Factory frontend migration so the app genuinely fits with other
 
 ## What Is Left
 
-- [ ] Finish `vision-system-new.html` nested settings/help internals.
-- [ ] Finish `io-link.html` dynamic detail internals.
-- [ ] Finish `plc-diagnostics.html` DB editor internals.
+- [ ] Finish `vision-system-new.html` browser polish and minor text/encoding cleanup.
+- [ ] Finish `io-link.html` browser polish on dynamic detail surfaces.
+- [ ] Finish `plc-diagnostics.html` browser polish on diagnostics/editor internals.
 - [ ] Finish `hotspot-status.html` text/encoding cleanup.
 - [ ] Rebuild deeper `vision-system.html` internals or retire the page.
 - [ ] Run browser QA and regression checks.
