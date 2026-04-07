@@ -11,6 +11,37 @@
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
+  <style>
+    /* Keep hotspot hero styled as a hero.
+       Global dashboard overrides flatten .sf-page-hero to a plain panel. */
+    body.sf-page-hotspot .sf-page-hero.sf-page-hero--twin {
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--sf-info-ui) 14%, var(--sf-base-100)) 0%,
+        color-mix(in srgb, var(--sf-primary) 10%, var(--sf-base-100)) 48%,
+        var(--sf-base-200) 100%
+      ) !important;
+      border: 1px solid color-mix(in srgb, var(--sf-info-ui) 24%, var(--sf-base-300)) !important;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12) !important;
+      padding: 1.25rem !important;
+      gap: 1rem !important;
+    }
+
+    body.sf-page-hotspot .sf-page-hero.sf-page-hero--twin .sf-page-hero-copy p {
+      color: var(--sf-base-muted) !important;
+    }
+
+    body.sf-page-hotspot .sf-page-hero.sf-page-hero--twin .sf-page-hero-chips > div {
+      background: var(--sf-base-100) !important;
+      border: 1px solid var(--sf-base-300) !important;
+    }
+
+    @media (max-width: 1024px) {
+      body.sf-page-hotspot .sf-page-hero.sf-page-hero--twin {
+        grid-template-columns: 1fr !important;
+      }
+    }
+  </style>
 
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#030c1d">
@@ -18,7 +49,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 
-<body class="dashboard-v2 sf-page-hotspot">
+<body class="dashboard-v2 sf-page-hotspot sf-subpage-v2">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
 
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">

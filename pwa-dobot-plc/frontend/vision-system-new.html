@@ -335,6 +335,36 @@
     background: color-mix(in srgb, var(--sf-danger-ui) 12%, var(--sf-base-100));
     border-color: color-mix(in srgb, var(--sf-danger-ui) 40%, var(--sf-base-300));
   }
+
+  /* Keep the vision hero styled as a hero on this page.
+     Global dashboard overrides flatten .sf-page-hero into a plain card. */
+  body.sf-page-vision .sf-page-hero.sf-page-hero--vision {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--sf-primary) 14%, var(--sf-base-100)) 0%,
+      color-mix(in srgb, var(--sf-info-ui) 10%, var(--sf-base-100)) 45%,
+      var(--sf-base-200) 100%
+    ) !important;
+    border: 1px solid color-mix(in srgb, var(--sf-primary) 24%, var(--sf-base-300)) !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12) !important;
+    padding: 1.25rem !important;
+    gap: 1rem !important;
+  }
+
+  body.sf-page-vision .sf-page-hero.sf-page-hero--vision .sf-page-hero-copy p {
+    color: var(--sf-base-muted) !important;
+  }
+
+  body.sf-page-vision .sf-page-hero.sf-page-hero--vision .sf-page-hero-chips > div {
+    background: var(--sf-base-100) !important;
+    border: 1px solid var(--sf-base-300) !important;
+  }
+
+  @media (max-width: 1024px) {
+    body.sf-page-vision .sf-page-hero.sf-page-hero--vision {
+      grid-template-columns: 1fr !important;
+    }
+  }
  </style>
  
  <!-- PWA Manifest -->
@@ -343,7 +373,7 @@
  <meta name="mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body class="dashboard-v2 sf-page-vision">
+<body class="dashboard-v2 sf-page-vision sf-subpage-v2">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">
