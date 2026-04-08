@@ -4,7 +4,7 @@
 
   const NAV_ITEMS = [
     { href: '/index.html', label: 'Dashboard', icon: 'dashboard', section: 'primary' },
-    { href: '/dobot.html', label: 'Dobot', icon: 'precision_manufacturing', section: 'primary' },
+    { href: '/robot-arm.html', label: 'Robot Arm', icon: 'precision_manufacturing', section: 'primary' },
     { href: '/vision-system-new.html', label: 'Vision System', icon: 'visibility', section: 'primary' },
     { href: '/rfid.html', label: 'RFID Tracking', icon: 'nfc', section: 'primary' },
     { href: '/plc-diagnostics.html', label: 'PLC Diagnostics', icon: 'analytics', section: 'primary' },
@@ -17,7 +17,7 @@
 
   const PAGE_META = {
     '/index.html': { kind: 'primary' },
-    '/dobot.html': { kind: 'primary' },
+    '/robot-arm.html': { kind: 'primary' },
     '/vision-system-new.html': { kind: 'primary' },
     '/rfid.html': { kind: 'primary' },
     '/plc-diagnostics.html': { kind: 'primary' },
@@ -34,9 +34,9 @@
   };
 
   const HERO_CONFIG = {
-    '/dobot.html': {
+    '/robot-arm.html': {
       kicker: 'Robot Control',
-      title: 'Operate, home, and diagnose the Dobot from one control surface.',
+      title: 'Operate and monitor the robot arm from one control surface.',
       description: 'Keep the existing motion, tool, settings, and emergency-stop flows, now presented in the unified Matrix shell.',
       variant: 'robot',
       chips: [
@@ -1121,7 +1121,7 @@
     normalizeLegacyLayout();
     upgradeCommonContent();
 
-    if (normalizedPath === '/dobot.html') {
+    if (normalizedPath === '/robot-arm.html') {
       document.body.classList.add('sf-page-robot');
       enhanceRobotPage();
       enhanceRobotModal();
