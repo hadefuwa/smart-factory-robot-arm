@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 import requests
 import base64
+import websocket
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -186,6 +187,17 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 plc_client = None  # Will be None if snap7 fails
 dobot_client = None
 camera_service = None
+
+# RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
+robot_arm_bridge_lock = threading.Lock()
+robot_arm_bridge_state = {
+    'ws': None,
+    'connected': False,
+    'host': None,
+    'port': None,
+    'last_error': None,
+    'last_status': None
+}
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
 latest_annotated_mime = 'image/jpeg'
@@ -1215,6 +1227,153 @@ def robot_status():
         'position': pose,
         'last_error': dobot_client.last_error
     })
+
+
+def close_robot_arm_bridge():
+    """Close active RobotArmv3 Pi WebSocket connection."""
+    ws = robot_arm_bridge_state.get('ws')
+    if ws:
+        try:
+            ws.close()
+        except Exception:
+            pass
+    robot_arm_bridge_state['ws'] = None
+    robot_arm_bridge_state['connected'] = False
+
+
+def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Send one command to Pi service and return one JSON response."""
+    ws = robot_arm_bridge_state.get('ws')
+    if not ws or not robot_arm_bridge_state.get('connected'):
+        raise RuntimeError('Robot arm bridge is not connected')
+
+    ws.send(json.dumps(command_payload))
+    raw_response = ws.recv()
+    response_data = json.loads(raw_response)
+    return response_data
+
+
+@app.route('/api/robot-arm/connect', methods=['POST'])
+def robot_arm_connect():
+    """
+    Connect Flask bridge to RobotArmv3 Pi service.
+    Body (optional): { "host": "robot-arm.local", "port": 8080 }
+    """
+    data = request.get_json(silent=True) or {}
+    host = data.get('host', 'robot-arm.local')
+    port = int(data.get('port', 8080))
+    ws_url = f"ws://{host}:{port}"
+
+    with robot_arm_bridge_lock:
+        try:
+            close_robot_arm_bridge()
+            ws = websocket.create_connection(ws_url, timeout=3)
+
+            # Pi service sends a welcome message on connect; read and ignore.
+            try:
+                _welcome_message = ws.recv()
+            except Exception:
+                _welcome_message = None
+
+            robot_arm_bridge_state['ws'] = ws
+            robot_arm_bridge_state['connected'] = True
+            robot_arm_bridge_state['host'] = host
+            robot_arm_bridge_state['port'] = port
+            robot_arm_bridge_state['last_error'] = None
+
+            return jsonify({
+                'success': True,
+                'connected': True,
+                'host': host,
+                'port': port
+            })
+        except Exception as e:
+            close_robot_arm_bridge()
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'error': str(e)
+            }), 500
+
+
+@app.route('/api/robot-arm/disconnect', methods=['POST'])
+def robot_arm_disconnect():
+    """Disconnect Flask bridge from RobotArmv3 Pi service."""
+    with robot_arm_bridge_lock:
+        close_robot_arm_bridge()
+        return jsonify({'success': True, 'connected': False})
+
+
+@app.route('/api/robot-arm/move', methods=['POST'])
+def robot_arm_move():
+    """Move one robot arm joint. Body: { joint, angle }"""
+    data = request.get_json(silent=True) or {}
+    joint = data.get('joint')
+    angle = data.get('angle')
+
+    if joint is None or angle is None:
+        return jsonify({'success': False, 'error': 'Missing required fields: joint, angle'}), 400
+
+    with robot_arm_bridge_lock:
+        try:
+            response = send_robot_arm_command({
+                'command': 'moveJoint',
+                'joint': int(joint),
+                'angle': float(angle)
+            })
+            success = response.get('type') == 'success'
+            status_code = 200 if success else 400
+            return jsonify({'success': success, 'bridge_response': response}), status_code
+        except Exception as e:
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/robot-arm/stop', methods=['POST'])
+def robot_arm_stop():
+    """Stop all robot arm joints."""
+    with robot_arm_bridge_lock:
+        try:
+            response = send_robot_arm_command({'command': 'stopAll'})
+            success = response.get('type') == 'success'
+            status_code = 200 if success else 400
+            return jsonify({'success': success, 'bridge_response': response}), status_code
+        except Exception as e:
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/robot-arm/status', methods=['GET'])
+def robot_arm_status():
+    """Get latest robot arm status from Pi service."""
+    with robot_arm_bridge_lock:
+        if not robot_arm_bridge_state.get('connected'):
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'host': robot_arm_bridge_state.get('host'),
+                'port': robot_arm_bridge_state.get('port'),
+                'error': robot_arm_bridge_state.get('last_error') or 'Robot arm bridge not connected'
+            }), 503
+
+        try:
+            response = send_robot_arm_command({'command': 'getStatus'})
+            robot_arm_bridge_state['last_status'] = response
+            return jsonify({
+                'success': True,
+                'connected': True,
+                'host': robot_arm_bridge_state.get('host'),
+                'port': robot_arm_bridge_state.get('port'),
+                'status': response
+            })
+        except Exception as e:
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'error': str(e)
+            }), 500
 
 @app.route('/api/dobot/debug', methods=['GET'])
 def dobot_debug():

@@ -150,7 +150,7 @@
       notify('Data written to PLC', 'success');
     },
     openRobot() {
-      window.location.href = '/robot-arm.html';
+      window.location.href = '/dobot.html';
     },
     openVision() {
       window.location.href = '/vision-system-new.html';

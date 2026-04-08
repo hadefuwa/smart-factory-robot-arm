@@ -1,0 +1,14 @@
+{
+  "name": "robotarmv3-pi-service",
+  "version": "1.0.0",
+  "description": "Raspberry Pi Node.js service for RobotArmv3 I2C control",
+  "main": "server.js",
+  "scripts": {
+    "server": "node server.js",
+    "test": "node test-i2c.js"
+  },
+  "dependencies": {
+    "i2c-bus": "^5.2.3",
+    "ws": "^8.16.0"
+  }
+}
