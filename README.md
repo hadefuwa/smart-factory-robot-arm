@@ -215,7 +215,6 @@ sf2/
 │   └── deploy/
 │       ├── ecosystem.config.js # PM2 config (points to sf2)
 │       └── generate_ssl_cert.sh # HTTPS certificate for WinCC
-├── WinCC_Camera_Control/       # Siemens WinCC Unified Custom Web Control
 ├── docs/                       # Documentation
 ├── scripts/                    # Scripts
 ├── lib/                        # External libraries
@@ -388,7 +387,7 @@ python3 app.py
 - ✅ **Real-time Parameter Controls** - Adjust detection confidence, IOU, cropping, edge sensitivity from the UI
 - ✅ **Camera Support** - Multiple MJPEG streams for raw feed, analyzed image, and annotated results
 - ✅ **HTTPS for WinCC** - Self-signed SSL for embedding camera in WinCC Unified HMI (run `deploy/generate_ssl_cert.sh`)
-- ✅ **WinCC HMI Support** - Custom Web Control to view camera streams on Siemens Unified Panels
+- ✅ **WinCC HMI Support** - Camera streams can be embedded in Siemens Unified Panels
 
 ---
 

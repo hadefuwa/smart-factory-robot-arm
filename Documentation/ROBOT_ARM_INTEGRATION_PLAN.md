@@ -174,7 +174,7 @@ asyncio.run(t())
 ```
 
 ### 2. PLC write test
-Use `test_plc_api.html` or the existing `/api/plc/read` endpoint to verify DB125 values update when joints move.
+Use the existing `/api/plc/read` endpoint to verify DB125 values update when joints move.
 
 ### 3. Smoke test via REST
 ```bash
