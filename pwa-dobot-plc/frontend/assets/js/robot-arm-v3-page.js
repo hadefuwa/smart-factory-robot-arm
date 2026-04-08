@@ -10,6 +10,7 @@
     jointAngle: document.getElementById('jointAngle'),
     moveBtn: document.getElementById('moveBtn'),
     stopBtn: document.getElementById('stopBtn'),
+    copyStatusBtn: document.getElementById('copyStatusBtn'),
     connectionText: document.getElementById('connectionText'),
     statusBox: document.getElementById('statusBox')
   };
@@ -30,10 +31,39 @@
     var response = await fetch(url, options || {});
     var data = await response.json();
     if (!response.ok) {
-      var errorMessage = data && data.error ? data.error : 'Request failed';
+      var errorMessage = 'Request failed';
+      if (data) {
+        if (data.error) {
+          errorMessage = data.error;
+        } else if (data.bridge_response && data.bridge_response.message) {
+          errorMessage = data.bridge_response.message;
+        }
+      }
       throw new Error(errorMessage);
     }
     return data;
+  }
+
+  async function copyStatusToClipboard() {
+    var text = elements.statusBox.textContent || '';
+    if (!text) {
+      setConnectionText('Status: Nothing to copy');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setConnectionText('Status: Copied status JSON');
+    } catch (error) {
+      // Fallback for browsers with clipboard restrictions
+      var textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setConnectionText('Status: Copied status JSON');
+    }
   }
 
   async function connectRobotArm() {
@@ -135,6 +165,9 @@
     elements.disconnectBtn.addEventListener('click', disconnectRobotArm);
     elements.moveBtn.addEventListener('click', moveJoint);
     elements.stopBtn.addEventListener('click', stopAll);
+    if (elements.copyStatusBtn) {
+      elements.copyStatusBtn.addEventListener('click', copyStatusToClipboard);
+    }
   }
 
   function init() {
