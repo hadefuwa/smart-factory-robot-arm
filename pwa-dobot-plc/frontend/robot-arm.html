@@ -1,20 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
+  <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
+  <link rel="icon" type="image/png" href="/assets/img/favicon.png">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Robot Arm (MVP) - Smart Factory</title>
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#050c1d">
   <style>
-    .robot-arm-shell {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 1rem;
-      display: grid;
-      gap: 1rem;
-    }
     .robot-arm-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -42,55 +40,129 @@
     }
   </style>
 </head>
-<body>
-  <main class="robot-arm-shell">
-    <div class="card p-4">
-      <h1 class="mb-2">Robot Arm (MVP Web Control)</h1>
-      <p class="mb-1">This page controls the RobotArmv3 Pi service through your Flask backend.</p>
-      <p class="small-help mb-0">Legacy Dobot page: <a href="/dobot.html">/dobot.html</a></p>
-    </div>
-
-    <div class="robot-arm-grid">
-      <div class="card p-4">
-        <h3 class="mb-3">1) Connection</h3>
-        <div class="mb-2">
-          <label for="piHost" class="small-help">Pi Host</label>
-          <input id="piHost" class="form-control" type="text" value="robot-arm.local" />
-        </div>
-        <div class="mb-3">
-          <label for="piPort" class="small-help">Pi Port</label>
-          <input id="piPort" class="form-control" type="number" value="8080" />
-        </div>
-        <div class="d-flex gap-2">
-          <button id="connectBtn" class="btn btn-primary">Connect</button>
-          <button id="disconnectBtn" class="btn btn-outline-secondary">Disconnect</button>
-        </div>
-        <p id="connectionText" class="mt-3 mb-0 small-help">Status: Not connected</p>
+<body class="dashboard-v2">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
+          <span class="sf-brand-text">Smart Factory</span>
+        </a>
       </div>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Smart Factory 2</span>
+      </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <label class="sf-theme-wrap label cursor-pointer gap-2">
+          <span>Theme</span>
+          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </div>
+    </header>
 
-      <div class="card p-4">
-        <h3 class="mb-3">2) Joint Move</h3>
-        <div class="mb-2">
-          <label for="jointNumber" class="small-help">Joint Number (1-based)</label>
-          <input id="jointNumber" class="form-control" type="number" min="1" value="1" />
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Production Pages</strong>
+          </div>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
         </div>
-        <div class="mb-3">
-          <label for="jointAngle" class="small-help">Angle (degrees)</label>
-          <input id="jointAngle" class="form-control" type="number" value="45" />
+
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
+            <li><a class="sf-nav-item active" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
+            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
+            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
+            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
+            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+          </ul>
+        </nav>
+      </aside>
+
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Robot Arm Control</p>
+            <h1 class="sf-topbar-title">RobotArmv3 MVP Interface</h1>
+          </div>
         </div>
-        <div class="d-flex gap-2">
-          <button id="moveBtn" class="btn btn-success">Move Joint</button>
-          <button id="stopBtn" class="btn btn-danger">Stop All</button>
-        </div>
+
+        <main class="sf-content p-4">
+          <div class="card p-4 mb-4">
+            <h2 class="mb-2">Robot Arm (MVP Web Control)</h2>
+            <p class="mb-0">This page controls the RobotArmv3 Pi service through your Flask backend.</p>
+          </div>
+
+          <div class="robot-arm-grid mb-4">
+            <div class="card p-4">
+              <h3 class="mb-3">1) Connection</h3>
+              <div class="mb-2">
+                <label for="piHost" class="small-help">Pi Host</label>
+                <input id="piHost" class="input input-bordered w-full" type="text" value="robot-arm.local" />
+              </div>
+              <div class="mb-3">
+                <label for="piPort" class="small-help">Pi Port</label>
+                <input id="piPort" class="input input-bordered w-full" type="number" value="8080" />
+              </div>
+              <div class="flex gap-2">
+                <button id="connectBtn" class="btn btn-primary">Connect</button>
+                <button id="disconnectBtn" class="btn btn-outline">Disconnect</button>
+              </div>
+              <p id="connectionText" class="mt-3 mb-0 small-help">Status: Not connected</p>
+            </div>
+
+            <div class="card p-4">
+              <h3 class="mb-3">2) Joint Move</h3>
+              <div class="mb-2">
+                <label for="jointNumber" class="small-help">Joint Number (1-based)</label>
+                <input id="jointNumber" class="input input-bordered w-full" type="number" min="1" value="1" />
+              </div>
+              <div class="mb-3">
+                <label for="jointAngle" class="small-help">Angle (degrees)</label>
+                <input id="jointAngle" class="input input-bordered w-full" type="number" value="45" />
+              </div>
+              <div class="flex gap-2">
+                <button id="moveBtn" class="btn btn-success">Move Joint</button>
+                <button id="stopBtn" class="btn btn-error">Stop All</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-4">
+            <h3 class="mb-3">3) Live Status (500ms polling)</h3>
+            <div id="statusBox" class="robot-status-box">Waiting for status...</div>
+          </div>
+        </main>
       </div>
     </div>
+  </div>
 
-    <div class="card p-4">
-      <h3 class="mb-3">3) Live Status (500ms polling)</h3>
-      <div id="statusBox" class="robot-status-box">Waiting for status...</div>
-    </div>
-  </main>
-
+  <script src="/assets/js/app-shell.js"></script>
   <script src="/assets/js/robot-arm-v3-page.js"></script>
 </body>
 </html>
