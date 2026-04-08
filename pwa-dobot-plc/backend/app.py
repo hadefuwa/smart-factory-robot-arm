@@ -1241,45 +1241,60 @@ def close_robot_arm_bridge():
     robot_arm_bridge_state['connected'] = False
 
 
+def open_robot_arm_bridge(host: str, port: int):
+    """Open a fresh RobotArmv3 Pi WebSocket connection and store it in bridge state."""
+    ws_url = f"ws://{host}:{port}"
+    close_robot_arm_bridge()
+    ws = websocket.create_connection(ws_url, timeout=3)
+
+    # Pi service sends a welcome message on connect; read and ignore.
+    try:
+        _welcome_message = ws.recv()
+    except Exception:
+        _welcome_message = None
+
+    robot_arm_bridge_state['ws'] = ws
+    robot_arm_bridge_state['connected'] = True
+    robot_arm_bridge_state['host'] = host
+    robot_arm_bridge_state['port'] = port
+    robot_arm_bridge_state['last_error'] = None
+    return ws
+
+
 def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Send one command to Pi service and return one JSON response."""
     ws = robot_arm_bridge_state.get('ws')
     if not ws or not robot_arm_bridge_state.get('connected'):
         raise RuntimeError('Robot arm bridge is not connected')
 
-    ws.send(json.dumps(command_payload))
-    raw_response = ws.recv()
-    response_data = json.loads(raw_response)
-    return response_data
+    try:
+        ws.send(json.dumps(command_payload))
+        raw_response = ws.recv()
+        response_data = json.loads(raw_response)
+        robot_arm_bridge_state['last_error'] = None
+        return response_data
+    except Exception as e:
+        # If the Pi-side Node service restarted, websocket-client can keep a dead socket
+        # object around and only fail on the next send/recv. Clear bridge state so the
+        # UI gets a truthful reconnect-required error instead of reusing a broken socket.
+        close_robot_arm_bridge()
+        robot_arm_bridge_state['last_error'] = str(e)
+        raise RuntimeError(f'Robot arm bridge connection lost: {e}')
 
 
 @app.route('/api/robot-arm/connect', methods=['POST'])
 def robot_arm_connect():
     """
     Connect Flask bridge to RobotArmv3 Pi service.
-    Body (optional): { "host": "robot-arm.local", "port": 8080 }
+    Body (optional): { "host": "robot-arm.local", "port": 8090 }
     """
     data = request.get_json(silent=True) or {}
     host = data.get('host', 'robot-arm.local')
-    port = int(data.get('port', 8080))
-    ws_url = f"ws://{host}:{port}"
+    port = int(data.get('port', 8090))
 
     with robot_arm_bridge_lock:
         try:
-            close_robot_arm_bridge()
-            ws = websocket.create_connection(ws_url, timeout=3)
-
-            # Pi service sends a welcome message on connect; read and ignore.
-            try:
-                _welcome_message = ws.recv()
-            except Exception:
-                _welcome_message = None
-
-            robot_arm_bridge_state['ws'] = ws
-            robot_arm_bridge_state['connected'] = True
-            robot_arm_bridge_state['host'] = host
-            robot_arm_bridge_state['port'] = port
-            robot_arm_bridge_state['last_error'] = None
+            open_robot_arm_bridge(host, port)
 
             return jsonify({
                 'success': True,
@@ -1374,6 +1389,76 @@ def robot_arm_status():
                 'connected': False,
                 'error': str(e)
             }), 500
+
+@app.route('/api/robot-arm/command', methods=['POST'])
+def robot_arm_command():
+    """
+    Generic passthrough — send any command payload to the Pi WebSocket service.
+    Body: { "command": "...", ...params, "_recvTimeout": 30 }
+    Optional _recvTimeout overrides the default 5s recv wait.
+    """
+    payload = request.get_json(silent=True) or {}
+    recv_timeout = int(payload.pop('_recvTimeout', 5))
+
+    with robot_arm_bridge_lock:
+        if not robot_arm_bridge_state.get('connected'):
+            return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
+        try:
+            ws = robot_arm_bridge_state['ws']
+            ws.settimeout(recv_timeout)
+            try:
+                ws.send(json.dumps(payload))
+                raw = ws.recv()
+                response = json.loads(raw)
+            finally:
+                ws.settimeout(3)
+            return jsonify({'success': True, 'bridge_response': response})
+        except Exception as e:
+            close_robot_arm_bridge()
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/robot-arm/scan', methods=['POST'])
+def robot_arm_scan():
+    """
+    Scan for ST3215 servos on the bus.
+    Body (optional): { "maxId": 20, "baudRates": [1000000], "timeout": 100 }
+    maxId: highest servo ID to probe (1-253, default 20)
+    baudRates: list of baud rates to try (default [1000000])
+    timeout: ms to wait per ping (default 100)
+    """
+    data = request.get_json(silent=True) or {}
+    payload = {'command': 'scanServos'}
+    if 'maxId'     in data: payload['maxId']     = int(data['maxId'])
+    if 'baudRates' in data: payload['baudRates'] = data['baudRates']
+    if 'timeout'   in data: payload['timeout']   = int(data['timeout'])
+
+    # Estimate worst-case seconds: maxId * timeout_ms / 1000 * len(baudRates) + margin
+    max_id   = int(data.get('maxId', 20))
+    n_bauds  = len(data.get('baudRates', [1000000]))
+    t_ms     = int(data.get('timeout', 100))
+    recv_timeout = max(15, int(max_id * n_bauds * t_ms / 1000) + 5)
+
+    with robot_arm_bridge_lock:
+        if not robot_arm_bridge_state.get('connected'):
+            return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
+        try:
+            ws = robot_arm_bridge_state['ws']
+            ws.settimeout(recv_timeout)
+            try:
+                ws.send(json.dumps(payload))
+                raw = ws.recv()
+                response = json.loads(raw)
+            finally:
+                ws.settimeout(3)  # restore default
+            robot_arm_bridge_state['last_error'] = None
+            return jsonify({'success': True, 'bridge_response': response})
+        except Exception as e:
+            close_robot_arm_bridge()
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/dobot/debug', methods=['GET'])
 def dobot_debug():
