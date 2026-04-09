@@ -612,11 +612,11 @@
  <div>Connected: DB124.DBX0.1</div>
  <div>Busy: DB124.DBX0.2</div>
  <div>Completed: DB124.DBX0.3</div>
- <div>Object_Detected: DB124.DBX0.4</div>
- <div>Object_OK: DB124.DBX0.5</div>
- <div>Defect_Detected: DB124.DBX0.6</div>
- <div>Object_Number: DB124.DBW2</div>
- <div>Defect_Number: DB124.DBW4</div>
+ <div>Defect_Detected: DB124.DBX0.4</div>
+ <div>Reject_Command_From_PLC: DB124.DBX0.5</div>
+ <div>Yellow_Cube_Detected: DB124.DBX0.6</div>
+ <div>White_Cube_Detected: DB124.DBX0.7</div>
+ <div>Metal_Cube_Detected: DB124.DBX1.0</div>
  </div>
  </div>
 
@@ -2345,11 +2345,11 @@
  'connected': false,
  'busy': false,
  'completed': false,
- 'object_detected': false,
- 'object_ok': false,
  'defect_detected': false,
- 'object_number': 0,
- 'defect_number': 0
+ 'reject_command_from_plc': false,
+ 'yellow_cube_detected': false,
+ 'white_cube_detected': false,
+ 'metal_cube_detected': false
  };
 
  try {
@@ -2389,29 +2389,29 @@
   <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX0.3</div>
  </div>
  <div style="padding: 8px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 6px;">
- <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Object_Detected</div>
- <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.object_detected)}</div>
+ <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Defect_Detected</div>
+ <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.defect_detected)}</div>
   <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX0.4</div>
  </div>
  <div style="padding: 8px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 6px;">
- <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Object_OK</div>
- <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.object_ok)}</div>
+ <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Reject_Command_From_PLC</div>
+ <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.reject_command_from_plc)}</div>
   <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX0.5</div>
  </div>
  <div style="padding: 8px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 6px;">
- <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Defect_Detected</div>
- <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.defect_detected)}</div>
+ <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Yellow_Cube_Detected</div>
+ <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.yellow_cube_detected)}</div>
   <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX0.6</div>
  </div>
  <div style="padding: 8px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 6px;">
- <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Object_Number</div>
- <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${tags.object_number || 0}</div>
-  <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBW2</div>
+ <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">White_Cube_Detected</div>
+ <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.white_cube_detected)}</div>
+  <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX0.7</div>
  </div>
  <div style="padding: 8px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: 6px;">
- <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Defect_Number</div>
- <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${tags.defect_number || 0}</div>
-  <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBW4</div>
+ <div style="color: var(--md-sys-color-on-surface-variant); font-size: 9px; margin-bottom: 4px;">Metal_Cube_Detected</div>
+ <div style="color: var(--md-sys-color-primary); font-size: 11px; font-weight: 700;">${formatBool(tags.metal_cube_detected)}</div>
+  <div style="color: var(--text-muted); font-size: 8px; margin-top: 2px;">DB124.DBX1.0</div>
  </div>
  `;
  } catch (error) {

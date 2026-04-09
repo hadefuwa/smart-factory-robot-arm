@@ -122,14 +122,14 @@ def queue_robot_position(x: int, y: int, z: int):
         return
 
     for field_name, value in (
-        ('robot_current_x', x),
-        ('robot_current_y', y),
-        ('robot_current_z', z),
+        ('x_position', x),
+        ('y_position', y),
+        ('z_position', z),
     ):
-        offset = plc_worker.main_db_tags[field_name]['byte']
+        offset = plc_worker.robot_db_tags[field_name]['byte']
         data = bytearray(2)
         set_int(data, 0, int(value))
-        plc_worker.queue_write(plc_worker.main_db_number, offset, data, f"{field_name}={value}")
+        plc_worker.queue_write(plc_worker.robot_db_number, offset, data, f"{field_name}={value}")
 
 
 def queue_robot_status(connected: bool = None, busy: bool = None):
@@ -144,12 +144,9 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         logger.warning("PLC worker not initialized")
         return
 
-    # Read-modify-write byte 2
+    # Read-modify-write the DB125 status bytes
     try:
         cache = get_plc_cache()
-        status_byte = bytearray(1)
-
-        # Preserve existing bits
         if connected is None:
             connected = cache.get('robot_connected', False)
         if busy is None:
@@ -157,20 +154,20 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
 
         byte_writes = {}
         for field_name, value in (
-            ('robot_connected', connected),
-            ('robot_busy', busy),
+            ('connected', connected),
+            ('busy', busy),
         ):
-            tag = plc_worker.main_db_tags[field_name]
+            tag = plc_worker.robot_db_tags[field_name]
             entry = byte_writes.setdefault(tag['byte'], bytearray(1))
             set_bool(entry, 0, tag['bit'], value)
 
-        cycle_tag = plc_worker.main_db_tags.get('robot_cycle_complete')
+        cycle_tag = plc_worker.robot_db_tags.get('cycle_complete')
         if cycle_tag:
             entry = byte_writes.setdefault(cycle_tag['byte'], bytearray(1))
             set_bool(entry, 0, cycle_tag['bit'], cache.get('robot_cycle_complete', False))
 
         for byte_offset, byte_data in byte_writes.items():
-            plc_worker.queue_write(plc_worker.main_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
+            plc_worker.queue_write(plc_worker.robot_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
 
     except Exception as e:
         logger.error(f"Error queueing robot status: {e}")
@@ -190,21 +187,16 @@ def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool
         logger.warning("PLC worker not initialized")
         return
 
-    color_offset = plc_worker.camera_db_tags['yellow_cube']['byte']
-    cache = get_plc_cache()
-    color_byte = bytearray(1)
-    set_bool(color_byte, 0, plc_worker.camera_db_tags['yellow_cube']['bit'], yellow)
-    set_bool(color_byte, 0, plc_worker.camera_db_tags['white_cube']['bit'], white)
-    set_bool(color_byte, 0, plc_worker.camera_db_tags['steel_cube']['bit'], steel)
-    set_bool(color_byte, 0, plc_worker.camera_db_tags['aluminum_cube']['bit'], aluminum)
-    set_bool(
-        color_byte,
-        0,
-        plc_worker.camera_db_tags['counter_exceeded']['bit'],
-        cache.get('counter_exceeded', False)
-    )
+    status_offset = plc_worker.camera_db_tags['yellow_cube_detected']['byte']
+    status_byte = bytearray(1)
+    set_bool(status_byte, 0, plc_worker.camera_db_tags['yellow_cube_detected']['bit'], yellow)
+    set_bool(status_byte, 0, plc_worker.camera_db_tags['white_cube_detected']['bit'], white)
+    plc_worker.queue_write(plc_worker.camera_db_number, status_offset, status_byte, "Cube colors")
 
-    plc_worker.queue_write(plc_worker.camera_db_number, color_offset, color_byte, "Cube colors")
+    metal_offset = plc_worker.camera_db_tags['metal_cube_detected']['byte']
+    metal_byte = bytearray(1)
+    set_bool(metal_byte, 0, plc_worker.camera_db_tags['metal_cube_detected']['bit'], bool(steel or aluminum))
+    plc_worker.queue_write(plc_worker.camera_db_number, metal_offset, metal_byte, "Metal cube bit")
 
 
 def get_plc_stats():
@@ -267,15 +259,11 @@ class PLCClientCompatWrapper:
             'connected': cache.get('camera_connected', False),
             'busy': cache.get('camera_busy', False),
             'completed': cache.get('camera_completed', False),
-            'object_detected': cache.get('object_detected', False),
-            'object_ok': cache.get('object_ok', False),
             'defect_detected': cache.get('defect_detected', False),
-            'object_number': cache.get('object_number', 0),
-            'defect_number': cache.get('defect_number', 0),
-            'yellow_cube_detected': cache.get('yellow_cube', False),
-            'white_cube_detected': cache.get('white_cube', False),
-            'steel_cube_detected': cache.get('steel_cube', False),
-            'alluminium_cube_detected': cache.get('aluminum_cube', False),
+            'reject_command_from_plc': cache.get('reject_command_from_plc', False),
+            'yellow_cube_detected': cache.get('yellow_cube_detected', False),
+            'white_cube_detected': cache.get('white_cube_detected', False),
+            'metal_cube_detected': cache.get('metal_cube_detected', False),
         }
 
     def read_target_pose(self, *args, **kwargs):
@@ -374,26 +362,23 @@ class PLCClientCompatWrapper:
         # Map known addresses to cache keys
         if db == self.worker.camera_db_number:
             camera_status_byte = self.worker.camera_db_tags['start']['byte']
-            camera_color_byte = self.worker.camera_db_tags['yellow_cube']['byte']
+            camera_metal_byte = self.worker.camera_db_tags['metal_cube_detected']['byte']
             if byte_offset == camera_status_byte:
                 bit_map = {
                     self.worker.camera_db_tags['start']['bit']: 'camera_start',
                     self.worker.camera_db_tags['connected']['bit']: 'camera_connected',
                     self.worker.camera_db_tags['busy']['bit']: 'camera_busy',
                     self.worker.camera_db_tags['completed']['bit']: 'camera_completed',
-                    self.worker.camera_db_tags['object_detected']['bit']: 'object_detected',
-                    self.worker.camera_db_tags['object_ok']['bit']: 'object_ok',
-                    self.worker.camera_db_tags['defect_detected']['bit']: 'defect_detected'
+                    self.worker.camera_db_tags['defect_detected']['bit']: 'defect_detected',
+                    self.worker.camera_db_tags['reject_command_from_plc']['bit']: 'reject_command_from_plc',
+                    self.worker.camera_db_tags['yellow_cube_detected']['bit']: 'yellow_cube_detected',
+                    self.worker.camera_db_tags['white_cube_detected']['bit']: 'white_cube_detected',
                 }
                 if bit_offset in bit_map:
                     return cache.get(bit_map[bit_offset], False)
-            elif byte_offset == camera_color_byte:
+            elif byte_offset == camera_metal_byte:
                 bit_map = {
-                    self.worker.camera_db_tags['yellow_cube']['bit']: 'yellow_cube',
-                    self.worker.camera_db_tags['white_cube']['bit']: 'white_cube',
-                    self.worker.camera_db_tags['steel_cube']['bit']: 'steel_cube',
-                    self.worker.camera_db_tags['aluminum_cube']['bit']: 'aluminum_cube',
-                    self.worker.camera_db_tags['counter_exceeded']['bit']: 'counter_exceeded',
+                    self.worker.camera_db_tags['metal_cube_detected']['bit']: 'metal_cube_detected',
                 }
                 if bit_offset in bit_map:
                     return cache.get(bit_map[bit_offset], False)
@@ -401,8 +386,8 @@ class PLCClientCompatWrapper:
             for tag_name, tag in self.worker.main_db_tags.items():
                 if tag.get('kind') == 'bool' and tag['byte'] == byte_offset and tag['bit'] == bit_offset:
                     return cache.get(tag_name, False)
-                if tag.get('kind') == 'row4' and tag['byte'] == byte_offset and 0 <= bit_offset < 4:
-                    row = cache.get(tag_name, [False, False, False, False])
+                if tag.get('kind') == 'row' and tag['byte'] == byte_offset and 0 <= bit_offset < int(tag.get('width', 3)):
+                    row = cache.get(tag_name, [False, False, False])
                     return row[bit_offset] if bit_offset < len(row) else False
 
         return None
@@ -420,14 +405,6 @@ class PLCClientCompatWrapper:
             for tag_name, tag in self.worker.main_db_tags.items():
                 if tag.get('kind') == 'int' and tag['byte'] == offset:
                     return cache.get(tag_name, 0)
-        elif db == self.worker.camera_db_number:
-            int_map = {
-                self.worker.camera_db_tags['object_number']['byte']: 'object_number',
-                self.worker.camera_db_tags['defect_number']['byte']: 'defect_number',
-            }
-            if offset in int_map:
-                return cache.get(int_map[offset], 0)
-
         return None
 
     def write_db_int(self, db: int, offset: int, value: int) -> bool:

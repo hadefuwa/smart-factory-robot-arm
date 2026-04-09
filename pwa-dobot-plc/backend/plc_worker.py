@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
 import snap7
-from snap7.util import get_bool, get_int, get_real, set_bool, set_int, set_real
+from snap7.util import get_bool, get_int, get_real, set_bool, set_real
 
 logger = logging.getLogger(__name__)
 
@@ -30,53 +30,53 @@ MAIN_DB_DEFAULTS = {
     'robot_connected': {'byte': 2, 'bit': 0, 'kind': 'bool'},
     'robot_busy': {'byte': 2, 'bit': 1, 'kind': 'bool'},
     'robot_cycle_complete': {'byte': 2, 'bit': 2, 'kind': 'bool'},
-    'robot_target_x': {'byte': 4, 'kind': 'int'},
-    'robot_target_y': {'byte': 6, 'kind': 'int'},
-    'robot_target_z': {'byte': 8, 'kind': 'int'},
-    'robot_current_x': {'byte': 10, 'kind': 'int'},
-    'robot_current_y': {'byte': 12, 'kind': 'int'},
-    'robot_current_z': {'byte': 14, 'kind': 'int'},
-    'robot_status_code': {'byte': 16, 'kind': 'int'},
-    'robot_error_code': {'byte': 18, 'kind': 'int'},
-    'cube_type': {'byte': 20, 'kind': 'int'},
-    'conveyor1_start': {'byte': 22, 'bit': 0, 'kind': 'bool'},
-    'conveyor1_stop': {'byte': 22, 'bit': 1, 'kind': 'bool'},
-    'conveyor2_start': {'byte': 24, 'bit': 0, 'kind': 'bool'},
-    'conveyor2_stop': {'byte': 24, 'bit': 1, 'kind': 'bool'},
-    'material_type': {'byte': 26, 'kind': 'int'},
-    'quarantined_count': {'byte': 28, 'kind': 'int'},
-    'defect_count': {'byte': 30, 'kind': 'int'},
-    'aluminum_count': {'byte': 32, 'kind': 'int'},
-    'steel_count': {'byte': 34, 'kind': 'int'},
-    'yellow_count': {'byte': 36, 'kind': 'int'},
-    'white_count': {'byte': 38, 'kind': 'int'},
-    'gantry_home': {'byte': 40, 'bit': 0, 'kind': 'bool'},
-    'gantry_busy': {'byte': 40, 'bit': 1, 'kind': 'bool'},
-    'gantry_move_done': {'byte': 40, 'bit': 2, 'kind': 'bool'},
-    'gantry_pick_up': {'byte': 40, 'bit': 3, 'kind': 'bool'},
-    'gantry_place_down': {'byte': 40, 'bit': 4, 'kind': 'bool'},
-    'gantry_home_command': {'byte': 40, 'bit': 5, 'kind': 'bool'},
-    'gantry_power_ok': {'byte': 40, 'bit': 6, 'kind': 'bool'},
-    'gantry_current_position': {'byte': 42, 'kind': 'real'},
-    'gantry_target_position': {'byte': 46, 'kind': 'real'},
-    'gantry_velocity': {'byte': 50, 'kind': 'real'},
-    'gantry_position1': {'byte': 54, 'kind': 'real'},
-    'gantry_position2': {'byte': 58, 'kind': 'real'},
-    'gantry_home_error': {'byte': 62, 'bit': 0, 'kind': 'bool'},
-    'gantry_home_error_fix': {'byte': 62, 'bit': 1, 'kind': 'bool'},
-    'system_safety_ok': {'byte': 64, 'bit': 0, 'kind': 'bool'},
-    'system_no_faults': {'byte': 64, 'bit': 1, 'kind': 'bool'},
-    'system_active_fault': {'byte': 64, 'bit': 2, 'kind': 'bool'},
-    'system_startup_completed': {'byte': 64, 'bit': 3, 'kind': 'bool'},
-    'system_state': {'byte': 66, 'kind': 'int'},
-    'pallet_row1': {'byte': 68, 'kind': 'row4'},
-    'pallet_row2': {'byte': 70, 'kind': 'row4'},
-    'pallet_row3': {'byte': 72, 'kind': 'row4'},
-    'pallet_row4': {'byte': 74, 'kind': 'row4'},
-    'pallet_full': {'byte': 76, 'bit': 0, 'kind': 'bool'},
-    'conveyor1_override': {'byte': 78, 'bit': 0, 'kind': 'bool'},
-    'conveyor2_override': {'byte': 78, 'bit': 1, 'kind': 'bool'},
-    'linear_override': {'byte': 78, 'bit': 2, 'kind': 'bool'},
+    'robot_target_x': {'byte': 46, 'kind': 'int'},
+    'robot_target_y': {'byte': 48, 'kind': 'int'},
+    'robot_target_z': {'byte': 50, 'kind': 'int'},
+    'robot_current_x': {'byte': 52, 'kind': 'int'},
+    'robot_current_y': {'byte': 54, 'kind': 'int'},
+    'robot_current_z': {'byte': 56, 'kind': 'int'},
+    'robot_status_code': {'byte': 42, 'kind': 'int'},
+    'robot_error_code': {'byte': 6, 'kind': 'int'},
+    'cube_type': {'byte': 2, 'kind': 'int'},
+    'conveyor1_start': {'byte': 74, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_stop': {'byte': 74, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_start': {'byte': 74, 'bit': 1, 'kind': 'bool'},
+    'conveyor2_stop': {'byte': 74, 'bit': 1, 'kind': 'bool'},
+    'material_type': {'byte': 2, 'kind': 'int'},
+    'quarantined_count': {'byte': 4, 'kind': 'int'},
+    'defect_count': {'byte': 6, 'kind': 'int'},
+    'aluminum_count': {'byte': 8, 'kind': 'int'},
+    'steel_count': {'byte': 10, 'kind': 'int'},
+    'yellow_count': {'byte': 12, 'kind': 'int'},
+    'white_count': {'byte': 14, 'kind': 'int'},
+    'gantry_home': {'byte': 16, 'bit': 0, 'kind': 'bool'},
+    'gantry_busy': {'byte': 16, 'bit': 1, 'kind': 'bool'},
+    'gantry_move_done': {'byte': 16, 'bit': 2, 'kind': 'bool'},
+    'gantry_pick_up': {'byte': 16, 'bit': 3, 'kind': 'bool'},
+    'gantry_place_down': {'byte': 16, 'bit': 4, 'kind': 'bool'},
+    'gantry_home_command': {'byte': 16, 'bit': 5, 'kind': 'bool'},
+    'gantry_power_ok': {'byte': 16, 'bit': 6, 'kind': 'bool'},
+    'gantry_current_position': {'byte': 18, 'kind': 'real'},
+    'gantry_target_position': {'byte': 22, 'kind': 'real'},
+    'gantry_velocity': {'byte': 26, 'kind': 'real'},
+    'gantry_position1': {'byte': 30, 'kind': 'real'},
+    'gantry_position2': {'byte': 34, 'kind': 'real'},
+    'gantry_home_error': {'byte': 38, 'bit': 0, 'kind': 'bool'},
+    'gantry_home_error_fix': {'byte': 38, 'bit': 1, 'kind': 'bool'},
+    'system_safety_ok': {'byte': 40, 'bit': 0, 'kind': 'bool'},
+    'system_no_faults': {'byte': 40, 'bit': 1, 'kind': 'bool'},
+    'system_active_fault': {'byte': 40, 'bit': 2, 'kind': 'bool'},
+    'system_startup_completed': {'byte': 44, 'bit': 0, 'kind': 'bool'},
+    'system_state': {'byte': 42, 'kind': 'int'},
+    'pallet_row1': {'byte': 64, 'kind': 'row', 'width': 3},
+    'pallet_row2': {'byte': 66, 'kind': 'row', 'width': 3},
+    'pallet_row3': {'byte': 68, 'kind': 'row', 'width': 3},
+    'pallet_row4': {'byte': 70, 'kind': 'row', 'width': 3},
+    'pallet_full': {'byte': 72, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_override': {'byte': 74, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_override': {'byte': 74, 'bit': 1, 'kind': 'bool'},
+    'linear_override': {'byte': 74, 'bit': 2, 'kind': 'bool'},
 }
 
 CAMERA_DB_DEFAULTS = {
@@ -84,16 +84,11 @@ CAMERA_DB_DEFAULTS = {
     'connected': {'byte': 0, 'bit': 1, 'kind': 'bool'},
     'busy': {'byte': 0, 'bit': 2, 'kind': 'bool'},
     'completed': {'byte': 0, 'bit': 3, 'kind': 'bool'},
-    'object_detected': {'byte': 0, 'bit': 4, 'kind': 'bool'},
-    'object_ok': {'byte': 0, 'bit': 5, 'kind': 'bool'},
     'defect_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
-    'object_number': {'byte': 2, 'kind': 'int'},
-    'defect_number': {'byte': 4, 'kind': 'int'},
-    'yellow_cube': {'byte': 6, 'bit': 0, 'kind': 'bool'},
-    'white_cube': {'byte': 6, 'bit': 1, 'kind': 'bool'},
-    'steel_cube': {'byte': 6, 'bit': 2, 'kind': 'bool'},
-    'aluminum_cube': {'byte': 6, 'bit': 3, 'kind': 'bool'},
-    'counter_exceeded': {'byte': 6, 'bit': 4, 'kind': 'bool'},
+    'reject_command_from_plc': {'byte': 0, 'bit': 5, 'kind': 'bool'},
+    'yellow_cube_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
+    'white_cube_detected': {'byte': 0, 'bit': 7, 'kind': 'bool'},
+    'metal_cube_detected': {'byte': 1, 'bit': 0, 'kind': 'bool'},
 }
 
 ROBOT_DB_DEFAULTS = {
@@ -200,10 +195,10 @@ class PLCWorker:
         self.cycle_time_ms = cycle_time_ms
         self.cycle_time_sec = cycle_time_ms / 1000.0
         self.main_db_number = 123
-        self.main_db_total_size = 80
+        self.main_db_total_size = 75
         self.main_db_tags = {}
         self.camera_db_number = 124
-        self.camera_db_total_size = 8
+        self.camera_db_total_size = 2
         self.camera_db_tags = {}
         self.robot_db_number = 125
         self.robot_db_total_size = 20
@@ -250,10 +245,10 @@ class PLCWorker:
         camera_db_config = camera_db_config or {}
         robot_db_config = robot_db_config or {}
         self.main_db_number = int(main_db_config.get('db_number', 123))
-        self.main_db_total_size = max(80, int(main_db_config.get('total_size', 80)))
+        self.main_db_total_size = max(1, int(main_db_config.get('total_size', 75)))
         self.main_db_tags = self._build_tag_config(main_db_config.get('tags', {}), MAIN_DB_DEFAULTS)
         self.camera_db_number = int(camera_db_config.get('db_number', 124))
-        self.camera_db_total_size = max(8, int(camera_db_config.get('total_size', 8)))
+        self.camera_db_total_size = max(1, int(camera_db_config.get('total_size', 2)))
         self.camera_db_tags = self._build_tag_config(camera_db_config.get('tags', {}), CAMERA_DB_DEFAULTS)
         self.robot_db_number = int(robot_db_config.get('db_number', 125))
         self.robot_db_total_size = max(20, int(robot_db_config.get('total_size', 20)))
@@ -319,6 +314,8 @@ class PLCWorker:
             if 'bit' in default:
                 entry['bit'] = int(raw.get('bit', default['bit']))
             entry['kind'] = default.get('kind')
+            if 'width' in default:
+                entry['width'] = int(raw.get('width', default['width']))
             normalized[tag_name] = entry
         return normalized
 
@@ -343,8 +340,9 @@ class PLCWorker:
     def _main_row(self, data: bytearray, tag_name: str) -> List[bool]:
         tag = self.main_db_tags.get(tag_name)
         if not tag:
-            return [False, False, False, False]
-        return [get_bool(data, tag['byte'], i) for i in range(4)]
+            return [False, False, False]
+        width = max(1, int(tag.get('width', 3)))
+        return [get_bool(data, tag['byte'], i) for i in range(width)]
 
     def _camera_bit(self, data: bytearray, tag_name: str, fallback: bool = False) -> bool:
         tag = self.camera_db_tags.get(tag_name)
@@ -408,16 +406,11 @@ class PLCWorker:
             'camera_connected': False,
             'camera_busy': False,
             'camera_completed': False,
-            'object_detected': False,
-            'object_ok': False,
             'defect_detected': False,
-            'object_number': 0,
-            'defect_number': 0,
-            'yellow_cube': False,
-            'white_cube': False,
-            'steel_cube': False,
-            'aluminum_cube': False,
-            'counter_exceeded': False,
+            'reject_command_from_plc': False,
+            'yellow_cube_detected': False,
+            'white_cube_detected': False,
+            'metal_cube_detected': False,
 
             # Robot arm PLC DB125
             'db125_connected': False,
@@ -473,10 +466,10 @@ class PLCWorker:
             'system_state': 0,
 
             # Pallet (byte 76-85)
-            'pallet_row1': [False] * 4,
-            'pallet_row2': [False] * 4,
-            'pallet_row3': [False] * 4,
-            'pallet_row4': [False] * 4,
+            'pallet_row1': [False] * 3,
+            'pallet_row2': [False] * 3,
+            'pallet_row3': [False] * 3,
+            'pallet_row4': [False] * 3,
             'pallet_full': False,
 
             # HMI Overrides (byte 86-87)
@@ -561,8 +554,6 @@ class PLCWorker:
         white: bool = False,
         steel: bool = False,
         aluminum: bool = False,
-        object_number: int = None,
-        defect_number: int = None
     ):
         """
         Helper method for vision callbacks to write results.
@@ -575,23 +566,7 @@ class PLCWorker:
             object_ok: Object passed quality check
             defect_detected: Defect/reject detected
             yellow/white/steel/aluminum: Cube color flags
-            object_number: Total object count (None = auto-increment)
-            defect_number: Total defect count (None = auto-increment)
         """
-        # Auto-increment counters if not specified
-        if object_number is None:
-            object_number = self.get_cache_value('object_number', 0)
-            if object_detected:
-                object_number += 1
-
-        if defect_number is None:
-            defect_number = self.get_cache_value('defect_number', 0)
-            if defect_detected:
-                defect_number += 1
-
-        # This method can be called from vision callback thread
-        # We need to do read-modify-write for byte 26, but we can't access client here
-        # Solution: Store the values and let _queue_vision_status handle the RMW
         self._pending_vision_result = {
             'object_detected': object_detected,
             'object_ok': object_ok,
@@ -600,18 +575,12 @@ class PLCWorker:
             'white': white,
             'steel': steel,
             'aluminum': aluminum,
-            'object_number': object_number,
-            'defect_number': defect_number,
         }
-
-        # Queue the writes (will be processed by worker thread)
-        # Note: The actual byte 26 RMW happens in _finalize_vision_result()
-        # which is called from worker thread
 
     def _finalize_vision_result(self):
         """
         Internal: Finalize pending vision result (called from worker thread only).
-        Does the actual read-modify-write for byte 26.
+        Writes the current 2-byte DB124 status/color layout.
         """
         if not hasattr(self, '_pending_vision_result') or self._pending_vision_result is None:
             return
@@ -625,50 +594,31 @@ class PLCWorker:
             status_byte = bytearray(current_byte)
             set_bool(status_byte, 0, self.camera_db_tags['busy']['bit'], False)
             set_bool(status_byte, 0, self.camera_db_tags['completed']['bit'], True)
-            set_bool(status_byte, 0, self.camera_db_tags['object_detected']['bit'], result['object_detected'])
-            set_bool(status_byte, 0, self.camera_db_tags['object_ok']['bit'], result['object_ok'])
             set_bool(status_byte, 0, self.camera_db_tags['defect_detected']['bit'], result['defect_detected'])
+            set_bool(status_byte, 0, self.camera_db_tags['yellow_cube_detected']['bit'], result['yellow'])
+            set_bool(status_byte, 0, self.camera_db_tags['white_cube_detected']['bit'], result['white'])
             self.queue_write(self.camera_db_number, status_byte_offset, status_byte, "Vision status")
 
-            object_number_tag = self.camera_db_tags['object_number']
-            defect_number_tag = self.camera_db_tags['defect_number']
-            if defect_number_tag['byte'] == object_number_tag['byte'] + 2:
-                counter_data = bytearray(4)
-                set_int(counter_data, 0, result['object_number'])
-                set_int(counter_data, 2, result['defect_number'])
-                self.queue_write(
-                    self.camera_db_number,
-                    object_number_tag['byte'],
-                    counter_data,
-                    f"Counters: {result['object_number']}/{result['defect_number']}"
-                )
-            else:
-                object_data = bytearray(2)
-                defect_data = bytearray(2)
-                set_int(object_data, 0, result['object_number'])
-                set_int(defect_data, 0, result['defect_number'])
-                self.queue_write(self.camera_db_number, object_number_tag['byte'], object_data, f"Object counter: {result['object_number']}")
-                self.queue_write(self.camera_db_number, defect_number_tag['byte'], defect_data, f"Defect counter: {result['defect_number']}")
+            metal_byte_offset = self.camera_db_tags['metal_cube_detected']['byte']
+            try:
+                metal_byte = bytearray(self.client.db_read(self.camera_db_number, metal_byte_offset, 1))
+            except Exception:
+                metal_byte = bytearray(1)
+            set_bool(
+                metal_byte,
+                0,
+                self.camera_db_tags['metal_cube_detected']['bit'],
+                bool(result['steel'] or result['aluminum'])
+            )
+            self.queue_write(self.camera_db_number, metal_byte_offset, metal_byte, "Vision metal status")
 
-            color_tag_names = ['yellow_cube', 'white_cube', 'steel_cube', 'aluminum_cube']
-            color_values = {
-                'yellow_cube': result['yellow'],
-                'white_cube': result['white'],
-                'steel_cube': result['steel'],
-                'aluminum_cube': result['aluminum'],
-            }
-            for color_byte_offset in sorted({self.camera_db_tags[name]['byte'] for name in color_tag_names}):
-                try:
-                    color_byte = bytearray(self.client.db_read(self.camera_db_number, color_byte_offset, 1))
-                except Exception:
-                    color_byte = bytearray(1)
-                for tag_name in color_tag_names:
-                    tag = self.camera_db_tags[tag_name]
-                    if tag['byte'] == color_byte_offset:
-                        set_bool(color_byte, 0, tag['bit'], color_values[tag_name])
-                self.queue_write(self.camera_db_number, color_byte_offset, color_byte, "Cube colors")
-
-            logger.info(f"✅ Vision result finalized: obj={result['object_number']}, def={result['defect_number']}")
+            logger.info(
+                "Vision result finalized: defect=%s yellow=%s white=%s metal=%s",
+                result['defect_detected'],
+                result['yellow'],
+                result['white'],
+                bool(result['steel'] or result['aluminum'])
+            )
 
         except Exception as e:
             logger.error(f"Error finalizing vision result: {e}", exc_info=True)
@@ -854,16 +804,11 @@ class PLCWorker:
             self.cache['camera_connected'] = self._camera_bit(data, 'connected')
             self.cache['camera_busy'] = self._camera_bit(data, 'busy')
             self.cache['camera_completed'] = self._camera_bit(data, 'completed')
-            self.cache['object_detected'] = self._camera_bit(data, 'object_detected')
-            self.cache['object_ok'] = self._camera_bit(data, 'object_ok')
             self.cache['defect_detected'] = self._camera_bit(data, 'defect_detected')
-            self.cache['object_number'] = self._camera_int(data, 'object_number')
-            self.cache['defect_number'] = self._camera_int(data, 'defect_number')
-            self.cache['yellow_cube'] = self._camera_bit(data, 'yellow_cube')
-            self.cache['white_cube'] = self._camera_bit(data, 'white_cube')
-            self.cache['steel_cube'] = self._camera_bit(data, 'steel_cube')
-            self.cache['aluminum_cube'] = self._camera_bit(data, 'aluminum_cube')
-            self.cache['counter_exceeded'] = self._camera_bit(data, 'counter_exceeded')
+            self.cache['reject_command_from_plc'] = self._camera_bit(data, 'reject_command_from_plc')
+            self.cache['yellow_cube_detected'] = self._camera_bit(data, 'yellow_cube_detected')
+            self.cache['white_cube_detected'] = self._camera_bit(data, 'white_cube_detected')
+            self.cache['metal_cube_detected'] = self._camera_bit(data, 'metal_cube_detected')
 
     def _decode_robot_db(self, data: bytearray):
         """Decode the robot PLC DB into cache (called by worker thread only)."""
@@ -887,6 +832,18 @@ class PLCWorker:
             self.cache['db125_target_x'] = self._robot_int(data, 'target_x')
             self.cache['db125_target_y'] = self._robot_int(data, 'target_y')
             self.cache['db125_target_z'] = self._robot_int(data, 'target_z')
+            # Keep legacy robot cache keys populated from DB125 so older endpoints still work.
+            self.cache['robot_connected'] = self.cache['db125_connected']
+            self.cache['robot_busy'] = self.cache['db125_busy']
+            self.cache['robot_cycle_complete'] = self.cache['db125_cycle_complete']
+            self.cache['robot_status_code'] = self.cache['db125_robot_status_code']
+            self.cache['robot_error_code'] = self.cache['db125_error_code']
+            self.cache['robot_current_x'] = self.cache['db125_x_position']
+            self.cache['robot_current_y'] = self.cache['db125_y_position']
+            self.cache['robot_current_z'] = self.cache['db125_z_position']
+            self.cache['robot_target_x'] = self.cache['db125_target_x']
+            self.cache['robot_target_y'] = self.cache['db125_target_y']
+            self.cache['robot_target_z'] = self.cache['db125_target_z']
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""

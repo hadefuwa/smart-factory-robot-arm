@@ -196,6 +196,45 @@
         display: none;
       }
     }
+
+    .sf-title-conn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-left: 0.55rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      line-height: 1;
+      vertical-align: middle;
+    }
+
+    .sf-title-conn-badge.online {
+      background: var(--status-success-bg);
+      color: var(--status-success);
+    }
+
+    .sf-title-conn-badge.offline {
+      background: var(--status-danger-bg);
+      color: var(--status-danger);
+    }
+
+    .sf-title-conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .sf-title-conn-dot.pulse {
+      animation: sf-title-conn-pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes sf-title-conn-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
   </style>
 </head>
 <body class="dashboard-v2 sf-page-edge sf-subpage-v2">
@@ -270,7 +309,12 @@
         <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Edge Telemetry</p>
-            <h1 class="sf-topbar-title">Edge Device Stats</h1>
+            <h1 class="sf-topbar-title">Edge Device Stats
+              <span id="titleConnBadge" class="sf-title-conn-badge offline">
+                <span id="titleConnDot" class="sf-title-conn-dot"></span>
+                <span id="titleConnText">Offline</span>
+              </span>
+            </h1>
           </div>
         </div>
 
@@ -389,6 +433,19 @@
   <script>
     var STATS_URL = "/api/edge-device-stats";
 
+    function setTitleConnectionStatus(isOnline) {
+      var badge = document.getElementById("titleConnBadge");
+      var dot = document.getElementById("titleConnDot");
+      var text = document.getElementById("titleConnText");
+      if (!badge || !dot || !text) return;
+
+      var online = Boolean(isOnline);
+      badge.classList.toggle("online", online);
+      badge.classList.toggle("offline", !online);
+      dot.classList.toggle("pulse", online);
+      text.textContent = online ? "Online" : "Offline";
+    }
+
     function formatSecondsToHMS(seconds) {
       var hours = Math.floor(seconds / 3600);
       var minutes = Math.floor((seconds % 3600) / 60);
@@ -411,6 +468,7 @@
           if (!data || !data.cpu || !data.memory) {
             throw new Error("Stats format is invalid");
           }
+          setTitleConnectionStatus(true);
 
           document.getElementById("cpuLoad1").textContent = data.cpu.load1.toFixed(2) + " load";
           document.getElementById("cpuLoad1Detail").textContent = data.cpu.load1.toFixed(2) + " (load)";
@@ -438,6 +496,7 @@
         .catch(function(error) {
           console.error("Error fetching stats:", error);
           errorMessageElement.textContent = "Error fetching stats: " + error.message;
+          setTitleConnectionStatus(false);
         });
     }
 

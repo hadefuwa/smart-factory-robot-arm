@@ -435,6 +435,45 @@
         white-space: nowrap;
       }
     }
+
+    .sf-title-conn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-left: 0.55rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      line-height: 1;
+      vertical-align: middle;
+    }
+
+    .sf-title-conn-badge.online {
+      background: var(--status-success-bg);
+      color: var(--status-success);
+    }
+
+    .sf-title-conn-badge.offline {
+      background: var(--status-danger-bg);
+      color: var(--status-danger);
+    }
+
+    .sf-title-conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .sf-title-conn-dot.pulse {
+      animation: sf-title-conn-pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes sf-title-conn-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
   </style>
 </head>
 
@@ -510,7 +549,12 @@
         <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Engineering Tools</p>
-            <h1 class="sf-topbar-title">PLC Setup</h1>
+            <h1 class="sf-topbar-title">PLC Setup
+              <span id="titleConnBadge" class="sf-title-conn-badge offline">
+                <span id="titleConnDot" class="sf-title-conn-dot"></span>
+                <span id="titleConnText">Offline</span>
+              </span>
+            </h1>
           </div>
         </div>
 
@@ -776,60 +820,87 @@
     // ========== PLC SETUP LOGIC ==========
     const API_BASE = window.location.origin;
 
+    function setTitleConnectionStatus(isOnline) {
+      const badge = document.getElementById('titleConnBadge');
+      const dot = document.getElementById('titleConnDot');
+      const text = document.getElementById('titleConnText');
+      if (!badge || !dot || !text) return;
+
+      const online = Boolean(isOnline);
+      badge.classList.toggle('online', online);
+      badge.classList.toggle('offline', !online);
+      dot.classList.toggle('pulse', online);
+      text.textContent = online ? 'Online' : 'Offline';
+    }
+
+    async function refreshPlcConnectionBadge() {
+      try {
+        const response = await fetch(`${API_BASE}/api/plc/status`, { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) {
+          setTitleConnectionStatus(false);
+          return;
+        }
+        const data = await response.json();
+        setTitleConnectionStatus(Boolean(data && data.connected));
+      } catch (error) {
+        setTitleConnectionStatus(false);
+      }
+    }
+
     const MAIN_DB_TAG_FIELDS = [
       { key: 'hmi_start', label: 'HMI Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'hmi_stop', label: 'HMI Stop', type: 'bool', defaultByte: 0, defaultBit: 1 },
       { key: 'hmi_reset', label: 'HMI Reset', type: 'bool', defaultByte: 0, defaultBit: 2 },
-      { key: 'robot_connected', label: 'Robot Connected', type: 'bool', defaultByte: 2, defaultBit: 0 },
-      { key: 'robot_busy', label: 'Robot Busy', type: 'bool', defaultByte: 2, defaultBit: 1 },
-      { key: 'robot_cycle_complete', label: 'Robot Cycle Complete', type: 'bool', defaultByte: 2, defaultBit: 2 },
-      { key: 'robot_target_x', label: 'Robot Target X', type: 'int', defaultByte: 4 },
-      { key: 'robot_target_y', label: 'Robot Target Y', type: 'int', defaultByte: 6 },
-      { key: 'robot_target_z', label: 'Robot Target Z', type: 'int', defaultByte: 8 },
-      { key: 'robot_current_x', label: 'Robot Current X', type: 'int', defaultByte: 10 },
-      { key: 'robot_current_y', label: 'Robot Current Y', type: 'int', defaultByte: 12 },
-      { key: 'robot_current_z', label: 'Robot Current Z', type: 'int', defaultByte: 14 },
-      { key: 'robot_status_code', label: 'Robot Status Code', type: 'int', defaultByte: 16 },
-      { key: 'robot_error_code', label: 'Robot Error Code', type: 'int', defaultByte: 18 },
-      { key: 'cube_type', label: 'Cube Type', type: 'int', defaultByte: 20 },
-      { key: 'conveyor1_start', label: 'Conveyor1 Start', type: 'bool', defaultByte: 22, defaultBit: 0 },
-      { key: 'conveyor1_stop', label: 'Conveyor1 Stop', type: 'bool', defaultByte: 22, defaultBit: 1 },
-      { key: 'conveyor2_start', label: 'Conveyor2 Start', type: 'bool', defaultByte: 24, defaultBit: 0 },
-      { key: 'conveyor2_stop', label: 'Conveyor2 Stop', type: 'bool', defaultByte: 24, defaultBit: 1 },
-      { key: 'material_type', label: 'Material Type', type: 'int', defaultByte: 26 },
-      { key: 'quarantined_count', label: 'Quarantined Count', type: 'int', defaultByte: 28 },
-      { key: 'defect_count', label: 'Defect Count', type: 'int', defaultByte: 30 },
-      { key: 'aluminum_count', label: 'Aluminum Count', type: 'int', defaultByte: 32 },
-      { key: 'steel_count', label: 'Steel Count', type: 'int', defaultByte: 34 },
-      { key: 'yellow_count', label: 'Yellow Count', type: 'int', defaultByte: 36 },
-      { key: 'white_count', label: 'White Count', type: 'int', defaultByte: 38 },
-      { key: 'gantry_home', label: 'Gantry Home', type: 'bool', defaultByte: 40, defaultBit: 0 },
-      { key: 'gantry_busy', label: 'Gantry Busy', type: 'bool', defaultByte: 40, defaultBit: 1 },
-      { key: 'gantry_move_done', label: 'Gantry Move Done', type: 'bool', defaultByte: 40, defaultBit: 2 },
-      { key: 'gantry_pick_up', label: 'Gantry Pick Up', type: 'bool', defaultByte: 40, defaultBit: 3 },
-      { key: 'gantry_place_down', label: 'Gantry Place Down', type: 'bool', defaultByte: 40, defaultBit: 4 },
-      { key: 'gantry_home_command', label: 'Gantry Home Command', type: 'bool', defaultByte: 40, defaultBit: 5 },
-      { key: 'gantry_power_ok', label: 'Gantry Power OK', type: 'bool', defaultByte: 40, defaultBit: 6 },
-      { key: 'gantry_current_position', label: 'Gantry Current Position', type: 'real', defaultByte: 42 },
-      { key: 'gantry_target_position', label: 'Gantry Target Position', type: 'real', defaultByte: 46 },
-      { key: 'gantry_velocity', label: 'Gantry Velocity', type: 'real', defaultByte: 50 },
-      { key: 'gantry_position1', label: 'Gantry Position1', type: 'real', defaultByte: 54 },
-      { key: 'gantry_position2', label: 'Gantry Position2', type: 'real', defaultByte: 58 },
-      { key: 'gantry_home_error', label: 'Gantry Home Error', type: 'bool', defaultByte: 62, defaultBit: 0 },
-      { key: 'gantry_home_error_fix', label: 'Gantry Home Error Fix', type: 'bool', defaultByte: 62, defaultBit: 1 },
-      { key: 'system_safety_ok', label: 'System Safety OK', type: 'bool', defaultByte: 64, defaultBit: 0 },
-      { key: 'system_no_faults', label: 'System No Faults', type: 'bool', defaultByte: 64, defaultBit: 1 },
-      { key: 'system_active_fault', label: 'System Active Fault', type: 'bool', defaultByte: 64, defaultBit: 2 },
-      { key: 'system_startup_completed', label: 'System Startup Completed', type: 'bool', defaultByte: 64, defaultBit: 3 },
-      { key: 'system_state', label: 'System State', type: 'int', defaultByte: 66 },
-      { key: 'pallet_row1', label: 'Pallet Row 1 Base', type: 'row4', defaultByte: 68 },
-      { key: 'pallet_row2', label: 'Pallet Row 2 Base', type: 'row4', defaultByte: 70 },
-      { key: 'pallet_row3', label: 'Pallet Row 3 Base', type: 'row4', defaultByte: 72 },
-      { key: 'pallet_row4', label: 'Pallet Row 4 Base', type: 'row4', defaultByte: 74 },
-      { key: 'pallet_full', label: 'Pallet Full', type: 'bool', defaultByte: 76, defaultBit: 0 },
-      { key: 'conveyor1_override', label: 'Conveyor1 Override', type: 'bool', defaultByte: 78, defaultBit: 0 },
-      { key: 'conveyor2_override', label: 'Conveyor2 Override', type: 'bool', defaultByte: 78, defaultBit: 1 },
-      { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 78, defaultBit: 2 }
+      { key: 'robot_connected', label: 'Material Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 0 },
+      { key: 'robot_busy', label: 'Quarantine Count Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 1 },
+      { key: 'robot_cycle_complete', label: 'Defect Count Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 2 },
+      { key: 'robot_target_x', label: 'Pickup Location X', type: 'int', defaultByte: 46 },
+      { key: 'robot_target_y', label: 'Pickup Location Y', type: 'int', defaultByte: 48 },
+      { key: 'robot_target_z', label: 'Pickup Location Z', type: 'int', defaultByte: 50 },
+      { key: 'robot_current_x', label: 'Quarantine Location X', type: 'int', defaultByte: 52 },
+      { key: 'robot_current_y', label: 'Quarantine Location Y', type: 'int', defaultByte: 54 },
+      { key: 'robot_current_z', label: 'Quarantine Location Z', type: 'int', defaultByte: 56 },
+      { key: 'robot_status_code', label: 'System State Alias', type: 'int', defaultByte: 42 },
+      { key: 'robot_error_code', label: 'Defect Count Alias', type: 'int', defaultByte: 6 },
+      { key: 'cube_type', label: 'Cube Material', type: 'int', defaultByte: 2 },
+      { key: 'conveyor1_start', label: 'Conveyor1 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 0 },
+      { key: 'conveyor1_stop', label: 'Conveyor1 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 0 },
+      { key: 'conveyor2_start', label: 'Conveyor2 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 1 },
+      { key: 'conveyor2_stop', label: 'Conveyor2 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 1 },
+      { key: 'material_type', label: 'Material Type', type: 'int', defaultByte: 2 },
+      { key: 'quarantined_count', label: 'Quarantined Count', type: 'int', defaultByte: 4 },
+      { key: 'defect_count', label: 'Defect Count', type: 'int', defaultByte: 6 },
+      { key: 'aluminum_count', label: 'Aluminium Count', type: 'int', defaultByte: 8 },
+      { key: 'steel_count', label: 'Steel Count', type: 'int', defaultByte: 10 },
+      { key: 'yellow_count', label: 'Yellow Count', type: 'int', defaultByte: 12 },
+      { key: 'white_count', label: 'White Count', type: 'int', defaultByte: 14 },
+      { key: 'gantry_home', label: 'Gantry Home', type: 'bool', defaultByte: 16, defaultBit: 0 },
+      { key: 'gantry_busy', label: 'Gantry Busy', type: 'bool', defaultByte: 16, defaultBit: 1 },
+      { key: 'gantry_move_done', label: 'Gantry Move Done', type: 'bool', defaultByte: 16, defaultBit: 2 },
+      { key: 'gantry_pick_up', label: 'Gantry Pick Up', type: 'bool', defaultByte: 16, defaultBit: 3 },
+      { key: 'gantry_place_down', label: 'Gantry Place Down', type: 'bool', defaultByte: 16, defaultBit: 4 },
+      { key: 'gantry_home_command', label: 'Gantry Home Command', type: 'bool', defaultByte: 16, defaultBit: 5 },
+      { key: 'gantry_power_ok', label: 'Gantry Power OK', type: 'bool', defaultByte: 16, defaultBit: 6 },
+      { key: 'gantry_current_position', label: 'Gantry Current Position', type: 'real', defaultByte: 18 },
+      { key: 'gantry_target_position', label: 'Gantry Target Position', type: 'real', defaultByte: 22 },
+      { key: 'gantry_velocity', label: 'Gantry Velocity', type: 'real', defaultByte: 26 },
+      { key: 'gantry_position1', label: 'Gantry Position1', type: 'real', defaultByte: 30 },
+      { key: 'gantry_position2', label: 'Gantry Position2', type: 'real', defaultByte: 34 },
+      { key: 'gantry_home_error', label: 'Gantry Home Error', type: 'bool', defaultByte: 38, defaultBit: 0 },
+      { key: 'gantry_home_error_fix', label: 'Gantry Home Error Fix', type: 'bool', defaultByte: 38, defaultBit: 1 },
+      { key: 'system_safety_ok', label: 'System Safety OK', type: 'bool', defaultByte: 40, defaultBit: 0 },
+      { key: 'system_no_faults', label: 'System No Faults', type: 'bool', defaultByte: 40, defaultBit: 1 },
+      { key: 'system_active_fault', label: 'System Active Fault', type: 'bool', defaultByte: 40, defaultBit: 2 },
+      { key: 'system_startup_completed', label: 'System Startup Completed', type: 'bool', defaultByte: 44, defaultBit: 0 },
+      { key: 'system_state', label: 'System State', type: 'int', defaultByte: 42 },
+      { key: 'pallet_row1', label: 'Pallet Row 1 Base', type: 'row4', defaultByte: 64 },
+      { key: 'pallet_row2', label: 'Pallet Row 2 Base', type: 'row4', defaultByte: 66 },
+      { key: 'pallet_row3', label: 'Pallet Row 3 Base', type: 'row4', defaultByte: 68 },
+      { key: 'pallet_row4', label: 'Pallet Row 4 Base', type: 'row4', defaultByte: 70 },
+      { key: 'pallet_full', label: 'Pallet Full', type: 'bool', defaultByte: 72, defaultBit: 0 },
+      { key: 'conveyor1_override', label: 'Conveyor1 Override', type: 'bool', defaultByte: 74, defaultBit: 0 },
+      { key: 'conveyor2_override', label: 'Conveyor2 Override', type: 'bool', defaultByte: 74, defaultBit: 1 },
+      { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 74, defaultBit: 2 }
     ];
 
     const CAMERA_DB_TAG_FIELDS = [
@@ -970,7 +1041,7 @@
     }
 
     function getDefaultMainDbConfig() {
-      return getDefaultDbConfig(MAIN_DB_TAG_FIELDS, 123, 80);
+      return getDefaultDbConfig(MAIN_DB_TAG_FIELDS, 123, 75);
     }
 
     function getDefaultCameraDbConfig() {
@@ -1176,6 +1247,7 @@
         setStatusMessage('cameraDbSaveMessage', 'Offline defaults loaded', 'error');
         setStatusMessage('robotDbSaveMessage', 'Offline defaults loaded', 'error');
       }
+      await refreshPlcConnectionBadge();
     }
 
     async function savePlcSetup() {
@@ -1215,6 +1287,8 @@
         setStatusMessage('plcSetupSaveMessage', `Error: ${error.message}`, 'error');
         setGlobalStatus(`PLC connection settings could not be saved: ${error.message}`, 'error');
       }
+
+      await refreshPlcConnectionBadge();
 
       btn.disabled = false;
     }
@@ -1325,6 +1399,7 @@
       });
 
       loadDbConfigs();
+      setInterval(refreshPlcConnectionBadge, 4000);
     });
   </script>
 </body>

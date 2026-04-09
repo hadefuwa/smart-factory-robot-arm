@@ -198,6 +198,8 @@ robot_arm_bridge_state = {
     'last_error': None,
     'last_status': None
 }
+ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
+ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
 latest_annotated_mime = 'image/jpeg'
@@ -235,7 +237,12 @@ def get_legacy_plc_cache() -> Dict[str, Any]:
             'x_pos': 0.0,
             'y_pos': 0.0,
             'z_pos': 0.0,
-            'counter': cache.get('object_number', 0),
+            'counter': (
+                int(cache.get('yellow_count', 0))
+                + int(cache.get('white_count', 0))
+                + int(cache.get('steel_count', 0))
+                + int(cache.get('aluminum_count', 0))
+            ),
             'robot_connected': cache.get('robot_connected', False),
             'robot_busy': cache.get('robot_busy', False),
             'robot_cycle_complete': cache.get('robot_cycle_complete', False),
@@ -1279,6 +1286,16 @@ def open_robot_arm_bridge(host: str, port: int):
     return ws
 
 
+def ensure_robot_arm_bridge_connected():
+    """Reconnect to the configured/default Pi bridge if the current socket is down."""
+    if robot_arm_bridge_state.get('connected') and robot_arm_bridge_state.get('ws'):
+        return
+
+    host = robot_arm_bridge_state.get('host') or ROBOT_ARM_BRIDGE_DEFAULT_HOST
+    port = int(robot_arm_bridge_state.get('port') or ROBOT_ARM_BRIDGE_DEFAULT_PORT)
+    open_robot_arm_bridge(host, port)
+
+
 def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Send one command to Pi service and return one JSON response."""
     ws = robot_arm_bridge_state.get('ws')
@@ -1307,8 +1324,8 @@ def robot_arm_connect():
     Body (optional): { "host": "robot-arm.local", "port": 8090 }
     """
     data = request.get_json(silent=True) or {}
-    host = data.get('host', 'robot-arm.local')
-    port = int(data.get('port', 8090))
+    host = data.get('host', ROBOT_ARM_BRIDGE_DEFAULT_HOST)
+    port = int(data.get('port', ROBOT_ARM_BRIDGE_DEFAULT_PORT))
 
     with robot_arm_bridge_lock:
         try:
@@ -1382,13 +1399,17 @@ def robot_arm_status():
     """Get latest robot arm status from Pi service."""
     with robot_arm_bridge_lock:
         if not robot_arm_bridge_state.get('connected'):
-            return jsonify({
-                'success': False,
-                'connected': False,
-                'host': robot_arm_bridge_state.get('host'),
-                'port': robot_arm_bridge_state.get('port'),
-                'error': robot_arm_bridge_state.get('last_error') or 'Robot arm bridge not connected'
-            }), 503
+            try:
+                ensure_robot_arm_bridge_connected()
+            except Exception as e:
+                robot_arm_bridge_state['last_error'] = str(e)
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'host': robot_arm_bridge_state.get('host') or ROBOT_ARM_BRIDGE_DEFAULT_HOST,
+                    'port': robot_arm_bridge_state.get('port') or ROBOT_ARM_BRIDGE_DEFAULT_PORT,
+                    'error': robot_arm_bridge_state.get('last_error') or 'Robot arm bridge not connected'
+                }), 503
 
         try:
             response = send_robot_arm_command({'command': 'getStatus'})
@@ -2067,9 +2088,7 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
             yellow=yellow,
             white=white,
             steel=steel,
-            aluminum=aluminum,
-            object_number=None,  # Auto-increment
-            defect_number=None   # Auto-increment
+            aluminum=aluminum
         )
 
         logger.info(f"✅ Vision cycle (NEW): Completed - {detected_color or 'none'} ({confidence}%)")
@@ -3194,15 +3213,11 @@ def read_camera_db_tags():
         'connected': False,
         'busy': False,
         'completed': False,
-        'object_detected': False,
-        'object_ok': False,
         'defect_detected': False,
+        'reject_command_from_plc': False,
         'yellow_cube_detected': False,
         'white_cube_detected': False,
-        'steel_cube_detected': False,
-        'alluminium_cube_detected': False,
-        'object_number': 0,
-        'defect_number': 0
+        'metal_cube_detected': False
     }
 
     if plc_client is None:

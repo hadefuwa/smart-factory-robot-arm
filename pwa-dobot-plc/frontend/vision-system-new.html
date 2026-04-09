@@ -336,6 +336,45 @@
     border-color: color-mix(in srgb, var(--sf-danger-ui) 40%, var(--sf-base-300));
   }
 
+  .sf-title-conn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.55rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: middle;
+  }
+
+  .sf-title-conn-badge.online {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+  }
+
+  .sf-title-conn-badge.offline {
+    background: var(--status-danger-bg);
+    color: var(--status-danger);
+  }
+
+  .sf-title-conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .sf-title-conn-dot.pulse {
+    animation: sf-title-conn-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sf-title-conn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
   /* Keep the vision hero styled as a hero on this page.
      Global dashboard overrides flatten .sf-page-hero into a plain card. */
   body.sf-page-vision .sf-page-hero.sf-page-hero--vision {
@@ -444,7 +483,12 @@
         <div class="sf-template-pagehead">
           <div class="sf-topbar-title-wrap">
             <p class="sf-eyebrow">Vision Control</p>
-            <h1 class="sf-topbar-title">Vision System</h1>
+            <h1 class="sf-topbar-title">Vision System
+              <span id="titleConnBadge" class="sf-title-conn-badge offline">
+                <span id="titleConnDot" class="sf-title-conn-dot"></span>
+                <span id="titleConnText">Offline</span>
+              </span>
+            </h1>
           </div>
         </div>
 
@@ -629,12 +673,13 @@
                       More Info: PLC Cube Color Bits
                     </summary>
                     <div class="sf-vision-help-copy">
-                      <div>When a cube is detected, the system clears DB124.DBX6.0 to DB124.DBX6.3, then sets one bit for the detected cube:</div>
-                      <div class="sf-vision-help-gap"><code>yellow_cube_detected</code> -> DB124.DBX6.0</div>
-                      <div><code>white_cube_detected</code> -> DB124.DBX6.1</div>
-                      <div><code>steel_cube_detected</code> -> DB124.DBX6.2</div>
-                      <div><code>alluminium_cube_detected</code> -> DB124.DBX6.3</div>
-                      <div class="sf-vision-help-gap">When the PLC Completed Command is received, DB124.DBX6.0 to DB124.DBX6.3 are cleared again, ready for the next cube.</div>
+                      <div>DB124 is a 2-byte PLC result block. The live result bits are:</div>
+                      <div class="sf-vision-help-gap"><code>defect_detected</code> -> DB124.DBX0.4</div>
+                      <div><code>reject_command_from_plc</code> -> DB124.DBX0.5</div>
+                      <div><code>yellow_cube_detected</code> -> DB124.DBX0.6</div>
+                      <div><code>white_cube_detected</code> -> DB124.DBX0.7</div>
+                      <div><code>metal_cube_detected</code> -> DB124.DBX1.0</div>
+                      <div class="sf-vision-help-gap">No object counters or extra color bytes are stored in the current DB124 layout.</div>
                     </div>
                   </details>
 
@@ -931,6 +976,19 @@
       resultsDiv.classList.remove('sf-vision-hidden');
     }
 
+    function setTitleConnectionStatus(isOnline) {
+      const badge = document.getElementById('titleConnBadge');
+      const dot = document.getElementById('titleConnDot');
+      const text = document.getElementById('titleConnText');
+      if (!badge || !dot || !text) return;
+
+      const online = Boolean(isOnline);
+      badge.classList.toggle('online', online);
+      badge.classList.toggle('offline', !online);
+      dot.classList.toggle('pulse', online);
+      text.textContent = online ? 'Online' : 'Offline';
+    }
+
     async function updateLiveStatus() {
       const refreshEl = document.getElementById('statusLastRefresh');
 
@@ -983,16 +1041,22 @@
           connected ? `Index ${cam.camera_index} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable',
           connected ? (canRead ? 'good' : 'warn') : 'bad'
         );
+        setTitleConnectionStatus(connected);
       } else {
         setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status', 'bad');
+        setTitleConnectionStatus(false);
       }
 
       if (cameraDbResult.status === 'fulfilled' && cameraDbResult.value.success) {
         const tags = cameraDbResult.value.tags || {};
         const busy = Boolean(tags.busy);
         const completed = Boolean(tags.completed);
-        const objectDetected = Boolean(tags.object_detected);
-        const objectNumber = Number(tags.object_number || 0);
+        const defectDetected = Boolean(tags.defect_detected);
+        const yellowDetected = Boolean(tags.yellow_cube_detected);
+        const whiteDetected = Boolean(tags.white_cube_detected);
+        const metalDetected = Boolean(tags.metal_cube_detected);
+        const rejectCommand = Boolean(tags.reject_command_from_plc);
+        const detectionLatched = defectDetected || yellowDetected || whiteDetected || metalDetected;
         const startBit = Boolean(tags.start);
 
         let visionLabel = 'IDLE';
@@ -1004,9 +1068,9 @@
           tone = 'good';
           color = '#4caf50';
         } else if (completed) {
-          visionLabel = objectDetected ? 'DONE (OBJECT)' : 'DONE (NO OBJECT)';
-          tone = objectDetected ? 'good' : 'bad';
-          color = objectDetected ? '#4caf50' : '#f44336';
+          visionLabel = detectionLatched ? 'DONE (RESULT LATCHED)' : 'DONE (NO RESULT)';
+          tone = detectionLatched ? 'good' : 'bad';
+          color = detectionLatched ? '#4caf50' : '#f44336';
         }
 
         const setBitStatus = (cardId, valueId, metaId, on, activeLabel) => {
@@ -1021,10 +1085,10 @@
           );
         };
 
-        setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', Boolean(tags.yellow_cube_detected), 'Yellow cube detected');
-        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', Boolean(tags.white_cube_detected), 'White cube detected');
-        setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', Boolean(tags.steel_cube_detected), 'Steel cube detected');
-        setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', Boolean(tags.alluminium_cube_detected), 'Alluminium cube detected');
+        setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', yellowDetected, 'Yellow cube detected');
+        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', whiteDetected, 'White cube detected');
+        setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', metalDetected, 'Metal cube detected');
+        setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', defectDetected, rejectCommand ? 'Reject command is active from PLC' : 'Defect detected');
 
         const annotatedImg = document.getElementById('annotatedImage');
         if (completed && (!annotatedImg || annotatedImg.style.display === 'none')) {

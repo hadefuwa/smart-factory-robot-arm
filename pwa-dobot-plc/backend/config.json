@@ -41,7 +41,7 @@
     "db123": {
       "enabled": true,
       "db_number": 123,
-      "total_size": 80,
+      "total_size": 75,
       "comment": "Main process DB: HMI, robot, conveyors, objects, gantry, system, pallet, overrides",
       "tags": {
         "hmi_start": { "byte": 0, "bit": 0 },
@@ -50,53 +50,53 @@
         "robot_connected": { "byte": 2, "bit": 0 },
         "robot_busy": { "byte": 2, "bit": 1 },
         "robot_cycle_complete": { "byte": 2, "bit": 2 },
-        "robot_target_x": { "byte": 4 },
-        "robot_target_y": { "byte": 6 },
-        "robot_target_z": { "byte": 8 },
-        "robot_current_x": { "byte": 10 },
-        "robot_current_y": { "byte": 12 },
-        "robot_current_z": { "byte": 14 },
-        "robot_status_code": { "byte": 16 },
-        "robot_error_code": { "byte": 18 },
-        "cube_type": { "byte": 20 },
-        "conveyor1_start": { "byte": 22, "bit": 0 },
-        "conveyor1_stop": { "byte": 22, "bit": 1 },
-        "conveyor2_start": { "byte": 24, "bit": 0 },
-        "conveyor2_stop": { "byte": 24, "bit": 1 },
-        "material_type": { "byte": 26 },
-        "quarantined_count": { "byte": 28 },
-        "defect_count": { "byte": 30 },
-        "aluminum_count": { "byte": 32 },
-        "steel_count": { "byte": 34 },
-        "yellow_count": { "byte": 36 },
-        "white_count": { "byte": 38 },
-        "gantry_home": { "byte": 40, "bit": 0 },
-        "gantry_busy": { "byte": 40, "bit": 1 },
-        "gantry_move_done": { "byte": 40, "bit": 2 },
-        "gantry_pick_up": { "byte": 40, "bit": 3 },
-        "gantry_place_down": { "byte": 40, "bit": 4 },
-        "gantry_home_command": { "byte": 40, "bit": 5 },
-        "gantry_power_ok": { "byte": 40, "bit": 6 },
-        "gantry_current_position": { "byte": 42 },
-        "gantry_target_position": { "byte": 46 },
-        "gantry_velocity": { "byte": 50 },
-        "gantry_position1": { "byte": 54 },
-        "gantry_position2": { "byte": 58 },
-        "gantry_home_error": { "byte": 62, "bit": 0 },
-        "gantry_home_error_fix": { "byte": 62, "bit": 1 },
-        "system_safety_ok": { "byte": 64, "bit": 0 },
-        "system_no_faults": { "byte": 64, "bit": 1 },
-        "system_active_fault": { "byte": 64, "bit": 2 },
-        "system_startup_completed": { "byte": 64, "bit": 3 },
-        "system_state": { "byte": 66 },
-        "pallet_row1": { "byte": 68 },
-        "pallet_row2": { "byte": 70 },
-        "pallet_row3": { "byte": 72 },
-        "pallet_row4": { "byte": 74 },
-        "pallet_full": { "byte": 76, "bit": 0 },
-        "conveyor1_override": { "byte": 78, "bit": 0 },
-        "conveyor2_override": { "byte": 78, "bit": 1 },
-        "linear_override": { "byte": 78, "bit": 2 }
+        "robot_target_x": { "byte": 46 },
+        "robot_target_y": { "byte": 48 },
+        "robot_target_z": { "byte": 50 },
+        "robot_current_x": { "byte": 52 },
+        "robot_current_y": { "byte": 54 },
+        "robot_current_z": { "byte": 56 },
+        "robot_status_code": { "byte": 42 },
+        "robot_error_code": { "byte": 6 },
+        "cube_type": { "byte": 2 },
+        "conveyor1_start": { "byte": 74, "bit": 0 },
+        "conveyor1_stop": { "byte": 74, "bit": 0 },
+        "conveyor2_start": { "byte": 74, "bit": 1 },
+        "conveyor2_stop": { "byte": 74, "bit": 1 },
+        "material_type": { "byte": 2 },
+        "quarantined_count": { "byte": 4 },
+        "defect_count": { "byte": 6 },
+        "aluminum_count": { "byte": 8 },
+        "steel_count": { "byte": 10 },
+        "yellow_count": { "byte": 12 },
+        "white_count": { "byte": 14 },
+        "gantry_home": { "byte": 16, "bit": 0 },
+        "gantry_busy": { "byte": 16, "bit": 1 },
+        "gantry_move_done": { "byte": 16, "bit": 2 },
+        "gantry_pick_up": { "byte": 16, "bit": 3 },
+        "gantry_place_down": { "byte": 16, "bit": 4 },
+        "gantry_home_command": { "byte": 16, "bit": 5 },
+        "gantry_power_ok": { "byte": 16, "bit": 6 },
+        "gantry_current_position": { "byte": 18 },
+        "gantry_target_position": { "byte": 22 },
+        "gantry_velocity": { "byte": 26 },
+        "gantry_position1": { "byte": 30 },
+        "gantry_position2": { "byte": 34 },
+        "gantry_home_error": { "byte": 38, "bit": 0 },
+        "gantry_home_error_fix": { "byte": 38, "bit": 1 },
+        "system_safety_ok": { "byte": 40, "bit": 0 },
+        "system_no_faults": { "byte": 40, "bit": 1 },
+        "system_active_fault": { "byte": 40, "bit": 2 },
+        "system_startup_completed": { "byte": 44, "bit": 0 },
+        "system_state": { "byte": 42 },
+        "pallet_row1": { "byte": 64 },
+        "pallet_row2": { "byte": 66 },
+        "pallet_row3": { "byte": 68 },
+        "pallet_row4": { "byte": 70 },
+        "pallet_full": { "byte": 72, "bit": 0 },
+        "conveyor1_override": { "byte": 74, "bit": 0 },
+        "conveyor2_override": { "byte": 74, "bit": 1 },
+        "linear_override": { "byte": 74, "bit": 2 }
       }
     },
     "db124": {
@@ -105,43 +105,15 @@
       "total_size": 2,
       "comment": "Camera DB: start/handshake bits and cube detection bits",
       "tags": {
-        "start": {
-          "byte": 0,
-          "bit": 0,
-          "comment": "READ-ONLY (PLC-controlled)"
-        },
-        "connected": {
-          "byte": 0,
-          "bit": 1
-        },
-        "busy": {
-          "byte": 0,
-          "bit": 2
-        },
-        "completed": {
-          "byte": 0,
-          "bit": 3
-        },
-        "defect_detected": {
-          "byte": 0,
-          "bit": 4
-        },
-        "reject_command_from_plc": {
-          "byte": 0,
-          "bit": 5
-        },
-        "yellow_cube_detected": {
-          "byte": 0,
-          "bit": 6
-        },
-        "white_cube_detected": {
-          "byte": 0,
-          "bit": 7
-        },
-        "metal_cube_detected": {
-          "byte": 1,
-          "bit": 0
-        }
+        "start": { "byte": 0, "bit": 0, "comment": "READ-ONLY (PLC-controlled)" },
+        "connected": { "byte": 0, "bit": 1 },
+        "busy": { "byte": 0, "bit": 2 },
+        "completed": { "byte": 0, "bit": 3 },
+        "defect_detected": { "byte": 0, "bit": 4 },
+        "reject_command_from_plc": { "byte": 0, "bit": 5 },
+        "yellow_cube_detected": { "byte": 0, "bit": 6 },
+        "white_cube_detected": { "byte": 0, "bit": 7 },
+        "metal_cube_detected": { "byte": 1, "bit": 0 }
       }
     },
     "db125": {
