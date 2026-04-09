@@ -114,7 +114,7 @@
     "db125": {
       "enabled": true,
       "db_number": 125,
-      "total_size": 20,
+      "total_size": 22,
       "comment": "Robot arm DB: connection, status, current position, and incoming commands",
       "tags": {
         "connected": {
@@ -176,14 +176,17 @@
           "byte": 12,
           "bit": 1
         },
-        "target_x": {
+        "speed": {
           "byte": 14
         },
-        "target_y": {
+        "target_x": {
           "byte": 16
         },
-        "target_z": {
+        "target_y": {
           "byte": 18
+        },
+        "target_z": {
+          "byte": 20
         }
       }
     }

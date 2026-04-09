@@ -18,7 +18,8 @@ Z_Position	Int	10
 Commands	Struct	12
 Home	Bool	12
 Pickup	Bool	12.1
-Position	Struct	14
-X_Position	Int	14
-Y_Position	Int	16
-Z_Position	Int	18
+Speed   Int	14
+Position	Struct	16
+X_Position	Int	16
+Y_Position	Int	18
+Z_Position	Int	20

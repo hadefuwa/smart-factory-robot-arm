@@ -5,7 +5,18 @@
 
   var state = {
     pollTimer: null,
-    lastJoints: []
+    lastJoints: [],
+    bridgeConnected: false
+  };
+
+  // PLC auto-move: continuously sends PLC target XYZ to the arm every intervalMs
+  var plcAuto = {
+    intervalMs: 100,
+    timer: null,
+    manualOverride: false,
+    overrideSecsLeft: 0,
+    overrideCountdownTimer: null,
+    latestPlcData: null     // cache updated by every status poll
   };
 
   // Groups: 'Robot State' = robot→PLC status flags, 'Position' = live XYZ readback,
@@ -27,6 +38,7 @@
     { key: 'z_position',            label: 'Z Position',     type: 'int',  unit: 'mm', group: 'Position' },
     { key: 'home_command',          label: 'Home Cmd',       type: 'bool', group: 'PLC Commands' },
     { key: 'pickup_command',        label: 'Pickup Cmd',     type: 'bool', group: 'PLC Commands' },
+    { key: 'speed',                 label: 'Speed',          type: 'int',  group: 'PLC Commands' },
     { key: 'target_x',              label: 'Target X',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
     { key: 'target_y',              label: 'Target Y',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
     { key: 'target_z',              label: 'Target Z',       type: 'int',  unit: 'mm', group: 'PLC Commands' }
@@ -309,6 +321,103 @@
     setVal('curZ', xyz ? xyz.z : null);
   }
 
+  // ── PLC auto-move ─────────────────────────────────────────────────────────
+
+  function renderPlcTargetXYZ(tags, plcConnected) {
+    function setTargetVal(id, v, unit) {
+      var e = el(id);
+      if (!e) return;
+      if (!plcConnected || v === null || v === undefined) { e.innerHTML = '—<span>' + unit + '</span>'; return; }
+      e.innerHTML = v + '<span>' + unit + '</span>';
+    }
+    setTargetVal('plcTargetX',     tags ? tags.target_x : null, 'mm');
+    setTargetVal('plcTargetY',     tags ? tags.target_y : null, 'mm');
+    setTargetVal('plcTargetZ',     tags ? tags.target_z : null, 'mm');
+    setTargetVal('plcTargetSpeed', tags ? tags.speed    : null, 'steps/s');
+  }
+
+  function updatePlcAutoBadge() {
+    var badge = el('plcAutoBadge');
+    if (!badge) return;
+    var plcData = plcAuto.latestPlcData;
+    var plcConn = !!(plcData && plcData.plc_connected);
+    if (!plcConn) {
+      badge.textContent = 'PLC Offline';
+      badge.className = 'plc-auto-badge offline';
+    } else if (plcAuto.manualOverride) {
+      badge.textContent = 'Paused — Manual Override';
+      badge.className = 'plc-auto-badge paused';
+    } else if (!state.bridgeConnected) {
+      badge.textContent = 'Bridge Offline';
+      badge.className = 'plc-auto-badge offline';
+    } else {
+      badge.textContent = 'Active — ' + plcAuto.intervalMs + 'ms';
+      badge.className = 'plc-auto-badge active';
+    }
+  }
+
+  async function plcAutoTick() {
+    if (plcAuto.manualOverride) return;
+    var plcData = plcAuto.latestPlcData;
+    if (!plcData || !plcData.plc_connected) return;
+    if (!state.bridgeConnected) return;
+    var tags = plcData.tags || {};
+    var x = tags.target_x, y = tags.target_y, z = tags.target_z;
+    var speed = tags.speed || 1500;
+    if (x === undefined || y === undefined || z === undefined) return;
+    try {
+      await apiRequest('/api/robot-arm/move-xyz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: x, y: y, z: z, speed: speed })
+      });
+    } catch (_) {}
+  }
+
+  function startPlcAutoMove() {
+    if (plcAuto.timer) window.clearInterval(plcAuto.timer);
+    plcAuto.timer = window.setInterval(plcAutoTick, plcAuto.intervalMs);
+  }
+
+  function stopPlcAutoMove() {
+    if (plcAuto.timer) { window.clearInterval(plcAuto.timer); plcAuto.timer = null; }
+  }
+
+  function tickOverrideCountdown() {
+    plcAuto.overrideSecsLeft -= 1;
+    var cdEl = el('overrideCountdown');
+    if (plcAuto.overrideSecsLeft <= 0) {
+      disableManualOverride();
+    } else {
+      var m = Math.floor(plcAuto.overrideSecsLeft / 60);
+      var s = plcAuto.overrideSecsLeft % 60;
+      if (cdEl) cdEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    }
+  }
+
+  function enableManualOverride() {
+    plcAuto.manualOverride = true;
+    plcAuto.overrideSecsLeft = 600; // 10 min
+    if (plcAuto.overrideCountdownTimer) window.clearInterval(plcAuto.overrideCountdownTimer);
+    plcAuto.overrideCountdownTimer = window.setInterval(tickOverrideCountdown, 1000);
+    var cdEl = el('overrideCountdown');
+    if (cdEl) { cdEl.textContent = '10:00'; cdEl.style.display = ''; }
+    updatePlcAutoBadge();
+    showMsg('Manual override ON — PLC auto-move paused for 10 min');
+  }
+
+  function disableManualOverride() {
+    plcAuto.manualOverride = false;
+    plcAuto.overrideSecsLeft = 0;
+    if (plcAuto.overrideCountdownTimer) { window.clearInterval(plcAuto.overrideCountdownTimer); plcAuto.overrideCountdownTimer = null; }
+    var cdEl = el('overrideCountdown');
+    if (cdEl) cdEl.style.display = 'none';
+    var tog = el('manualOverrideToggle');
+    if (tog) tog.checked = false;
+    updatePlcAutoBadge();
+    showMsg('Manual override OFF — PLC auto-move resumed');
+  }
+
   async function stopAll() {
     try {
       await apiRequest('/api/robot-arm/stop', { method: 'POST' });
@@ -420,20 +529,31 @@
       if (tEl) tEl.textContent = 'Last: ' + new Date().toLocaleTimeString();
       renderPlcDb125(plcDb125);
 
+      // Cache latest PLC data for the auto-move tick
+      plcAuto.latestPlcData = plcDb125;
+      var plcConnected = !!(plcDb125 && plcDb125.plc_connected);
+      renderPlcTargetXYZ(plcDb125 ? plcDb125.tags : null, plcConnected);
+
       if (data.connected) {
+        state.bridgeConnected = true;
         setConnected(true, 'Online');
         var joints = (data.status && data.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
         renderCurrentXYZ((data.status && data.status.currentXYZ) || null);
       } else {
+        state.bridgeConnected = false;
         setConnected(false, 'Offline');
         renderCurrentXYZ(null);
       }
+      updatePlcAutoBadge();
     } catch (e) {
+      state.bridgeConnected = false;
       setConnected(false, 'Error');
       var box2 = el('statusBox');
       if (box2) box2.textContent = 'Poll error: ' + e.message;
       renderPlcDb125(null);
+      renderPlcTargetXYZ(null, false);
+      updatePlcAutoBadge();
     }
   }
 
@@ -577,14 +697,44 @@
     if ((b = el('dbgPingBtn')))      b.addEventListener('click', function () { withBtn(b, dbgRawPing); });
     if ((b = el('dbgRegBtn')))       b.addEventListener('click', function () { withBtn(b, dbgReadRegister); });
     if ((b = el('dbgClearBtn')))     b.addEventListener('click', dbgClearAll);
+
+    // PLC auto-move — interval input (apply on change, no button needed)
+    var intervalInput = el('plcMoveInterval');
+    if (intervalInput) {
+      intervalInput.addEventListener('change', function () {
+        var v = Math.max(50, Math.min(5000, Number(intervalInput.value) || 100));
+        intervalInput.value = v;
+        plcAuto.intervalMs = v;
+        startPlcAutoMove();           // restart timer with new interval
+        updatePlcAutoBadge();
+        showMsg('PLC auto-move interval set to ' + v + 'ms');
+      });
+    }
+
+    // Manual override toggle
+    var tog = el('manualOverrideToggle');
+    if (tog) {
+      tog.addEventListener('change', function () {
+        if (tog.checked) {
+          enableManualOverride();
+        } else {
+          disableManualOverride();
+        }
+      });
+    }
   }
 
   function init() {
     initTabs();
     bindEvents();
     startPolling();
+    startPlcAutoMove();
   }
 
-  window.addEventListener('beforeunload', stopPolling);
+  window.addEventListener('beforeunload', function () {
+    stopPolling();
+    stopPlcAutoMove();
+    if (plcAuto.overrideCountdownTimer) window.clearInterval(plcAuto.overrideCountdownTimer);
+  });
   document.addEventListener('DOMContentLoaded', init);
 })();

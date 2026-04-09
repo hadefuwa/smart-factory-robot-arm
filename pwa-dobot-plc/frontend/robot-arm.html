@@ -75,6 +75,30 @@
     .settings-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; }
     .settings-card h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
 
+    /* ── PLC auto-move ── */
+    .plc-auto-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .plc-auto-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.18rem 0.55rem; border-radius: 1rem; font-size: 0.7rem; font-weight: 700; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); margin-left: 0.45rem; vertical-align: middle; }
+    .plc-auto-badge.active { background: var(--status-success-bg); color: var(--status-success); border-color: var(--status-success); }
+    .plc-auto-badge.paused { background: rgba(255,165,0,.12); color: var(--status-warning); border-color: var(--status-warning); }
+    .plc-auto-badge.offline { background: var(--status-danger-bg); color: var(--status-danger); border-color: var(--status-danger); }
+    .plc-auto-controls { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; }
+    .plc-target-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; }
+    @media (max-width: 680px) { .plc-target-grid { grid-template-columns: repeat(2, 1fr); } }
+    .plc-target-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem 0.85rem; }
+    .plc-target-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.3rem; }
+    .plc-target-val { font-size: 1.3rem; font-weight: 700; color: var(--text-white); font-family: var(--font-mono); letter-spacing: -0.5px; }
+    .plc-target-val span { font-size: 0.7rem; color: var(--text-secondary); font-weight: 400; margin-left: 2px; }
+
+    /* ── Manual override toggle switch ── */
+    .override-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+    .override-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .override-track { width: 44px; height: 24px; background: var(--border); border-radius: 12px; transition: background 0.2s; position: relative; display: inline-block; }
+    .override-thumb { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+    .override-toggle input:checked ~ .override-track { background: var(--status-warning); }
+    .override-toggle input:checked ~ .override-track .override-thumb { transform: translateX(20px); }
+    .override-label { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+    .override-countdown { font-size: 0.78rem; font-weight: 700; color: var(--status-warning); font-family: var(--font-mono); min-width: 3.2rem; }
+
     /* ── XYZ control ── */
     .xyz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem; }
     @media (max-width: 680px) { .xyz-grid { grid-template-columns: 1fr; } }
@@ -211,9 +235,49 @@
             </div>
           </div>
 
+          <!-- PLC auto-move -->
+          <div class="ra-section">
+            <div class="plc-auto-head">
+              <div>
+                <span class="ra-section-title" style="margin:0;display:inline">PLC Auto-Move</span>
+                <span class="plc-auto-badge" id="plcAutoBadge">Offline</span>
+              </div>
+              <div class="plc-auto-controls">
+                <div class="ra-field" style="flex-direction:row;align-items:center;gap:0.4rem;margin:0">
+                  <label class="ra-label" style="margin:0;white-space:nowrap">Interval (ms)</label>
+                  <input class="ra-input" id="plcMoveInterval" type="number" min="50" max="5000" value="100" style="width:72px">
+                </div>
+                <label class="override-toggle" title="Activate manual override — ignores PLC commands for 10 min">
+                  <input type="checkbox" id="manualOverrideToggle">
+                  <span class="override-track"><span class="override-thumb"></span></span>
+                </label>
+                <span class="override-label">Manual Override</span>
+                <span class="override-countdown" id="overrideCountdown" style="display:none"></span>
+              </div>
+            </div>
+            <div class="plc-target-grid">
+              <div class="plc-target-card">
+                <div class="plc-target-label">PLC Target X</div>
+                <div class="plc-target-val" id="plcTargetX">—<span>mm</span></div>
+              </div>
+              <div class="plc-target-card">
+                <div class="plc-target-label">PLC Target Y</div>
+                <div class="plc-target-val" id="plcTargetY">—<span>mm</span></div>
+              </div>
+              <div class="plc-target-card">
+                <div class="plc-target-label">PLC Target Z</div>
+                <div class="plc-target-val" id="plcTargetZ">—<span>mm</span></div>
+              </div>
+              <div class="plc-target-card">
+                <div class="plc-target-label">PLC Speed</div>
+                <div class="plc-target-val" id="plcTargetSpeed">—<span>steps/s</span></div>
+              </div>
+            </div>
+          </div>
+
           <!-- XYZ Cartesian control -->
           <div class="ra-section">
-            <div class="ra-section-title">Cartesian Position (XYZ)</div>
+            <div class="ra-section-title">Cartesian Position (XYZ) — Manual Override</div>
             <div class="xyz-grid">
 
               <!-- Current position -->

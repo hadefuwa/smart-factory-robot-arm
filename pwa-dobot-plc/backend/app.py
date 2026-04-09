@@ -3335,6 +3335,7 @@ def read_robot_db_tags():
         'z_position': 0,
         'home_command': False,
         'pickup_command': False,
+        'speed': 0,
         'target_x': 0,
         'target_y': 0,
         'target_z': 0
@@ -3363,6 +3364,7 @@ def read_robot_db_tags():
             'z_position': int(cache.get('db125_z_position', 0)),
             'home_command': bool(cache.get('db125_home_command', False)),
             'pickup_command': bool(cache.get('db125_pickup_command', False)),
+            'speed': int(cache.get('db125_speed', 0)),
             'target_x': int(cache.get('db125_target_x', 0)),
             'target_y': int(cache.get('db125_target_y', 0)),
             'target_z': int(cache.get('db125_target_z', 0)),

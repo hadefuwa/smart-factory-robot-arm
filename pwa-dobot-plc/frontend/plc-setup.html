@@ -666,7 +666,7 @@
             <div class="plc-live-item">
               <span>Robot Position</span>
               <strong class="plc-live-primary" id="liveRobotPose">X -, Y -, Z -</strong>
-              <div class="plc-live-secondary" id="liveRobotPoseDetail">Target X -, Y -, Z -</div>
+              <div class="plc-live-secondary" id="liveRobotPoseDetail">Speed - • Target X -, Y -, Z -</div>
             </div>
           </section>
 
@@ -1017,7 +1017,7 @@
       setText('liveRobotDetail', `Conn ${formatBoolLabel(robotConnected)} • Busy ${formatBoolLabel(robotBusy)} • Cycle ${formatBoolLabel(robotCycle)}`);
 
       setText('liveRobotPose', `X ${robotTags.x_position ?? '-'}, Y ${robotTags.y_position ?? '-'}, Z ${robotTags.z_position ?? '-'}`);
-      setText('liveRobotPoseDetail', `Target X ${robotTags.target_x ?? '-'}, Y ${robotTags.target_y ?? '-'}, Z ${robotTags.target_z ?? '-'}`);
+      setText('liveRobotPoseDetail', `Speed ${robotTags.speed ?? '-'} • Target X ${robotTags.target_x ?? '-'}, Y ${robotTags.target_y ?? '-'}, Z ${robotTags.target_z ?? '-'}`);
     }
 
     async function refreshLivePlcSummary() {
@@ -1122,9 +1122,10 @@
       { key: 'z_position', label: 'Z Position', type: 'int', defaultByte: 10 },
       { key: 'home_command', label: 'Home Command', type: 'bool', defaultByte: 12, defaultBit: 0 },
       { key: 'pickup_command', label: 'Pickup Command', type: 'bool', defaultByte: 12, defaultBit: 1 },
-      { key: 'target_x', label: 'Target X', type: 'int', defaultByte: 14 },
-      { key: 'target_y', label: 'Target Y', type: 'int', defaultByte: 16 },
-      { key: 'target_z', label: 'Target Z', type: 'int', defaultByte: 18 }
+      { key: 'speed', label: 'Speed', type: 'int', defaultByte: 14 },
+      { key: 'target_x', label: 'Target X', type: 'int', defaultByte: 16 },
+      { key: 'target_y', label: 'Target Y', type: 'int', defaultByte: 18 },
+      { key: 'target_z', label: 'Target Z', type: 'int', defaultByte: 20 }
     ];
 
     const MAIN_DB_OPTIONS = {
@@ -1157,7 +1158,7 @@
       enabledId: 'robotDbEnabled',
       previewPrefix: 'robot-preview',
       defaultDbNumber: 125,
-      defaultTotalSize: 20
+      defaultTotalSize: 22
     };
 
     function getDbNumber(inputId, fallbackDbNumber) {
@@ -1239,7 +1240,7 @@
     }
 
     function getDefaultRobotDbConfig() {
-      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 20);
+      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 22);
     }
 
     function getAddressPreview(dbNumber, field, byteValue, bitValue) {
