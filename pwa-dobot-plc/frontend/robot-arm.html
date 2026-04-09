@@ -79,6 +79,7 @@
     .dbg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
     .dbg-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem; }
     .dbg-card h5 { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 0.5rem; }
+    .dbg-help { font-size: 0.74rem; color: var(--text-muted); margin: -0.15rem 0 0.55rem; line-height: 1.45; }
     .dbg-out { font-family: var(--font-mono); font-size: 0.72rem; background: var(--bg-log); border-radius: 6px; padding: 0.5rem; min-height: 3rem; max-height: 8rem; overflow: auto; color: var(--text-secondary); white-space: pre-wrap; }
   </style>
 </head>
@@ -130,7 +131,7 @@
             <li><a class="sf-nav-item active" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
             <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
             <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
-            <li><a class="sf-nav-item" href="/plc-diagnostics.html"><i class="material-icons">analytics</i><span>PLC Diagnostics</span></a></li>
+            <li><a class="sf-nav-item" href="/plc-setup.html"><i class="material-icons">analytics</i><span>PLC Setup</span></a></li>
             <li><a class="sf-nav-item" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
             <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
             <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
@@ -314,53 +315,59 @@
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-debug">
           <div class="ctrl-row" style="margin-bottom:1rem">
-            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgEchoBtn">Echo</button>
-            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPortInfoBtn">Port Info</button>
-            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgLogsBtn">Get Logs</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgEchoBtn">Test Bridge (Echo)</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPortInfoBtn">Show Serial Port Info</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgLogsBtn">Show Recent Logs</button>
             <button class="ra-btn ra-btn-warning ra-btn-sm" id="dbgDebugOnBtn">Debug ON</button>
             <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgDebugOffBtn">Debug OFF</button>
-            <button class="ra-btn ra-btn-danger ra-btn-sm" id="dbgClearBtn">Clear All</button>
+            <button class="ra-btn ra-btn-danger ra-btn-sm" id="dbgClearBtn">Clear All Debug Boxes</button>
           </div>
 
           <div class="dbg-grid">
 
             <div class="dbg-card">
-              <h5>Service Echo</h5>
+              <h5>Service Echo (Quick Health Check)</h5>
+              <p class="dbg-help">What it does: checks if the robot bridge service is alive and responding. Use this first when debug starts.</p>
               <pre class="dbg-out" id="dbgEchoOut">—</pre>
             </div>
 
             <div class="dbg-card">
-              <h5>Port Info</h5>
+              <h5>Port Info (Connection Details)</h5>
+              <p class="dbg-help">What it does: shows which serial port is used and how it is configured.</p>
               <pre class="dbg-out" id="dbgPortOut">—</pre>
             </div>
 
             <div class="dbg-card">
-              <h5>Service Logs</h5>
+              <h5>Service Logs (Recent Errors/Events)</h5>
+              <p class="dbg-help">What it does: shows recent messages from the backend service. Check this when something fails.</p>
               <pre class="dbg-out" id="dbgLogsOut" style="max-height:12rem">—</pre>
             </div>
 
             <div class="dbg-card">
-              <h5>Raw Ping</h5>
+              <h5>Raw Ping (Is Servo ID Reachable?)</h5>
+              <p class="dbg-help">What it does: sends a low-level ping to one servo ID. Success means that servo can be reached on the bus.</p>
               <div class="ctrl-row" style="margin-bottom:0.4rem">
                 <input class="ra-input" id="pingId" type="number" min="1" max="253" value="1" style="width:70px" placeholder="ID">
-                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPingBtn">Ping</button>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPingBtn">Ping This ID</button>
               </div>
               <pre class="dbg-out" id="dbgPingOut">—</pre>
             </div>
 
             <div class="dbg-card">
-              <h5>Read Register</h5>
+              <h5>Read Register (Advanced Servo Data)</h5>
+              <p class="dbg-help">What it does: reads raw bytes from a servo register. Use only if you know the register address.</p>
               <div class="ctrl-row" style="margin-bottom:0.4rem">
                 <input class="ra-input" id="regId" type="number" min="1" max="253" value="1" style="width:55px" placeholder="ID">
                 <input class="ra-input" id="regAddr" type="number" min="0" max="255" value="56" style="width:55px" placeholder="Addr">
                 <input class="ra-input" id="regLen" type="number" min="1" max="32" value="2" style="width:50px" placeholder="Len">
-                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgRegBtn">Read</button>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgRegBtn">Read Register</button>
               </div>
               <pre class="dbg-out" id="dbgRegOut">—</pre>
             </div>
 
             <div class="dbg-card">
-              <h5>Scan Result</h5>
+              <h5>Scan Result (Detected Servo IDs)</h5>
+              <p class="dbg-help">What it does: shows IDs found by scan in Settings tab. If empty, check wiring, power, and baud settings.</p>
               <pre class="dbg-out" id="dbgScanOut">—</pre>
             </div>
 
@@ -371,7 +378,7 @@
     </div>
   </div>
 
-  <script src="/assets/js/sf-template.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
   <script src="/assets/js/robot-arm-v3-page.js"></script>
 </body>
 </html>

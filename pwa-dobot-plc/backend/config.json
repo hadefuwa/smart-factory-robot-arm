@@ -37,7 +37,7 @@
     "rack": 0,
     "slot": 1,
     "cycle_time_ms": 100,
-    "comment": "DB123 holds main line state. DB124 holds camera and vision tags.",
+    "comment": "DB123 holds main line state. DB124 holds camera and vision tags. DB125 holds robot arm bridge data.",
     "db123": {
       "enabled": true,
       "db_number": 123,
@@ -141,6 +141,82 @@
         "metal_cube_detected": {
           "byte": 1,
           "bit": 0
+        }
+      }
+    },
+    "db125": {
+      "enabled": true,
+      "db_number": 125,
+      "total_size": 20,
+      "comment": "Robot arm DB: connection, status, current position, and incoming commands",
+      "tags": {
+        "connected": {
+          "byte": 0,
+          "bit": 0
+        },
+        "busy": {
+          "byte": 0,
+          "bit": 1
+        },
+        "move_complete": {
+          "byte": 0,
+          "bit": 2
+        },
+        "at_home": {
+          "byte": 0,
+          "bit": 3
+        },
+        "at_pickup_position": {
+          "byte": 0,
+          "bit": 4
+        },
+        "at_pallet_position": {
+          "byte": 0,
+          "bit": 5
+        },
+        "at_quarantine_position": {
+          "byte": 0,
+          "bit": 6
+        },
+        "gripper_active": {
+          "byte": 0,
+          "bit": 7
+        },
+        "cycle_complete": {
+          "byte": 1,
+          "bit": 0
+        },
+        "robot_status_code": {
+          "byte": 2
+        },
+        "error_code": {
+          "byte": 4
+        },
+        "x_position": {
+          "byte": 6
+        },
+        "y_position": {
+          "byte": 8
+        },
+        "z_position": {
+          "byte": 10
+        },
+        "home_command": {
+          "byte": 12,
+          "bit": 0
+        },
+        "pickup_command": {
+          "byte": 12,
+          "bit": 1
+        },
+        "target_x": {
+          "byte": 14
+        },
+        "target_y": {
+          "byte": 16
+        },
+        "target_z": {
+          "byte": 18
         }
       }
     }

@@ -284,15 +284,23 @@ def get_camera_db_number(config: Optional[Dict[str, Any]] = None) -> int:
 
 
 def apply_runtime_plc_config(config: Dict[str, Any]) -> None:
-    """Push updated PLC DB mappings into the running PLC worker."""
+    """Push updated PLC settings and DB mappings into the running PLC worker."""
     worker = getattr(plc_client, 'worker', None) if plc_client else None
     if worker is None:
         return
     plc_config = config.get('plc', {})
+    worker.update_connection_settings(
+        plc_config.get('ip', worker.plc_ip),
+        plc_config.get('rack', worker.rack),
+        plc_config.get('slot', worker.slot),
+    )
     worker.update_db_configs(
         plc_config.get('db123', {}),
         get_camera_db_config(config)
     )
+    plc_client.ip = worker.plc_ip
+    plc_client.rack = worker.rack
+    plc_client.slot = worker.slot
 
 vision_handshake_processing = False
 
@@ -1777,7 +1785,7 @@ def get_config():
 
 @app.route('/api/config', methods=['POST'])
 def update_config():
-    """Update configuration, including PLC DB123/DB124 and vision settings."""
+    """Update configuration, including PLC setup, DB mappings, and vision settings."""
     try:
         new_config = request.json
         current_config = load_config()
@@ -1790,7 +1798,10 @@ def update_config():
         # Update PLC DB configs if provided (deep-merge tags so we don't wipe other tag definitions)
         if 'plc' in new_config:
             current_config.setdefault('plc', {})
-            for db_key in ('db123', 'db124'):
+            for key in ('ip', 'rack', 'slot', 'cycle_time_ms', 'comment'):
+                if key in new_config['plc']:
+                    current_config['plc'][key] = new_config['plc'][key]
+            for db_key in ('db123', 'db124', 'db125'):
                 if db_key not in new_config['plc']:
                     continue
                 current_config['plc'].setdefault(db_key, {})
@@ -4367,4 +4378,3 @@ if __name__ == '__main__':
     # Serve with Flask threaded WSGI for robust HTTP handling of long-lived MJPEG streams.
     # Socket.IO endpoints remain defined but are not used for transport in this mode.
     app.run(threaded=True, **run_kwargs)
-

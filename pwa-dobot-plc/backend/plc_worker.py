@@ -236,6 +236,40 @@ class PLCWorker:
             self.camera_db_total_size,
         )
 
+    def update_connection_settings(self, plc_ip: str, rack: int, slot: int):
+        """Update PLC network settings and force the worker to reconnect."""
+        new_ip = str(plc_ip or self.plc_ip)
+        new_rack = int(rack)
+        new_slot = int(slot)
+        changed = (
+            new_ip != self.plc_ip or
+            new_rack != self.rack or
+            new_slot != self.slot
+        )
+
+        self.plc_ip = new_ip
+        self.rack = new_rack
+        self.slot = new_slot
+
+        if not changed:
+            return
+
+        logger.info(
+            "PLC connection settings updated: ip=%s rack=%s slot=%s",
+            self.plc_ip,
+            self.rack,
+            self.slot,
+        )
+
+        if self.client:
+            try:
+                self.client.disconnect()
+            except Exception:
+                pass
+
+        self.connected = False
+        self.last_connection_attempt = 0
+
     def update_db123_config(self, db123_config: Dict[str, Any]):
         """Backward-compatible shim: update camera mapping from a DB123-style config."""
         self.update_db_configs(

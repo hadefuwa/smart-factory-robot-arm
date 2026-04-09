@@ -7,7 +7,7 @@
     { href: '/robot-arm.html', label: 'Robot Arm', icon: 'precision_manufacturing', section: 'primary' },
     { href: '/vision-system-new.html', label: 'Vision System', icon: 'visibility', section: 'primary' },
     { href: '/rfid.html', label: 'RFID Tracking', icon: 'nfc', section: 'primary' },
-    { href: '/plc-diagnostics.html', label: 'PLC Diagnostics', icon: 'analytics', section: 'primary' },
+    { href: '/plc-setup.html', label: 'PLC Setup', icon: 'analytics', section: 'primary' },
     { href: '/io-link.html', label: 'IO-Link Master', icon: 'settings_input_component', section: 'primary' },
     { href: '/edge-device-stats.html', label: 'Edge Device Stats', icon: 'memory', section: 'primary' },
     { href: '/hotspot-status.html', label: 'Hotspot Status', icon: 'wifi', section: 'utility' },
@@ -20,6 +20,7 @@
     '/robot-arm.html': { kind: 'primary' },
     '/vision-system-new.html': { kind: 'primary' },
     '/rfid.html': { kind: 'primary' },
+    '/plc-setup.html': { kind: 'primary' },
     '/plc-diagnostics.html': { kind: 'primary' },
     '/io-link.html': { kind: 'primary' },
     '/edge-device-stats.html': { kind: 'primary' },
@@ -67,14 +68,25 @@
         ['Status', 'Static / Demo'],
       ],
     },
-    '/plc-diagnostics.html': {
-      kicker: 'Engineering Tools',
-      title: 'Inspect and edit PLC mappings, runtime config, and camera start behavior.',
-      description: 'Dense diagnostics and admin workflows stay intact, but now sit inside the same operations shell as the rest of the application.',
+    '/plc-setup.html': {
+      kicker: 'PLC Setup',
+      title: 'Set PLC connection details and maintain DB123, DB124, and DB125 mappings.',
+      description: 'Store the PLC IP, rack, slot, and important variable locations in one setup surface while keeping live monitoring available.',
       variant: 'plc',
       chips: [
-        ['Focus', 'Diagnostics'],
-        ['Config', 'Editable'],
+        ['Focus', 'Setup'],
+        ['Mappings', 'DB123 / DB124 / DB125'],
+        ['Target', 'S7-1200'],
+      ],
+    },
+    '/plc-diagnostics.html': {
+      kicker: 'PLC Setup',
+      title: 'Set PLC connection details and maintain DB123, DB124, and DB125 mappings.',
+      description: 'Legacy diagnostics links now route into the PLC setup experience.',
+      variant: 'plc',
+      chips: [
+        ['Focus', 'Setup'],
+        ['Mappings', 'DB123 / DB124 / DB125'],
         ['Target', 'S7-1200'],
       ],
     },
@@ -1153,7 +1165,7 @@
     } else if (normalizedPath === '/vision-system.html') {
       document.body.classList.add('sf-page-vision-legacy');
       enhanceLegacyVisionPage();
-    } else if (normalizedPath === '/plc-diagnostics.html') {
+    } else if (normalizedPath === '/plc-diagnostics.html' || normalizedPath === '/plc-setup.html') {
       document.body.classList.add('sf-page-plc');
       enhancePlcPage();
       observeDynamicContent('#cameraDbEditorBody', applyPlcDynamicEnhancements);

@@ -156,7 +156,7 @@
       window.location.href = '/vision-system-new.html';
     },
     openPLC() {
-      window.location.href = '/plc-diagnostics.html';
+      window.location.href = '/plc-setup.html';
     },
     refreshNow() {
       void scheduler.refresh();
