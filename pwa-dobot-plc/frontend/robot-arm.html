@@ -6,71 +6,86 @@
   <link rel="icon" type="image/png" href="/assets/img/favicon.png">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Robot Arm (MVP) - Smart Factory</title>
+  <title>Robot Arm - Smart Factory</title>
   <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
   <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
   <link href="/assets/css/professional-theme.css" rel="stylesheet" />
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#050c1d">
   <style>
-    .robot-arm-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-    }
-    @media (max-width: 900px) {
-      .robot-arm-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    .robot-status-box {
-      font-family: monospace;
-      white-space: pre-wrap;
-      background: var(--sf-base-100);
-      border: 1px solid var(--sf-base-300);
-      border-radius: 0.75rem;
-      padding: 0.75rem;
-      min-height: 12rem;
-      max-height: 20rem;
-      overflow: auto;
-    }
-    .small-help {
-      font-size: 0.85rem;
-      color: var(--sf-base-muted);
-    }
-    .debug-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 1rem;
-    }
-    @media (max-width: 1100px) { .debug-grid { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 700px)  { .debug-grid { grid-template-columns: 1fr; } }
-    .debug-out {
-      font-family: monospace;
-      font-size: 0.78rem;
-      white-space: pre-wrap;
-      background: var(--sf-base-100);
-      border: 1px solid var(--sf-base-300);
-      border-radius: 0.5rem;
-      padding: 0.5rem;
-      min-height: 6rem;
-      max-height: 14rem;
-      overflow: auto;
-    }
-    .debug-label { font-size: 0.78rem; color: var(--sf-base-muted); margin-bottom: 0.25rem; }
-    .btn-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
-    .debug-section-title {
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--sf-base-muted);
-      margin-bottom: 0.5rem;
-    }
+    /* ── Tab system ── */
+    .ra-tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; border-bottom: 2px solid var(--border); margin-bottom: 1.25rem; }
+    .ra-tab { padding: 0.5rem 1.1rem; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 0.85rem; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s, border-color 0.15s; border-radius: 4px 4px 0 0; display: flex; align-items: center; gap: 0.4rem; }
+    .ra-tab:hover { color: var(--text-primary); }
+    .ra-tab.active { color: #fff; border-bottom-color: var(--accent-start); background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); border-radius: 4px 4px 0 0; }
+    .ra-panel { display: none; }
+    .ra-panel.active { display: block; }
+
+    /* ── Connection badge ── */
+    .ra-conn-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.8rem; border-radius: 2rem; font-size: 0.78rem; font-weight: 700; }
+    .ra-conn-badge.online  { background: var(--status-success-bg); color: var(--status-success); }
+    .ra-conn-badge.offline { background: var(--status-danger-bg);  color: var(--status-danger);  }
+    .ra-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .ra-dot.pulse { animation: ra-pulse 1.4s ease-in-out infinite; }
+    @keyframes ra-pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.3; } }
+
+    /* ── Joint grid ── */
+    .joint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem; }
+    .joint-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.9rem 1rem; }
+    .joint-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+    .joint-num { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
+    .joint-avail { font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 1rem; }
+    .joint-avail.ok   { background: var(--status-success-bg); color: var(--status-success); }
+    .joint-avail.fail { background: var(--status-danger-bg); color: var(--status-danger); }
+    .joint-angle { font-size: 1.6rem; font-weight: 700; color: var(--text-white); letter-spacing: -0.5px; }
+    .joint-angle span { font-size: 0.8rem; color: var(--text-secondary); font-weight: 400; margin-left: 2px; }
+    .joint-pos-row { display: flex; gap: 1rem; margin-top: 0.4rem; font-size: 0.75rem; color: var(--text-secondary); }
+    .joint-pos-row b { color: var(--text-primary); }
+    .joint-move-bar { margin-top: 0.7rem; display: flex; gap: 0.4rem; align-items: center; }
+    .joint-move-bar input[type=range] { flex: 1; accent-color: var(--accent-start); }
+    .joint-angle-input { width: 64px; background: var(--bg-input); border: 1px solid var(--border-input); border-radius: 6px; color: var(--text-primary); padding: 0.25rem 0.4rem; font-size: 0.82rem; text-align: center; }
+    .joint-btn-go { background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); color: #fff; border: none; border-radius: 6px; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+    .joint-btn-go:active { opacity: 0.8; }
+
+    /* ── Control row ── */
+    .ctrl-row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 1rem; }
+    .ra-input { background: var(--bg-input); border: 1px solid var(--border-input); border-radius: 8px; color: var(--text-primary); padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+    .ra-input:focus { outline: 1px solid var(--accent-start); }
+    .ra-label { font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 0.2rem; }
+    .ra-field { display: flex; flex-direction: column; }
+
+    /* ── Buttons ── */
+    .ra-btn { border: none; border-radius: 8px; padding: 0.45rem 1rem; font-size: 0.83rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; transition: opacity 0.15s; }
+    .ra-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ra-btn-primary { background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); color: #fff; }
+    .ra-btn-danger  { background: var(--status-danger); color: #fff; }
+    .ra-btn-warning { background: var(--status-warning); color: #111; }
+    .ra-btn-ghost   { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); }
+    .ra-btn-sm { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+
+    /* ── Section headers ── */
+    .ra-section { margin-bottom: 1.5rem; }
+    .ra-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.6rem; }
+
+    /* ── Log/mono box ── */
+    .ra-log { font-family: var(--font-mono); font-size: 0.76rem; background: var(--bg-log); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; min-height: 8rem; max-height: 22rem; overflow: auto; color: var(--text-secondary); white-space: pre-wrap; }
+
+    /* ── Settings grid ── */
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+    .settings-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; }
+    .settings-card h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
+
+    /* ── Debug ── */
+    .dbg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
+    .dbg-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem; }
+    .dbg-card h5 { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 0.5rem; }
+    .dbg-out { font-family: var(--font-mono); font-size: 0.72rem; background: var(--bg-log); border-radius: 6px; padding: 0.5rem; min-height: 3rem; max-height: 8rem; overflow: auto; color: var(--text-secondary); white-space: pre-wrap; }
   </style>
 </head>
-<body class="dashboard-v2">
+<body class="dashboard-v2 sf-page-robot-arm">
   <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+
+    <!-- Top bar -->
     <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">
         <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
@@ -78,44 +93,37 @@
         </button>
         <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
           <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
-          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
           <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
-      <div class="sf-template-header-center flex-1 flex justify-center">
-        <span class="sf-template-shell-title">Smart Factory 2</span>
+      <div class="sf-template-header-center flex-1 flex items-center justify-center gap-3">
+        <i class="material-icons" style="color:var(--accent-end)">precision_manufacturing</i>
+        <span style="font-weight:700;font-size:1rem;">Robot Arm Control</span>
+        <span id="connBadge" class="ra-conn-badge offline">
+          <span class="ra-dot" id="connDot"></span>
+          <span id="connText">Offline</span>
+        </span>
       </div>
-      <div class="sf-template-header-right flex-none flex items-center gap-4">
-        <label class="sf-theme-wrap label cursor-pointer gap-2">
-          <span>Theme</span>
-          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
+      <div class="sf-template-header-right flex-none flex items-center gap-2">
+        <button class="ra-btn ra-btn-danger ra-btn-sm" id="eStopBtn" title="Emergency stop — disables torque on all joints">
+          <i class="material-icons" style="font-size:16px">emergency</i> E-STOP
+        </button>
       </div>
     </header>
 
-    <div class="sf-template-body flex flex-1 bg-base-100 relative">
-      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+    <div class="sf-body flex flex-1 overflow-hidden">
 
+      <!-- Sidebar -->
       <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
         <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
-          <div>
-            <p class="sf-template-sidebar-kicker">Workspace</p>
-            <strong>Production Pages</strong>
-          </div>
+          <div><p class="sf-template-sidebar-kicker">Workspace</p><strong>Production Pages</strong></div>
           <div class="sf-template-sidebar-actions flex items-center gap-2">
-            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+            <button class="sf-icon-btn btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
               <i class="material-icons">close</i>
-            </button>
-            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
-              <i class="material-icons">left_panel_open</i>
             </button>
           </div>
         </div>
-
-        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto p-4" aria-label="Main navigation">
           <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
             <li class="sf-menu-title"><span>Production</span></li>
             <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
@@ -128,205 +136,242 @@
             <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
             <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
             <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
-            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
           </ul>
         </nav>
       </aside>
 
-      <div class="sf-main">
-        <div class="sf-template-pagehead">
-          <div class="sf-topbar-title-wrap">
-            <p class="sf-eyebrow">Robot Arm Control</p>
-            <h1 class="sf-topbar-title">RobotArmv3 MVP Interface</h1>
+      <!-- Main content -->
+      <main class="sf-main flex-1 overflow-auto p-4 sm:p-6">
+
+        <!-- Tab bar -->
+        <div class="ra-tabs" id="raTabs">
+          <button class="ra-tab active" data-tab="joint-control">
+            <i class="material-icons" style="font-size:16px">tune</i> Joint Control
+          </button>
+          <button class="ra-tab" data-tab="status">
+            <i class="material-icons" style="font-size:16px">monitor_heart</i> Live Status
+          </button>
+          <button class="ra-tab" data-tab="settings">
+            <i class="material-icons" style="font-size:16px">settings</i> Settings
+          </button>
+          <button class="ra-tab" data-tab="debug">
+            <i class="material-icons" style="font-size:16px">bug_report</i> Debug
+          </button>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 1 — Joint Control                                   -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel active" id="tab-joint-control">
+
+          <div class="ra-section">
+            <div class="ra-section-title">Quick Actions</div>
+            <div class="ctrl-row">
+              <button class="ra-btn ra-btn-primary" id="homeAllBtn">
+                <i class="material-icons" style="font-size:16px">home</i> Home All
+              </button>
+              <button class="ra-btn ra-btn-warning" id="torqueOnBtn">
+                <i class="material-icons" style="font-size:16px">bolt</i> Torque On
+              </button>
+              <button class="ra-btn ra-btn-ghost" id="torqueOffBtn">
+                <i class="material-icons" style="font-size:16px">power_off</i> Torque Off
+              </button>
+              <button class="ra-btn ra-btn-ghost" id="stopAllBtn">
+                <i class="material-icons" style="font-size:16px">stop_circle</i> Stop All
+              </button>
+            </div>
+          </div>
+
+          <div class="ra-section">
+            <div class="ra-section-title">Joint Status — drag slider or type angle then press Go</div>
+            <div class="joint-grid" id="jointGrid">
+              <!-- JS populates from live status polls -->
+            </div>
+          </div>
+
+          <div class="ra-section">
+            <div class="ra-section-title">Manual Move</div>
+            <div class="ctrl-row">
+              <div class="ra-field">
+                <label class="ra-label">Joint (1–6)</label>
+                <input class="ra-input" id="jointNumber" type="number" min="1" max="6" value="1" style="width:70px">
+              </div>
+              <div class="ra-field">
+                <label class="ra-label">Angle (°)</label>
+                <input class="ra-input" id="jointAngle" type="number" min="-180" max="180" value="0" style="width:90px">
+              </div>
+              <div class="ra-field">
+                <label class="ra-label">Speed (steps/s)</label>
+                <input class="ra-input" id="moveSpeed" type="number" min="0" max="3400" value="1500" style="width:90px">
+              </div>
+              <div class="ra-field" style="justify-content:flex-end">
+                <label class="ra-label">&nbsp;</label>
+                <button class="ra-btn ra-btn-primary" id="moveBtn">
+                  <i class="material-icons" style="font-size:16px">send</i> Move
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ra-section">
+            <div class="ra-section-title">Speed &amp; Acceleration</div>
+            <div class="ctrl-row">
+              <div class="ra-field">
+                <label class="ra-label">Joint</label>
+                <input class="ra-input" id="speedJoint" type="number" min="1" max="6" value="1" style="width:70px">
+              </div>
+              <div class="ra-field">
+                <label class="ra-label">Speed (0–3400)</label>
+                <input class="ra-input" id="speedValue" type="number" min="0" max="3400" value="1500" style="width:90px">
+              </div>
+              <div class="ra-field">
+                <label class="ra-label">Accel (0–254)</label>
+                <input class="ra-input" id="accelValue" type="number" min="0" max="254" value="50" style="width:80px">
+              </div>
+              <div class="ra-field" style="justify-content:flex-end">
+                <label class="ra-label">&nbsp;</label>
+                <div style="display:flex;gap:0.4rem">
+                  <button class="ra-btn ra-btn-ghost" id="setSpeedBtn">Set Speed</button>
+                  <button class="ra-btn ra-btn-ghost" id="setAccelBtn">Set Accel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="jointCtrlMsg" style="font-size:0.83rem;min-height:1.2em;color:var(--status-success)"></div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 2 — Live Status                                     -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-status">
+          <div class="ra-section">
+            <div class="ra-section-title" style="display:flex;justify-content:space-between">
+              <span>Live Servo Status</span>
+              <span id="lastPollTime" style="font-size:0.72rem;color:var(--text-muted)"></span>
+            </div>
+            <pre class="ra-log" id="statusBox">Waiting for first poll…</pre>
+          </div>
+          <div class="ctrl-row" style="margin-top:0.5rem">
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="copyStatusBtn">
+              <i class="material-icons" style="font-size:14px">content_copy</i> Copy JSON
+            </button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="refreshStatusBtn">
+              <i class="material-icons" style="font-size:14px">refresh</i> Refresh Now
+            </button>
           </div>
         </div>
 
-        <main class="sf-content p-4">
-          <div class="card p-4 mb-4">
-            <h2 class="mb-2">Robot Arm (MVP Web Control)</h2>
-            <p class="mb-0">This page controls the RobotArmv3 Pi service through your Flask backend.</p>
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 3 — Settings                                        -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-settings">
+          <div class="settings-grid">
+
+            <div class="settings-card">
+              <h4><i class="material-icons" style="font-size:16px">link</i> Bridge Connection</h4>
+              <div class="ra-field" style="margin-bottom:0.5rem">
+                <label class="ra-label">Pi Host / IP</label>
+                <input class="ra-input" id="piHost" value="localhost" style="width:100%">
+              </div>
+              <div class="ra-field" style="margin-bottom:0.7rem">
+                <label class="ra-label">Port</label>
+                <input class="ra-input" id="piPort" type="number" value="8090" style="width:100px">
+              </div>
+              <div class="ctrl-row">
+                <button class="ra-btn ra-btn-primary ra-btn-sm" id="connectBtn">Connect</button>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="disconnectBtn">Disconnect</button>
+              </div>
+              <div id="connectionText" style="margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary)"></div>
+            </div>
+
+            <div class="settings-card">
+              <h4><i class="material-icons" style="font-size:16px">radar</i> Servo Discovery</h4>
+              <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:0.7rem">
+                Quick scan tests IDs 1–6. Full scan tests all 253 IDs across baud rates (~30s).
+              </p>
+              <div class="ctrl-row">
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="scanBtn">Quick Scan (1–6)</button>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="scanFullBtn">Full Scan</button>
+              </div>
+              <pre class="dbg-out" id="scanOut" style="margin-top:0.5rem">—</pre>
+            </div>
+
+            <div class="settings-card">
+              <h4><i class="material-icons" style="font-size:16px">speed</i> Poll Interval</h4>
+              <div class="ra-field">
+                <label class="ra-label">Status poll interval (ms)</label>
+                <input class="ra-input" id="pollInterval" type="number" min="200" max="5000" value="500" style="width:110px">
+              </div>
+              <button class="ra-btn ra-btn-ghost ra-btn-sm" id="setPollBtn" style="margin-top:0.6rem">Apply</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 4 — Debug                                           -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-debug">
+          <div class="ctrl-row" style="margin-bottom:1rem">
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgEchoBtn">Echo</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPortInfoBtn">Port Info</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgLogsBtn">Get Logs</button>
+            <button class="ra-btn ra-btn-warning ra-btn-sm" id="dbgDebugOnBtn">Debug ON</button>
+            <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgDebugOffBtn">Debug OFF</button>
+            <button class="ra-btn ra-btn-danger ra-btn-sm" id="dbgClearBtn">Clear All</button>
           </div>
 
-          <div class="robot-arm-grid mb-4">
-            <div class="card p-4">
-              <h3 class="mb-3">1) Connection</h3>
-              <div class="mb-2">
-                <label for="piHost" class="small-help">Pi Host</label>
-                <input id="piHost" class="input input-bordered w-full" type="text" value="127.0.0.1" />
-              </div>
-              <div class="mb-3">
-                <label for="piPort" class="small-help">Pi Port</label>
-                <input id="piPort" class="input input-bordered w-full" type="number" value="8090" />
-              </div>
-              <div class="flex gap-2">
-                <button id="connectBtn" class="btn btn-primary">Connect</button>
-                <button id="disconnectBtn" class="btn btn-outline">Disconnect</button>
-              </div>
-              <div class="flex gap-2 mt-2">
-                <button id="scanBtn" class="btn btn-warning btn-sm" title="Scan IDs 1-20 at 1 Mbps">Scan Servos (IDs 1-20)</button>
-                <button id="scanFullBtn" class="btn btn-outline btn-sm" title="Scan all IDs 1-253 (slow)">Full Scan</button>
-              </div>
-              <p id="connectionText" class="mt-3 mb-0 small-help">Status: Not connected</p>
+          <div class="dbg-grid">
+
+            <div class="dbg-card">
+              <h5>Service Echo</h5>
+              <pre class="dbg-out" id="dbgEchoOut">—</pre>
             </div>
 
-            <div class="card p-4">
-              <h3 class="mb-3">2) Joint Move</h3>
-              <div class="mb-2">
-                <label for="jointNumber" class="small-help">Joint Number (1-based)</label>
-                <input id="jointNumber" class="input input-bordered w-full" type="number" min="1" value="1" />
-              </div>
-              <div class="mb-3">
-                <label for="jointAngle" class="small-help">Angle (degrees)</label>
-                <input id="jointAngle" class="input input-bordered w-full" type="number" value="45" />
-              </div>
-              <div class="flex gap-2">
-                <button id="moveBtn" class="btn btn-success">Move Joint</button>
-                <button id="stopBtn" class="btn btn-error">Stop All</button>
-              </div>
+            <div class="dbg-card">
+              <h5>Port Info</h5>
+              <pre class="dbg-out" id="dbgPortOut">—</pre>
             </div>
+
+            <div class="dbg-card">
+              <h5>Service Logs</h5>
+              <pre class="dbg-out" id="dbgLogsOut" style="max-height:12rem">—</pre>
+            </div>
+
+            <div class="dbg-card">
+              <h5>Raw Ping</h5>
+              <div class="ctrl-row" style="margin-bottom:0.4rem">
+                <input class="ra-input" id="pingId" type="number" min="1" max="253" value="1" style="width:70px" placeholder="ID">
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgPingBtn">Ping</button>
+              </div>
+              <pre class="dbg-out" id="dbgPingOut">—</pre>
+            </div>
+
+            <div class="dbg-card">
+              <h5>Read Register</h5>
+              <div class="ctrl-row" style="margin-bottom:0.4rem">
+                <input class="ra-input" id="regId" type="number" min="1" max="253" value="1" style="width:55px" placeholder="ID">
+                <input class="ra-input" id="regAddr" type="number" min="0" max="255" value="56" style="width:55px" placeholder="Addr">
+                <input class="ra-input" id="regLen" type="number" min="1" max="32" value="2" style="width:50px" placeholder="Len">
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dbgRegBtn">Read</button>
+              </div>
+              <pre class="dbg-out" id="dbgRegOut">—</pre>
+            </div>
+
+            <div class="dbg-card">
+              <h5>Scan Result</h5>
+              <pre class="dbg-out" id="dbgScanOut">—</pre>
+            </div>
+
           </div>
+        </div>
 
-          <div class="card p-4">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="mb-0">3) Live Status (500ms polling)</h3>
-              <button id="copyStatusBtn" class="btn btn-sm btn-outline" type="button">Copy Status JSON</button>
-            </div>
-            <div id="statusBox" class="robot-status-box">Waiting for status...</div>
-          </div>
-
-          <!-- DEBUG PANEL -->
-          <div class="card p-4 mt-4">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="mb-0">Debug &amp; Diagnostics</h3>
-              <button id="debugClearAllBtn" class="btn btn-sm btn-ghost" type="button">Clear All Outputs</button>
-            </div>
-
-            <div class="debug-grid">
-
-              <!-- Col 1: Service health -->
-              <div>
-                <p class="debug-section-title">Service health</p>
-                <p class="small-help mb-2">
-                  Check whether the Pi robot service is alive, which port/device it uses, and fetch recent backend-side debug logs.
-                </p>
-                <div class="btn-row">
-                  <button id="dbgEchoBtn"    class="btn btn-sm btn-primary">Echo / Ping</button>
-                  <button id="dbgPortBtn"    class="btn btn-sm btn-outline">Port Info</button>
-                  <button id="dbgLogsBtn"    class="btn btn-sm btn-outline">Get Logs</button>
-                  <button id="dbgDebugOnBtn" class="btn btn-sm btn-outline">Debug ON</button>
-                  <button id="dbgDebugOffBtn" class="btn btn-sm btn-ghost btn-xs">Debug OFF</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgHealthOut" class="debug-out">—</div>
-              </div>
-
-              <!-- Col 2: Servo discovery -->
-              <div>
-                <p class="debug-section-title">Servo discovery</p>
-                <p class="small-help mb-2">
-                  Find which servo IDs respond on the current serial bus. Start with 1-20, then use full scan only if needed.
-                </p>
-                <div class="btn-row">
-                  <button id="dbgScan20Btn"  class="btn btn-sm btn-warning">Scan IDs 1–20</button>
-                  <button id="dbgScanAllBtn" class="btn btn-sm btn-outline">Full Scan (1–253)</button>
-                </div>
-                <div class="btn-row">
-                  <span class="debug-label" style="line-height:2rem">Raw ping ID:</span>
-                  <input id="dbgPingId" class="input input-bordered input-sm" type="number" min="1" max="253" value="1" style="width:4rem" />
-                  <button id="dbgRawPingBtn" class="btn btn-sm btn-outline">Ping</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgDiscoveryOut" class="debug-out">—</div>
-              </div>
-
-              <!-- Col 3: Register inspector -->
-              <div>
-                <p class="debug-section-title">Register inspector</p>
-                <p class="small-help mb-2">
-                  Read raw servo registers to verify low-level communication. Position uses register 56 (2 bytes), Volt/Temp uses 62+.
-                </p>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;margin-bottom:0.5rem">
-                  <div>
-                    <p class="debug-label">Servo ID</p>
-                    <input id="dbgRegId"  class="input input-bordered input-sm w-full" type="number" min="1" max="253" value="1" />
-                  </div>
-                  <div>
-                    <p class="debug-label">Register</p>
-                    <input id="dbgRegAddr" class="input input-bordered input-sm w-full" type="number" min="0" max="255" value="56" />
-                  </div>
-                  <div>
-                    <p class="debug-label">Length</p>
-                    <input id="dbgRegLen" class="input input-bordered input-sm w-full" type="number" min="1" max="32" value="2" />
-                  </div>
-                </div>
-                <div class="btn-row">
-                  <button id="dbgReadRegBtn"  class="btn btn-sm btn-outline">Read Register</button>
-                  <button id="dbgReadPosBtn"  class="btn btn-sm btn-ghost btn-xs" title="Reg 56, len 2">Position</button>
-                  <button id="dbgReadVoltBtn" class="btn btn-sm btn-ghost btn-xs" title="Reg 62, len 2">Volt/Temp</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgRegOut" class="debug-out">—</div>
-              </div>
-
-              <!-- Col 4: Motion tests -->
-              <div>
-                <p class="debug-section-title">Motion tests</p>
-                <p class="small-help mb-2">
-                  Manual motion and torque checks. Use small angles first, then Stop All if motion is unexpected.
-                </p>
-                <div class="btn-row">
-                  <button id="dbgHomeAllBtn"    class="btn btn-sm btn-success">Home All (0°)</button>
-                  <button id="dbgTorqueOnBtn"   class="btn btn-sm btn-outline">Torque ON</button>
-                  <button id="dbgTorqueOffBtn"  class="btn btn-sm btn-outline">Torque OFF</button>
-                  <button id="dbgStopAllBtn"    class="btn btn-sm btn-error">Stop All</button>
-                </div>
-                <div class="btn-row">
-                  <span class="debug-label" style="line-height:2rem">Joint:</span>
-                  <input id="dbgTestJoint" class="input input-bordered input-sm" type="number" min="1" max="6" value="1" style="width:3.5rem" />
-                  <span class="debug-label" style="line-height:2rem">Angle:</span>
-                  <input id="dbgTestAngle" class="input input-bordered input-sm" type="number" value="45" style="width:4rem" />
-                  <button id="dbgMoveOneBtn" class="btn btn-sm btn-outline">Move</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgMotionOut" class="debug-out">—</div>
-              </div>
-
-              <!-- Col 5: Bus stress / timing -->
-              <div>
-                <p class="debug-section-title">Bus timing test</p>
-                <p class="small-help mb-2">Sends N echo commands in sequence and measures round-trip time to catch queue / timeout issues.</p>
-                <div class="btn-row">
-                  <span class="debug-label" style="line-height:2rem">Reps:</span>
-                  <input id="dbgBusReps" class="input input-bordered input-sm" type="number" min="1" max="50" value="5" style="width:4rem" />
-                  <button id="dbgBusTestBtn" class="btn btn-sm btn-outline">Run</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgBusOut" class="debug-out">—</div>
-              </div>
-
-              <!-- Col 6: Joint configs -->
-              <div>
-                <p class="debug-section-title">Discovered joints</p>
-                <p class="small-help mb-2">
-                  Read joint availability/config summary from the Pi service and force an immediate status refresh.
-                </p>
-                <div class="btn-row">
-                  <button id="dbgJointCfgBtn" class="btn btn-sm btn-outline">Get Joint Configs</button>
-                  <button id="dbgGetStatusBtn" class="btn btn-sm btn-outline">Get Status Now</button>
-                </div>
-                <p class="debug-label">Output</p>
-                <div id="dbgJointOut" class="debug-out">—</div>
-              </div>
-
-            </div><!-- /debug-grid -->
-          </div><!-- /debug card -->
-
-        </main>
-      </div>
+      </main>
     </div>
   </div>
 
-  <script src="/assets/js/app-shell.js"></script>
+  <script src="/assets/js/sf-template.js"></script>
   <script src="/assets/js/robot-arm-v3-page.js"></script>
 </body>
 </html>
