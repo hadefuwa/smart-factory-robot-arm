@@ -75,6 +75,17 @@
     .settings-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; }
     .settings-card h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
 
+    /* ── XYZ control ── */
+    .xyz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.5rem; }
+    @media (max-width: 680px) { .xyz-grid { grid-template-columns: 1fr; } }
+    .xyz-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; }
+    .xyz-card h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
+    .xyz-readout { display: flex; gap: 1.5rem; }
+    .xyz-readout-item { display: flex; flex-direction: column; }
+    .xyz-readout-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.2rem; }
+    .xyz-readout-val { font-size: 1.5rem; font-weight: 700; color: var(--text-white); font-family: var(--font-mono); letter-spacing: -0.5px; }
+    .xyz-readout-val span { font-size: 0.72rem; color: var(--text-secondary); font-weight: 400; margin-left: 1px; }
+
     /* ── Debug ── */
     .dbg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
     .dbg-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem; }
@@ -180,6 +191,63 @@
               <button class="ra-btn ra-btn-ghost" id="stopAllBtn">
                 <i class="material-icons" style="font-size:16px">stop_circle</i> Stop All
               </button>
+            </div>
+          </div>
+
+          <!-- XYZ Cartesian control -->
+          <div class="ra-section">
+            <div class="ra-section-title">Cartesian Position (XYZ)</div>
+            <div class="xyz-grid">
+
+              <!-- Current position -->
+              <div class="xyz-card">
+                <h4><i class="material-icons" style="font-size:16px">my_location</i> Current Position</h4>
+                <div class="xyz-readout">
+                  <div class="xyz-readout-item">
+                    <span class="xyz-readout-label">X</span>
+                    <div class="xyz-readout-val" id="curX">—<span>mm</span></div>
+                  </div>
+                  <div class="xyz-readout-item">
+                    <span class="xyz-readout-label">Y</span>
+                    <div class="xyz-readout-val" id="curY">—<span>mm</span></div>
+                  </div>
+                  <div class="xyz-readout-item">
+                    <span class="xyz-readout-label">Z</span>
+                    <div class="xyz-readout-val" id="curZ">—<span>mm</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Target position -->
+              <div class="xyz-card">
+                <h4><i class="material-icons" style="font-size:16px">place</i> Move to Target XYZ</h4>
+                <div class="ctrl-row" style="flex-wrap:nowrap;gap:0.5rem">
+                  <div class="ra-field">
+                    <label class="ra-label">X (mm)</label>
+                    <input class="ra-input" id="targetX" type="number" value="300" step="1" style="width:74px">
+                  </div>
+                  <div class="ra-field">
+                    <label class="ra-label">Y (mm)</label>
+                    <input class="ra-input" id="targetY" type="number" value="0" step="1" style="width:74px">
+                  </div>
+                  <div class="ra-field">
+                    <label class="ra-label">Z (mm)</label>
+                    <input class="ra-input" id="targetZ" type="number" value="260" step="1" style="width:74px">
+                  </div>
+                  <div class="ra-field">
+                    <label class="ra-label">Speed</label>
+                    <input class="ra-input" id="xyzSpeed" type="number" value="1500" min="0" max="3400" style="width:74px">
+                  </div>
+                  <div class="ra-field" style="justify-content:flex-end">
+                    <label class="ra-label">&nbsp;</label>
+                    <button class="ra-btn ra-btn-primary" id="moveXYZBtn">
+                      <i class="material-icons" style="font-size:16px">send</i> Move
+                    </button>
+                  </div>
+                </div>
+                <div id="xyzMsg" style="font-size:0.78rem;min-height:1.2em;margin-top:0.4rem;color:var(--status-success)"></div>
+              </div>
+
             </div>
           </div>
 

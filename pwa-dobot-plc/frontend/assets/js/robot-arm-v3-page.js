@@ -189,6 +189,42 @@
     }
   }
 
+  async function moveXYZ() {
+    var x = Number((el('targetX') && el('targetX').value) || 0);
+    var y = Number((el('targetY') && el('targetY').value) || 0);
+    var z = Number((el('targetZ') && el('targetZ').value) || 0);
+    var speed = Number((el('xyzSpeed') && el('xyzSpeed').value) || 1500);
+    var msgEl = el('xyzMsg');
+    try {
+      var data = await apiRequest('/api/robot-arm/move-xyz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: x, y: y, z: z, speed: speed })
+      });
+      var resp = data.bridge_response || {};
+      if (data.success) {
+        var angles = (resp.angles || []).map(function (a) { return a.toFixed(1) + '°'; }).join(', ');
+        if (msgEl) { msgEl.textContent = 'Moving → [' + angles + ']'; msgEl.style.color = 'var(--status-success)'; }
+      } else {
+        if (msgEl) { msgEl.textContent = resp.message || 'Move failed'; msgEl.style.color = 'var(--status-danger)'; }
+      }
+    } catch (e) {
+      if (msgEl) { msgEl.textContent = 'Error: ' + e.message; msgEl.style.color = 'var(--status-danger)'; }
+    }
+  }
+
+  function renderCurrentXYZ(xyz) {
+    function setVal(id, v) {
+      var e = el(id);
+      if (!e) return;
+      if (v === null || v === undefined) { e.innerHTML = '—<span>mm</span>'; return; }
+      e.innerHTML = v.toFixed(1) + '<span>mm</span>';
+    }
+    setVal('curX', xyz ? xyz.x : null);
+    setVal('curY', xyz ? xyz.y : null);
+    setVal('curZ', xyz ? xyz.z : null);
+  }
+
   async function stopAll() {
     try {
       await apiRequest('/api/robot-arm/stop', { method: 'POST' });
@@ -293,8 +329,10 @@
         setConnected(true, 'Online');
         var joints = (data.status && data.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
+        renderCurrentXYZ((data.status && data.status.currentXYZ) || null);
       } else {
         setConnected(false, 'Offline');
+        renderCurrentXYZ(null);
       }
     } catch (e) {
       setConnected(false, 'Error');
@@ -418,6 +456,9 @@
     if ((b = el('torqueOnBtn')))  b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(true); }); });
     if ((b = el('torqueOffBtn'))) b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(false); }); });
     if ((b = el('stopAllBtn')))   b.addEventListener('click', function () { withBtn(b, stopAll); });
+
+    // Joint control tab — XYZ move
+    if ((b = el('moveXYZBtn')))   b.addEventListener('click', function () { withBtn(b, moveXYZ); });
 
     // Joint control tab — manual move
     if ((b = el('moveBtn')))      b.addEventListener('click', function () { withBtn(b, moveJoint); });

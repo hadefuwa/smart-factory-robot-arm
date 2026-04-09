@@ -536,14 +536,35 @@ async function handleCommand(ws, data) {
             }));
             break;
             
-        case 'getStatus':
-            // Send status of all servos
+        case 'getStatus': {
+            // Send status of all servos, plus current XYZ position from FK
             const statuses = await getAllServoStatus();
+            let currentXYZ = null;
+            if (robotKinematics.isConfigured()) {
+                try {
+                    const availableAngles = statuses
+                        .filter(s => s.available)
+                        .map(s => s.angleDegrees);
+                    // Only compute FK if we have angles for all revolute joints
+                    if (availableAngles.length === robotKinematics.getJointCount()) {
+                        const fk = robotKinematics.forwardKinematics(availableAngles);
+                        if (fk && fk.position) {
+                            currentXYZ = {
+                                x: Math.round(fk.position.x * 10) / 10,
+                                y: Math.round(fk.position.y * 10) / 10,
+                                z: Math.round(fk.position.z * 10) / 10
+                            };
+                        }
+                    }
+                } catch (_) {}
+            }
             ws.send(JSON.stringify({
                 type: 'status',
-                joints: statuses
+                joints: statuses,
+                currentXYZ: currentXYZ
             }));
             break;
+        }
             
         case 'moveJoint':
             // Move a servo to a specific angle
