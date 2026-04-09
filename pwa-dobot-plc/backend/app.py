@@ -424,6 +424,42 @@ def load_config():
                 merged[key] = value
         return merged
 
+    def _normalize_db125(config: Dict[str, Any]) -> Dict[str, Any]:
+        plc_cfg = config.setdefault('plc', {})
+        db125_cfg = plc_cfg.get('db125')
+        if not isinstance(db125_cfg, dict):
+            return config
+
+        tags = db125_cfg.setdefault('tags', {})
+        if not isinstance(tags, dict):
+            tags = {}
+            db125_cfg['tags'] = tags
+
+        speed_tag = tags.get('speed')
+        target_x_tag = tags.get('target_x')
+        target_y_tag = tags.get('target_y')
+        target_z_tag = tags.get('target_z')
+
+        old_target_layout = (
+            isinstance(target_x_tag, dict) and target_x_tag.get('byte') == 14 and
+            isinstance(target_y_tag, dict) and target_y_tag.get('byte') == 16 and
+            isinstance(target_z_tag, dict) and target_z_tag.get('byte') == 18
+        )
+
+        if not isinstance(speed_tag, dict) and old_target_layout:
+            tags['speed'] = {'byte': 14}
+
+        if isinstance(tags.get('speed'), dict) and tags['speed'].get('byte') == 14:
+            if isinstance(target_x_tag, dict) and target_x_tag.get('byte') == 14:
+                tags['target_x'] = {**target_x_tag, 'byte': 16}
+            if isinstance(target_y_tag, dict) and target_y_tag.get('byte') == 16:
+                tags['target_y'] = {**target_y_tag, 'byte': 18}
+            if isinstance(target_z_tag, dict) and target_z_tag.get('byte') == 18:
+                tags['target_z'] = {**target_z_tag, 'byte': 20}
+
+        db125_cfg['total_size'] = max(int(db125_cfg.get('total_size', 22) or 22), 22)
+        return config
+
     base_config = {}
     try:
         with open(REPO_CONFIG_PATH, 'r') as f:
@@ -453,11 +489,11 @@ def load_config():
         if os.path.exists(LOCAL_CONFIG_PATH):
             with open(LOCAL_CONFIG_PATH, 'r') as f:
                 local_override = json.load(f)
-            return _deep_merge(base_config, local_override)
+            return _normalize_db125(_deep_merge(base_config, local_override))
     except Exception as e:
         logger.error(f"Error loading local config override ({LOCAL_CONFIG_PATH}): {e}")
 
-    return base_config
+    return _normalize_db125(base_config)
 
 def delete_old_counter_images(counter_number: int):
     """

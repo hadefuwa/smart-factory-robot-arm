@@ -1352,12 +1352,31 @@
     }
 
     function mergeDbConfig(defaults, savedConfig) {
+      const mergedTags = {
+        ...defaults.tags,
+        ...(((savedConfig || {}).tags) || {})
+      };
+
+      if (
+        mergedTags.speed && Number(mergedTags.speed.byte) === 14 &&
+        mergedTags.target_x && Number(mergedTags.target_x.byte) === 14 &&
+        mergedTags.target_y && Number(mergedTags.target_y.byte) === 16 &&
+        mergedTags.target_z && Number(mergedTags.target_z.byte) === 18
+      ) {
+        mergedTags.target_x = { ...mergedTags.target_x, byte: 16 };
+        mergedTags.target_y = { ...mergedTags.target_y, byte: 18 };
+        mergedTags.target_z = { ...mergedTags.target_z, byte: 20 };
+      }
+
       return {
         ...defaults,
         ...(savedConfig || {}),
+        total_size: Math.max(
+          defaults.total_size || 1,
+          parseInt((savedConfig || {}).total_size, 10) || defaults.total_size || 1
+        ),
         tags: {
-          ...defaults.tags,
-          ...(((savedConfig || {}).tags) || {})
+          ...mergedTags
         }
       };
     }
