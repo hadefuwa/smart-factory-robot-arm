@@ -234,26 +234,30 @@ def get_legacy_plc_cache() -> Dict[str, Any]:
             'busy': cache.get('camera_busy', False),
             'complete': cache.get('camera_completed', False),
             'fault': cache.get('defect_detected', False),
-            'x_pos': 0.0,
-            'y_pos': 0.0,
-            'z_pos': 0.0,
+            'x_pos': float(cache.get('pickup_location_x', 0)),
+            'y_pos': float(cache.get('pickup_location_y', 0)),
+            'z_pos': float(cache.get('pickup_location_z', 0)),
             'counter': (
                 int(cache.get('yellow_count', 0))
                 + int(cache.get('white_count', 0))
                 + int(cache.get('steel_count', 0))
                 + int(cache.get('aluminum_count', 0))
             ),
-            'robot_connected': cache.get('robot_connected', False),
-            'robot_busy': cache.get('robot_busy', False),
-            'robot_cycle_complete': cache.get('robot_cycle_complete', False),
-            'robot_target_x': cache.get('robot_target_x', 0),
-            'robot_target_y': cache.get('robot_target_y', 0),
-            'robot_target_z': cache.get('robot_target_z', 0),
-            'robot_current_x': cache.get('robot_current_x', 0),
-            'robot_current_y': cache.get('robot_current_y', 0),
-            'robot_current_z': cache.get('robot_current_z', 0),
-            'robot_status_code': cache.get('robot_status_code', 0),
-            'robot_error_code': cache.get('robot_error_code', 0),
+            'material_type': cache.get('material_type', 0),
+            'quarantined_count': cache.get('quarantined_count', 0),
+            'defect_count': cache.get('defect_count', 0),
+            'gantry_power_ok': cache.get('gantry_power_ok', False),
+            'gantry_busy': cache.get('gantry_busy', False),
+            'gantry_move_done': cache.get('gantry_move_done', False),
+            'pickup_location_x': cache.get('pickup_location_x', 0),
+            'pickup_location_y': cache.get('pickup_location_y', 0),
+            'pickup_location_z': cache.get('pickup_location_z', 0),
+            'quarantine_location_x': cache.get('quarantine_location_x', 0),
+            'quarantine_location_y': cache.get('quarantine_location_y', 0),
+            'quarantine_location_z': cache.get('quarantine_location_z', 0),
+            'pallet_home_x': cache.get('pallet_home_x', 0),
+            'pallet_home_y': cache.get('pallet_home_y', 0),
+            'pallet_home_z': cache.get('pallet_home_z', 0),
         }
     }
 
@@ -2068,9 +2072,8 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
         confidence = voting_result.get('confidence', 0)
         vote_counts = voting_result.get('vote_counts', {})
 
-        object_detected = (detected_color is not None)
+        result_present = (detected_color is not None)
         defect_detected = False  # Not doing defect detection for now
-        object_ok = True
 
         # Map color to cube type flags
         yellow = (detected_color == 'yellow')
@@ -2082,8 +2085,6 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
 
         # Queue results via NEW worker helper (handles all PLC writes)
         worker.queue_vision_result(
-            object_detected=object_detected,
-            object_ok=object_ok,
             defect_detected=defect_detected,
             yellow=yellow,
             white=white,
@@ -2100,7 +2101,7 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
             'detected_color': detected_color,
             'color_code': color_code,
             'confidence': float(confidence),
-            'object_count': 1 if object_detected else 0,
+            'object_count': 1 if result_present else 0,
             'vote_counts': vote_counts,
             'message': f"Completed (NEW): {detected_color or 'none'} ({confidence}%)"
         })
@@ -3060,7 +3061,6 @@ def vision_detect():
         # Run defect detection if enabled (currently disabled)
         defect_count = 0
         defect_detected = False
-        object_ok = True
         
         if defect_detection_enabled:
             results['defects_found'] = False
@@ -3079,14 +3079,10 @@ def vision_detect():
                         defect_count = sum(1 for item in defect_data.values() 
                                          if item.get('defect_results', {}).get('defects_found', False))
                         defect_detected = defect_count > 0
-                        object_ok = not defect_detected
             except Exception as e:
                 logger.debug(f"Error reading defect data: {e}")
 
-        object_count = results.get('object_count', 0)
         queue_vision_result(
-            object_detected=object_count > 0,
-            object_ok=object_ok,
             defect_detected=defect_detected
         )
 
@@ -3716,8 +3712,8 @@ def get_smart_factory_data():
         production_counter = legacy_cache.get('db123', {}).get('counter', 0)
         conveyor_busy = legacy_cache.get('db123', {}).get('busy', False)
         conveyor_running = conveyor_busy or legacy_cache.get('db123', {}).get('start', False)
-        gantry_connected = legacy_cache.get('db123', {}).get('robot_connected', False)
-        gantry_busy = legacy_cache.get('db123', {}).get('robot_busy', False)
+        gantry_connected = legacy_cache.get('db123', {}).get('gantry_power_ok', False)
+        gantry_busy = legacy_cache.get('db123', {}).get('gantry_busy', False)
         gantry_running = gantry_connected and gantry_busy
         fault_detected = legacy_cache.get('db123', {}).get('fault', False)
         plc_connected = legacy_cache.get('plc_connected', False)

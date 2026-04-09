@@ -40,26 +40,26 @@ def mock_vision_processor(cache_snapshot: dict, worker: PLCWorker):
     time.sleep(0.15)
 
     # Get current counters from cache snapshot
-    object_num = cache_snapshot.get('object_number', 0)
+    cycle_count = (
+        cache_snapshot.get('yellow_count', 0)
+        + cache_snapshot.get('white_count', 0)
+        + cache_snapshot.get('steel_count', 0)
+        + cache_snapshot.get('aluminum_count', 0)
+    )
 
     # Simulate detection results
-    detected = True
-    defect = (object_num % 5 == 0)  # Every 5th object is a defect
+    defect = (cycle_count % 5 == 0)  # Every 5th object is a defect
     color = 'yellow' if not defect else 'reject'
 
-    logger.info(f"🔍 Detection: {color}, objects will be {object_num + 1}")
+    logger.info(f"🔍 Detection: {color}, cycles will be {cycle_count + 1}")
 
     # Queue result using helper method (NO direct worker.client access!)
     worker.queue_vision_result(
-        object_detected=detected,
-        object_ok=not defect,
         defect_detected=defect,
         yellow=(color == 'yellow'),
         white=(color == 'white'),
         steel=(color == 'steel'),
-        aluminum=(color == 'aluminum'),
-        object_number=None,  # Auto-increment
-        defect_number=None   # Auto-increment
+        aluminum=(color == 'aluminum')
     )
 
     logger.info(f"✅ Vision processing completed")
@@ -99,8 +99,8 @@ def test_basic_connectivity():
     logger.info(f"  PLC connected: {cache['connected']}")
     logger.info(f"  Last update: {time.time() - cache['last_update']:.2f}s ago")
     logger.info(f"  Camera start: {cache['camera_start']}")
-    logger.info(f"  Robot target: X={cache['robot_target_x']}, Y={cache['robot_target_y']}, Z={cache['robot_target_z']}")
-    logger.info(f"  Object count: {cache['object_number']}")
+    logger.info(f"  Robot target: X={cache['db125_target_x']}, Y={cache['db125_target_y']}, Z={cache['db125_target_z']}")
+    logger.info(f"  Yellow bit: {cache['yellow_cube_detected']}")
 
     worker.stop()
 
@@ -134,8 +134,8 @@ def test_read_performance():
     for _ in range(iterations):
         cache = worker.get_cache_snapshot()
         _ = cache['camera_start']
-        _ = cache['robot_busy']
-        _ = cache['object_number']
+        _ = cache['db125_busy']
+        _ = cache['yellow_cube_detected']
     end = time.perf_counter()
 
     cache_time_ms = ((end - start) / iterations) * 1000
@@ -222,11 +222,11 @@ def test_vision_handshake():
             f"Start={cache['camera_start']} | "
             f"Busy={cache['camera_busy']} | "
             f"Done={cache['camera_completed']} | "
-            f"Objects={cache['object_number']}"
+            f"Yellow={cache['yellow_cube_detected']} | Metal={cache['metal_cube_detected']}"
         )
 
         # Check if we've completed at least one cycle
-        if cache['object_number'] > 0:
+        if cache['camera_completed'] or cache['yellow_cube_detected'] or cache['metal_cube_detected']:
             logger.info("\n✅ Handshake completed successfully!")
             break
     else:

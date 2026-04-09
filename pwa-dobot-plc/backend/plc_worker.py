@@ -27,22 +27,6 @@ MAIN_DB_DEFAULTS = {
     'hmi_start': {'byte': 0, 'bit': 0, 'kind': 'bool'},
     'hmi_stop': {'byte': 0, 'bit': 1, 'kind': 'bool'},
     'hmi_reset': {'byte': 0, 'bit': 2, 'kind': 'bool'},
-    'robot_connected': {'byte': 2, 'bit': 0, 'kind': 'bool'},
-    'robot_busy': {'byte': 2, 'bit': 1, 'kind': 'bool'},
-    'robot_cycle_complete': {'byte': 2, 'bit': 2, 'kind': 'bool'},
-    'robot_target_x': {'byte': 46, 'kind': 'int'},
-    'robot_target_y': {'byte': 48, 'kind': 'int'},
-    'robot_target_z': {'byte': 50, 'kind': 'int'},
-    'robot_current_x': {'byte': 52, 'kind': 'int'},
-    'robot_current_y': {'byte': 54, 'kind': 'int'},
-    'robot_current_z': {'byte': 56, 'kind': 'int'},
-    'robot_status_code': {'byte': 42, 'kind': 'int'},
-    'robot_error_code': {'byte': 6, 'kind': 'int'},
-    'cube_type': {'byte': 2, 'kind': 'int'},
-    'conveyor1_start': {'byte': 74, 'bit': 0, 'kind': 'bool'},
-    'conveyor1_stop': {'byte': 74, 'bit': 0, 'kind': 'bool'},
-    'conveyor2_start': {'byte': 74, 'bit': 1, 'kind': 'bool'},
-    'conveyor2_stop': {'byte': 74, 'bit': 1, 'kind': 'bool'},
     'material_type': {'byte': 2, 'kind': 'int'},
     'quarantined_count': {'byte': 4, 'kind': 'int'},
     'defect_count': {'byte': 6, 'kind': 'int'},
@@ -67,8 +51,18 @@ MAIN_DB_DEFAULTS = {
     'system_safety_ok': {'byte': 40, 'bit': 0, 'kind': 'bool'},
     'system_no_faults': {'byte': 40, 'bit': 1, 'kind': 'bool'},
     'system_active_fault': {'byte': 40, 'bit': 2, 'kind': 'bool'},
-    'system_startup_completed': {'byte': 44, 'bit': 0, 'kind': 'bool'},
     'system_state': {'byte': 42, 'kind': 'int'},
+    'system_startup_completed': {'byte': 44, 'bit': 0, 'kind': 'bool'},
+    'cube_in_quarantine': {'byte': 44, 'bit': 1, 'kind': 'bool'},
+    'pickup_location_x': {'byte': 46, 'kind': 'int'},
+    'pickup_location_y': {'byte': 48, 'kind': 'int'},
+    'pickup_location_z': {'byte': 50, 'kind': 'int'},
+    'quarantine_location_x': {'byte': 52, 'kind': 'int'},
+    'quarantine_location_y': {'byte': 54, 'kind': 'int'},
+    'quarantine_location_z': {'byte': 56, 'kind': 'int'},
+    'pallet_home_x': {'byte': 58, 'kind': 'int'},
+    'pallet_home_y': {'byte': 60, 'kind': 'int'},
+    'pallet_home_z': {'byte': 62, 'kind': 'int'},
     'pallet_row1': {'byte': 64, 'kind': 'row', 'width': 3},
     'pallet_row2': {'byte': 66, 'kind': 'row', 'width': 3},
     'pallet_row3': {'byte': 68, 'kind': 'row', 'width': 3},
@@ -77,6 +71,7 @@ MAIN_DB_DEFAULTS = {
     'conveyor1_override': {'byte': 74, 'bit': 0, 'kind': 'bool'},
     'conveyor2_override': {'byte': 74, 'bit': 1, 'kind': 'bool'},
     'linear_override': {'byte': 74, 'bit': 2, 'kind': 'bool'},
+    'confirm_reset': {'byte': 74, 'bit': 3, 'kind': 'bool'},
 }
 
 CAMERA_DB_DEFAULTS = {
@@ -381,27 +376,7 @@ class PLCWorker:
             'hmi_stop': False,
             'hmi_reset': False,
 
-            # Robot (byte 2-21)
-            'robot_connected': False,
-            'robot_busy': False,
-            'robot_cycle_complete': False,
-            'robot_target_x': 0,
-            'robot_target_y': 0,
-            'robot_target_z': 0,
-            'robot_current_x': 0,
-            'robot_current_y': 0,
-            'robot_current_z': 0,
-            'robot_status_code': 0,
-            'robot_error_code': 0,
-            'cube_type': 0,
-
-            # Conveyors (byte 22-25)
-            'conveyor1_start': False,
-            'conveyor1_stop': False,
-            'conveyor2_start': False,
-            'conveyor2_stop': False,
-
-            # Camera & Vision (byte 26-33)
+            # Camera & Vision
             'camera_start': False,        # READ-ONLY (PLC → Pi)
             'camera_connected': False,
             'camera_busy': False,
@@ -464,6 +439,16 @@ class PLCWorker:
             'system_active_fault': False,
             'system_startup_completed': False,
             'system_state': 0,
+            'cube_in_quarantine': False,
+            'pickup_location_x': 0,
+            'pickup_location_y': 0,
+            'pickup_location_z': 0,
+            'quarantine_location_x': 0,
+            'quarantine_location_y': 0,
+            'quarantine_location_z': 0,
+            'pallet_home_x': 0,
+            'pallet_home_y': 0,
+            'pallet_home_z': 0,
 
             # Pallet (byte 76-85)
             'pallet_row1': [False] * 3,
@@ -476,6 +461,7 @@ class PLCWorker:
             'conveyor1_override': False,  # READ-ONLY (PLC → Pi)
             'conveyor2_override': False,  # READ-ONLY (PLC → Pi)
             'linear_override': False,     # READ-ONLY (PLC → Pi)
+            'confirm_reset': False,
         }
 
     def start(self):
@@ -547,8 +533,6 @@ class PLCWorker:
 
     def queue_vision_result(
         self,
-        object_detected: bool,
-        object_ok: bool,
         defect_detected: bool,
         yellow: bool = False,
         white: bool = False,
@@ -562,14 +546,10 @@ class PLCWorker:
         Never access worker.client directly!
 
         Args:
-            object_detected: Object found in frame
-            object_ok: Object passed quality check
             defect_detected: Defect/reject detected
             yellow/white/steel/aluminum: Cube color flags
         """
         self._pending_vision_result = {
-            'object_detected': object_detected,
-            'object_ok': object_ok,
             'defect_detected': defect_detected,
             'yellow': yellow,
             'white': white,
@@ -740,24 +720,6 @@ class PLCWorker:
             self.cache['hmi_stop'] = self._main_bit(data, 'hmi_stop')
             self.cache['hmi_reset'] = self._main_bit(data, 'hmi_reset')
 
-            self.cache['robot_connected'] = self._main_bit(data, 'robot_connected')
-            self.cache['robot_busy'] = self._main_bit(data, 'robot_busy')
-            self.cache['robot_cycle_complete'] = self._main_bit(data, 'robot_cycle_complete')
-            self.cache['robot_target_x'] = self._main_int(data, 'robot_target_x')
-            self.cache['robot_target_y'] = self._main_int(data, 'robot_target_y')
-            self.cache['robot_target_z'] = self._main_int(data, 'robot_target_z')
-            self.cache['robot_current_x'] = self._main_int(data, 'robot_current_x')
-            self.cache['robot_current_y'] = self._main_int(data, 'robot_current_y')
-            self.cache['robot_current_z'] = self._main_int(data, 'robot_current_z')
-            self.cache['robot_status_code'] = self._main_int(data, 'robot_status_code')
-            self.cache['robot_error_code'] = self._main_int(data, 'robot_error_code')
-            self.cache['cube_type'] = self._main_int(data, 'cube_type')
-
-            self.cache['conveyor1_start'] = self._main_bit(data, 'conveyor1_start')
-            self.cache['conveyor1_stop'] = self._main_bit(data, 'conveyor1_stop')
-            self.cache['conveyor2_start'] = self._main_bit(data, 'conveyor2_start')
-            self.cache['conveyor2_stop'] = self._main_bit(data, 'conveyor2_stop')
-
             self.cache['material_type'] = self._main_int(data, 'material_type')
             self.cache['quarantined_count'] = self._main_int(data, 'quarantined_count')
             self.cache['defect_count'] = self._main_int(data, 'defect_count')
@@ -786,6 +748,16 @@ class PLCWorker:
             self.cache['system_active_fault'] = self._main_bit(data, 'system_active_fault')
             self.cache['system_startup_completed'] = self._main_bit(data, 'system_startup_completed')
             self.cache['system_state'] = self._main_int(data, 'system_state')
+            self.cache['cube_in_quarantine'] = self._main_bit(data, 'cube_in_quarantine')
+            self.cache['pickup_location_x'] = self._main_int(data, 'pickup_location_x')
+            self.cache['pickup_location_y'] = self._main_int(data, 'pickup_location_y')
+            self.cache['pickup_location_z'] = self._main_int(data, 'pickup_location_z')
+            self.cache['quarantine_location_x'] = self._main_int(data, 'quarantine_location_x')
+            self.cache['quarantine_location_y'] = self._main_int(data, 'quarantine_location_y')
+            self.cache['quarantine_location_z'] = self._main_int(data, 'quarantine_location_z')
+            self.cache['pallet_home_x'] = self._main_int(data, 'pallet_home_x')
+            self.cache['pallet_home_y'] = self._main_int(data, 'pallet_home_y')
+            self.cache['pallet_home_z'] = self._main_int(data, 'pallet_home_z')
 
             self.cache['pallet_row1'] = self._main_row(data, 'pallet_row1')
             self.cache['pallet_row2'] = self._main_row(data, 'pallet_row2')
@@ -796,6 +768,7 @@ class PLCWorker:
             self.cache['conveyor1_override'] = self._main_bit(data, 'conveyor1_override')
             self.cache['conveyor2_override'] = self._main_bit(data, 'conveyor2_override')
             self.cache['linear_override'] = self._main_bit(data, 'linear_override')
+            self.cache['confirm_reset'] = self._main_bit(data, 'confirm_reset')
 
     def _decode_camera_db(self, data: bytearray):
         """Decode the camera PLC DB into cache (called by worker thread only)."""
@@ -832,18 +805,6 @@ class PLCWorker:
             self.cache['db125_target_x'] = self._robot_int(data, 'target_x')
             self.cache['db125_target_y'] = self._robot_int(data, 'target_y')
             self.cache['db125_target_z'] = self._robot_int(data, 'target_z')
-            # Keep legacy robot cache keys populated from DB125 so older endpoints still work.
-            self.cache['robot_connected'] = self.cache['db125_connected']
-            self.cache['robot_busy'] = self.cache['db125_busy']
-            self.cache['robot_cycle_complete'] = self.cache['db125_cycle_complete']
-            self.cache['robot_status_code'] = self.cache['db125_robot_status_code']
-            self.cache['robot_error_code'] = self.cache['db125_error_code']
-            self.cache['robot_current_x'] = self.cache['db125_x_position']
-            self.cache['robot_current_y'] = self.cache['db125_y_position']
-            self.cache['robot_current_z'] = self.cache['db125_z_position']
-            self.cache['robot_target_x'] = self.cache['db125_target_x']
-            self.cache['robot_target_y'] = self.cache['db125_target_y']
-            self.cache['robot_target_z'] = self.cache['db125_target_z']
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""

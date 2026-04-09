@@ -851,22 +851,6 @@
       { key: 'hmi_start', label: 'HMI Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'hmi_stop', label: 'HMI Stop', type: 'bool', defaultByte: 0, defaultBit: 1 },
       { key: 'hmi_reset', label: 'HMI Reset', type: 'bool', defaultByte: 0, defaultBit: 2 },
-      { key: 'robot_connected', label: 'Material Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 0 },
-      { key: 'robot_busy', label: 'Quarantine Count Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 1 },
-      { key: 'robot_cycle_complete', label: 'Defect Count Alias / Legacy Bit', type: 'bool', defaultByte: 2, defaultBit: 2 },
-      { key: 'robot_target_x', label: 'Pickup Location X', type: 'int', defaultByte: 46 },
-      { key: 'robot_target_y', label: 'Pickup Location Y', type: 'int', defaultByte: 48 },
-      { key: 'robot_target_z', label: 'Pickup Location Z', type: 'int', defaultByte: 50 },
-      { key: 'robot_current_x', label: 'Quarantine Location X', type: 'int', defaultByte: 52 },
-      { key: 'robot_current_y', label: 'Quarantine Location Y', type: 'int', defaultByte: 54 },
-      { key: 'robot_current_z', label: 'Quarantine Location Z', type: 'int', defaultByte: 56 },
-      { key: 'robot_status_code', label: 'System State Alias', type: 'int', defaultByte: 42 },
-      { key: 'robot_error_code', label: 'Defect Count Alias', type: 'int', defaultByte: 6 },
-      { key: 'cube_type', label: 'Cube Material', type: 'int', defaultByte: 2 },
-      { key: 'conveyor1_start', label: 'Conveyor1 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 0 },
-      { key: 'conveyor1_stop', label: 'Conveyor1 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 0 },
-      { key: 'conveyor2_start', label: 'Conveyor2 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 1 },
-      { key: 'conveyor2_stop', label: 'Conveyor2 Override Alias', type: 'bool', defaultByte: 74, defaultBit: 1 },
       { key: 'material_type', label: 'Material Type', type: 'int', defaultByte: 2 },
       { key: 'quarantined_count', label: 'Quarantined Count', type: 'int', defaultByte: 4 },
       { key: 'defect_count', label: 'Defect Count', type: 'int', defaultByte: 6 },
@@ -891,16 +875,27 @@
       { key: 'system_safety_ok', label: 'System Safety OK', type: 'bool', defaultByte: 40, defaultBit: 0 },
       { key: 'system_no_faults', label: 'System No Faults', type: 'bool', defaultByte: 40, defaultBit: 1 },
       { key: 'system_active_fault', label: 'System Active Fault', type: 'bool', defaultByte: 40, defaultBit: 2 },
-      { key: 'system_startup_completed', label: 'System Startup Completed', type: 'bool', defaultByte: 44, defaultBit: 0 },
       { key: 'system_state', label: 'System State', type: 'int', defaultByte: 42 },
-      { key: 'pallet_row1', label: 'Pallet Row 1 Base', type: 'row4', defaultByte: 64 },
-      { key: 'pallet_row2', label: 'Pallet Row 2 Base', type: 'row4', defaultByte: 66 },
-      { key: 'pallet_row3', label: 'Pallet Row 3 Base', type: 'row4', defaultByte: 68 },
-      { key: 'pallet_row4', label: 'Pallet Row 4 Base', type: 'row4', defaultByte: 70 },
+      { key: 'system_startup_completed', label: 'System Startup Completed', type: 'bool', defaultByte: 44, defaultBit: 0 },
+      { key: 'cube_in_quarantine', label: 'Cube In Quarantine', type: 'bool', defaultByte: 44, defaultBit: 1 },
+      { key: 'pickup_location_x', label: 'Pickup Location X', type: 'int', defaultByte: 46 },
+      { key: 'pickup_location_y', label: 'Pickup Location Y', type: 'int', defaultByte: 48 },
+      { key: 'pickup_location_z', label: 'Pickup Location Z', type: 'int', defaultByte: 50 },
+      { key: 'quarantine_location_x', label: 'Quarantine Location X', type: 'int', defaultByte: 52 },
+      { key: 'quarantine_location_y', label: 'Quarantine Location Y', type: 'int', defaultByte: 54 },
+      { key: 'quarantine_location_z', label: 'Quarantine Location Z', type: 'int', defaultByte: 56 },
+      { key: 'pallet_home_x', label: 'Pallet Home X', type: 'int', defaultByte: 58 },
+      { key: 'pallet_home_y', label: 'Pallet Home Y', type: 'int', defaultByte: 60 },
+      { key: 'pallet_home_z', label: 'Pallet Home Z', type: 'int', defaultByte: 62 },
+      { key: 'pallet_row1', label: 'Pallet Row 1 Base', type: 'row', defaultByte: 64 },
+      { key: 'pallet_row2', label: 'Pallet Row 2 Base', type: 'row', defaultByte: 66 },
+      { key: 'pallet_row3', label: 'Pallet Row 3 Base', type: 'row', defaultByte: 68 },
+      { key: 'pallet_row4', label: 'Pallet Row 4 Base', type: 'row', defaultByte: 70 },
       { key: 'pallet_full', label: 'Pallet Full', type: 'bool', defaultByte: 72, defaultBit: 0 },
       { key: 'conveyor1_override', label: 'Conveyor1 Override', type: 'bool', defaultByte: 74, defaultBit: 0 },
       { key: 'conveyor2_override', label: 'Conveyor2 Override', type: 'bool', defaultByte: 74, defaultBit: 1 },
-      { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 74, defaultBit: 2 }
+      { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 74, defaultBit: 2 },
+      { key: 'confirm_reset', label: 'Confirm Reset', type: 'bool', defaultByte: 74, defaultBit: 3 }
     ];
 
     const CAMERA_DB_TAG_FIELDS = [
@@ -1055,7 +1050,7 @@
     function getAddressPreview(dbNumber, field, byteValue, bitValue) {
       if (field.type === 'bool') return `DB${dbNumber}.DBX${byteValue}.${bitValue}`;
       if (field.type === 'real') return `DB${dbNumber}.DBD${byteValue}`;
-      if (field.type === 'row4') return `DB${dbNumber}.DBX${byteValue}.0-3`;
+      if (field.type === 'row') return `DB${dbNumber}.DBX${byteValue}.0-2`;
       return `DB${dbNumber}.DBW${byteValue}`;
     }
 

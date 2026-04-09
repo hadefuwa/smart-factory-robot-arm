@@ -84,8 +84,6 @@ def get_plc_cache():
 
 
 def queue_vision_result(
-    object_detected: bool,
-    object_ok: bool,
     defect_detected: bool,
     yellow: bool = False,
     white: bool = False,
@@ -100,8 +98,6 @@ def queue_vision_result(
         return
 
     plc_worker.queue_vision_result(
-        object_detected=object_detected,
-        object_ok=object_ok,
         defect_detected=defect_detected,
         yellow=yellow,
         white=white,
@@ -148,9 +144,9 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
     try:
         cache = get_plc_cache()
         if connected is None:
-            connected = cache.get('robot_connected', False)
+            connected = cache.get('db125_connected', False)
         if busy is None:
-            busy = cache.get('robot_busy', False)
+            busy = cache.get('db125_busy', False)
 
         byte_writes = {}
         for field_name, value in (
@@ -164,7 +160,7 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         cycle_tag = plc_worker.robot_db_tags.get('cycle_complete')
         if cycle_tag:
             entry = byte_writes.setdefault(cycle_tag['byte'], bytearray(1))
-            set_bool(entry, 0, cycle_tag['bit'], cache.get('robot_cycle_complete', False))
+            set_bool(entry, 0, cycle_tag['bit'], cache.get('db125_cycle_complete', False))
 
         for byte_offset, byte_data in byte_writes.items():
             plc_worker.queue_write(plc_worker.robot_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
@@ -270,29 +266,29 @@ class PLCClientCompatWrapper:
         """Read target pose (from cache)"""
         cache = self.worker.get_cache_snapshot()
         return {
-            'x': cache.get('robot_target_x', 0),
-            'y': cache.get('robot_target_y', 0),
-            'z': cache.get('robot_target_z', 0),
+            'x': cache.get('db125_target_x', 0),
+            'y': cache.get('db125_target_y', 0),
+            'z': cache.get('db125_target_z', 0),
         }
 
     def read_current_pose(self, *args, **kwargs):
         """Read current pose (from cache)"""
         cache = self.worker.get_cache_snapshot()
         return {
-            'x': cache.get('robot_current_x', 0),
-            'y': cache.get('robot_current_y', 0),
-            'z': cache.get('robot_current_z', 0),
+            'x': cache.get('db125_x_position', 0),
+            'y': cache.get('db125_y_position', 0),
+            'z': cache.get('db125_z_position', 0),
         }
 
     def read_robot_status(self, *args, **kwargs):
         """Read robot status (from cache)"""
         cache = self.worker.get_cache_snapshot()
         return {
-            'connected': cache.get('robot_connected', False),
-            'busy': cache.get('robot_busy', False),
-            'cycle_complete': cache.get('robot_cycle_complete', False),
-            'status_code': cache.get('robot_status_code', 0),
-            'error_code': cache.get('robot_error_code', 0),
+            'connected': cache.get('db125_connected', False),
+            'busy': cache.get('db125_busy', False),
+            'cycle_complete': cache.get('db125_cycle_complete', False),
+            'status_code': cache.get('db125_robot_status_code', 0),
+            'error_code': cache.get('db125_error_code', 0),
         }
 
     def write_vision_tags(self, tags, *args, **kwargs):
@@ -331,13 +327,13 @@ class PLCClientCompatWrapper:
             'suction': False,
             'ready': cache.get('camera_connected', False),
             'busy': (
-                cache.get('robot_busy', False)
+                cache.get('db125_busy', False)
                 or cache.get('gantry_busy', False)
                 or cache.get('camera_busy', False)
             ),
             'error': (
                 cache.get('system_active_fault', False)
-                or bool(cache.get('robot_error_code', 0))
+                or bool(cache.get('db125_error_code', 0))
             )
         }
 
