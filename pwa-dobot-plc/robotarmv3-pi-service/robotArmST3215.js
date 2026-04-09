@@ -643,6 +643,34 @@ setTimeout(resolve, 1);
     }
 
     /**
+     * Hold at the current physical position.
+     * Reads the present position register and writes it back as the goal,
+     * then enables torque. This locks the servo in place without snapping
+     * to a previously commanded angle.
+     * @returns {boolean} True if successful
+     */
+    async holdCurrentPosition() {
+        try {
+            // Read present position (2 bytes, little-endian)
+            const posData = await this.readData(STS_PRESENT_POSITION_L, 2);
+            if (!posData || posData.length < 2) throw new Error('Could not read present position');
+            const presentPos = posData[0] | (posData[1] << 8);
+
+            // Write present position as goal position (servo stays put)
+            await this.writeData(STS_GOAL_POSITION_L, [this.stsLobyte(presentPos), this.stsHibyte(presentPos)]);
+
+            // Ensure torque is on
+            await this.writeData(STS_TORQUE_ENABLE, [1]);
+
+            if (DEBUG) console.log(`Servo ${this.servoId}: Holding at position ${presentPos}`);
+            return true;
+        } catch (error) {
+            console.error(`Servo ${this.servoId}: Failed to hold position:`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * Disable torque (stop servo)
      * @returns {boolean} True if successful
      */

@@ -604,6 +604,32 @@ async function handleCommand(ws, data) {
             }
             break;
             
+        case 'holdAllJoints': {
+            // Read current position from each servo and write it back as goal, then enable torque.
+            // This locks joints in place without snapping to a previously commanded angle.
+            const holdResults = [];
+            for (let hi = 0; hi < servos.length; hi++) {
+                if (servos[hi] !== null) {
+                    const ok = await servos[hi].holdCurrentPosition();
+                    holdResults.push({ joint: hi + 1, held: ok });
+                }
+            }
+            ws.send(JSON.stringify({ type: 'success', message: 'Holding all joints at current position', results: holdResults }));
+            break;
+        }
+
+        case 'holdJoint': {
+            // Hold one specific joint at its current physical position.
+            const holdJointIdx = (data.joint || 1) - 1;
+            if (holdJointIdx < 0 || holdJointIdx >= servos.length || servos[holdJointIdx] === null) {
+                ws.send(JSON.stringify({ type: 'error', message: 'Joint not available: ' + data.joint }));
+                break;
+            }
+            const held = await servos[holdJointIdx].holdCurrentPosition();
+            ws.send(JSON.stringify({ type: held ? 'success' : 'error', message: held ? ('Joint ' + data.joint + ' holding') : ('Failed to hold joint ' + data.joint) }));
+            break;
+        }
+
         case 'stopJoint':
             // Stop a specific servo
             const stopJointNumber = data.joint - 1;

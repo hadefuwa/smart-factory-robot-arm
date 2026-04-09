@@ -8,6 +8,28 @@
     lastJoints: []
   };
 
+  var PLC_DB125_FIELDS = [
+    { key: 'connected', label: 'Connected', type: 'bool' },
+    { key: 'busy', label: 'Busy', type: 'bool' },
+    { key: 'move_complete', label: 'Move Complete', type: 'bool' },
+    { key: 'at_home', label: 'At Home', type: 'bool' },
+    { key: 'at_pickup_position', label: 'At Pickup', type: 'bool' },
+    { key: 'at_pallet_position', label: 'At Pallet', type: 'bool' },
+    { key: 'at_quarantine_position', label: 'At Quarantine', type: 'bool' },
+    { key: 'gripper_active', label: 'Gripper Active', type: 'bool' },
+    { key: 'cycle_complete', label: 'Cycle Complete', type: 'bool' },
+    { key: 'robot_status_code', label: 'Status Code', type: 'int' },
+    { key: 'error_code', label: 'Error Code', type: 'int' },
+    { key: 'x_position', label: 'X Position', type: 'int', unit: 'mm' },
+    { key: 'y_position', label: 'Y Position', type: 'int', unit: 'mm' },
+    { key: 'z_position', label: 'Z Position', type: 'int', unit: 'mm' },
+    { key: 'home_command', label: 'Home Command', type: 'bool' },
+    { key: 'pickup_command', label: 'Pickup Command', type: 'bool' },
+    { key: 'target_x', label: 'Target X', type: 'int', unit: 'mm' },
+    { key: 'target_y', label: 'Target Y', type: 'int', unit: 'mm' },
+    { key: 'target_z', label: 'Target Z', type: 'int', unit: 'mm' }
+  ];
+
   // ── helpers ──────────────────────────────────────────────────────────────
 
   function el(id) { return document.getElementById(id); }
@@ -39,6 +61,43 @@
   function dbgOut(elId, data) {
     var e = el(elId);
     if (e) e.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  }
+
+  function formatPlcValue(field, value) {
+    if (field.type === 'bool') return value ? 'TRUE' : 'FALSE';
+    if (value === null || value === undefined) return '—';
+    return String(value) + (field.unit ? ' ' + field.unit : '');
+  }
+
+  function renderPlcDb125(payload) {
+    var grid = el('plcVarGrid');
+    var badge = el('plcDb125Badge');
+    if (!grid) return;
+
+    var tags = (payload && payload.tags) || {};
+    var mapping = (payload && payload.mapping) || {};
+    var dbNumber = (payload && payload.db_number) || 125;
+    var plcConnected = !!(payload && payload.plc_connected);
+
+    if (badge) {
+      badge.textContent = 'PLC DB' + dbNumber + (plcConnected ? ' • Online' : ' • Offline');
+    }
+
+    grid.innerHTML = PLC_DB125_FIELDS.map(function (field) {
+      var value = tags[field.key];
+      var mappingInfo = mapping[field.key] || {};
+      var address = field.type === 'bool'
+        ? ('DB' + dbNumber + '.DBX' + (mappingInfo.byte || 0) + '.' + (mappingInfo.bit || 0))
+        : ('DB' + dbNumber + '.DBW' + (mappingInfo.byte || 0));
+      var boolClass = field.type === 'bool' ? (value ? ' bool-true' : ' bool-false') : '';
+
+      return '' +
+        '<div class="plc-var-card">' +
+          '<div class="plc-var-label">' + field.label + '</div>' +
+          '<div class="plc-var-value' + boolClass + '">' + formatPlcValue(field, value) + '</div>' +
+          '<div class="plc-var-meta">' + address + '</div>' +
+        '</div>';
+    }).join('');
   }
 
   async function withBtn(btn, fn) {
@@ -259,12 +318,17 @@
 
   async function setTorqueAll(enabled) {
     try {
-      for (var i = 1; i <= 6; i++) {
-        try {
-          await cmd({ command: enabled ? 'startServo' : 'stopJoint', joint: i });
-        } catch (_) {}
+      if (enabled) {
+        // Hold at current physical position — reads present position and writes it
+        // back as goal before enabling torque, so joints don't snap to a stale angle.
+        await cmd({ command: 'holdAllJoints' });
+        showMsg('Holding all joints at current position');
+      } else {
+        for (var i = 1; i <= 6; i++) {
+          try { await cmd({ command: 'stopJoint', joint: i }); } catch (_) {}
+        }
+        showMsg('Torque disabled — joints free to move');
       }
-      showMsg('Torque ' + (enabled ? 'enabled' : 'disabled') + ' for all joints');
     } catch (e) {
       showMsg('Torque error: ' + e.message, true);
     }
@@ -319,11 +383,17 @@
 
   async function pollStatus() {
     try {
-      var data = await apiRequest('/api/robot-arm/status');
+      var results = await Promise.all([
+        apiRequest('/api/robot-arm/status'),
+        apiRequest('/api/plc/db125/read').catch(function () { return null; })
+      ]);
+      var data = results[0];
+      var plcDb125 = results[1];
       var box = el('statusBox');
       if (box) box.textContent = JSON.stringify(data, null, 2);
       var tEl = el('lastPollTime');
       if (tEl) tEl.textContent = 'Last: ' + new Date().toLocaleTimeString();
+      renderPlcDb125(plcDb125);
 
       if (data.connected) {
         setConnected(true, 'Online');
@@ -338,6 +408,7 @@
       setConnected(false, 'Error');
       var box2 = el('statusBox');
       if (box2) box2.textContent = 'Poll error: ' + e.message;
+      renderPlcDb125(null);
     }
   }
 
