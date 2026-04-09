@@ -395,6 +395,15 @@
     }
   }
 
+  function setManualMoveEnabled(enabled) {
+    ['targetX', 'targetY', 'targetZ', 'xyzSpeed', 'moveXYZBtn'].forEach(function (id) {
+      var e = el(id);
+      if (e) e.disabled = !enabled;
+    });
+    var lock = el('manualMoveLock');
+    if (lock) lock.style.display = enabled ? 'none' : '';
+  }
+
   function enableManualOverride() {
     plcAuto.manualOverride = true;
     plcAuto.overrideSecsLeft = 600; // 10 min
@@ -402,6 +411,7 @@
     plcAuto.overrideCountdownTimer = window.setInterval(tickOverrideCountdown, 1000);
     var cdEl = el('overrideCountdown');
     if (cdEl) { cdEl.textContent = '10:00'; cdEl.style.display = ''; }
+    setManualMoveEnabled(true);
     updatePlcAutoBadge();
     showMsg('Manual override ON — PLC auto-move paused for 10 min');
   }
@@ -414,6 +424,7 @@
     if (cdEl) cdEl.style.display = 'none';
     var tog = el('manualOverrideToggle');
     if (tog) tog.checked = false;
+    setManualMoveEnabled(false);
     updatePlcAutoBadge();
     showMsg('Manual override OFF — PLC auto-move resumed');
   }

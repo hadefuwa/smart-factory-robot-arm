@@ -300,28 +300,30 @@
               </div>
 
               <!-- Target position -->
-              <div class="xyz-card">
-                <h4><i class="material-icons" style="font-size:16px">place</i> Move to Target XYZ</h4>
+              <div class="xyz-card" id="manualMoveCard">
+                <h4><i class="material-icons" style="font-size:16px">place</i> Move to Target XYZ
+                  <span id="manualMoveLock" style="font-size:0.7rem;font-weight:400;color:var(--text-muted);margin-left:0.5rem">— enable Manual Override to use</span>
+                </h4>
                 <div class="ctrl-row" style="flex-wrap:nowrap;gap:0.5rem">
                   <div class="ra-field">
                     <label class="ra-label">X (mm)</label>
-                    <input class="ra-input" id="targetX" type="number" value="300" step="1" style="width:74px">
+                    <input class="ra-input" id="targetX" type="number" value="300" step="1" style="width:74px" disabled>
                   </div>
                   <div class="ra-field">
                     <label class="ra-label">Y (mm)</label>
-                    <input class="ra-input" id="targetY" type="number" value="0" step="1" style="width:74px">
+                    <input class="ra-input" id="targetY" type="number" value="0" step="1" style="width:74px" disabled>
                   </div>
                   <div class="ra-field">
                     <label class="ra-label">Z (mm)</label>
-                    <input class="ra-input" id="targetZ" type="number" value="260" step="1" style="width:74px">
+                    <input class="ra-input" id="targetZ" type="number" value="260" step="1" style="width:74px" disabled>
                   </div>
                   <div class="ra-field">
                     <label class="ra-label">Speed</label>
-                    <input class="ra-input" id="xyzSpeed" type="number" value="1500" min="0" max="3400" style="width:74px">
+                    <input class="ra-input" id="xyzSpeed" type="number" value="1500" min="0" max="3400" style="width:74px" disabled>
                   </div>
                   <div class="ra-field" style="justify-content:flex-end">
                     <label class="ra-label">&nbsp;</label>
-                    <button class="ra-btn ra-btn-primary" id="moveXYZBtn">
+                    <button class="ra-btn ra-btn-primary" id="moveXYZBtn" disabled>
                       <i class="material-icons" style="font-size:16px">send</i> Move
                     </button>
                   </div>
