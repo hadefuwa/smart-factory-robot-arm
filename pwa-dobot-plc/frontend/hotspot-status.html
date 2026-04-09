@@ -187,7 +187,7 @@
                       </td>
                     </tr>
                     <tr>
-                      <td class="text-sm">wlan0 IP (should be 192.168.4.1)</td>
+                      <td class="text-sm">AP Interface IP (should be 192.168.4.1)</td>
                       <td class="text-right">
                         <span id="wlanStatus" class="badge badge-neutral">-</span>
                       </td>
@@ -288,8 +288,13 @@
               'Hotspot looks good. Phones should be able to connect to Wi-Fi and reach http://192.168.4.1:8080.';
           } else {
             statusSummary.className = 'alert alert-warning shadow-sm mb-4';
+            var details = Array.isArray(data.failed_checks) && data.failed_checks.length
+              ? ' Failing checks: ' + data.failed_checks.join(' | ') + '.'
+              : '';
+            var ifaceHint = data.ap_interface ? ' AP interface: ' + data.ap_interface + '.' : '';
+            var ipHint = data.ap_ip ? ' Current AP IP: ' + data.ap_ip + '.' : '';
             statusSummary.textContent =
-              'Hotspot is not fully healthy yet. Check the red items in the table above.';
+              'Hotspot is not fully healthy yet. Check the red items in the table above.' + details + ifaceHint + ipHint;
           }
         })
         .catch(function (err) {

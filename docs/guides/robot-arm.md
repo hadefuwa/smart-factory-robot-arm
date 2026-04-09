@@ -52,6 +52,17 @@ The browser never talks to Node.js directly. Flask holds the persistent WebSocke
 - Angle conversion: `angleDegrees = (position - 2048) / (2048 / 180)`
 - Servo IDs 1–5 are active. Servo ID 6 is not yet physically connected.
 
+#### Torque Enable (register 40)
+
+`TORQUE_ENABLE = 1` powers the motor and commands it to hold its **last written goal position** — it does not automatically hold the current physical position. If the arm has been moved by hand while torque was off, enabling torque naively will cause the servo to snap toward the stale goal angle.
+
+The correct hold sequence (implemented in `holdCurrentPosition()`):
+1. Read the present position register.
+2. Write that position back as the goal.
+3. Enable torque.
+
+This locks the joint exactly where it sits without any movement. The **Torque On** button in the UI calls `holdAllJoints`, which does this for all joints simultaneously.
+
 ---
 
 ## Services on the Pi
@@ -60,10 +71,10 @@ Both services run on the Raspberry Pi (`pi@rpi`).
 
 | Service | Process manager | Port | Config file |
 |---------|----------------|------|-------------|
-| Flask (`app.py`) | **systemd** (`pwa-dobot-plc.service`) | 8080 HTTPS | `/etc/systemd/system/pwa-dobot-plc.service` |
+| Flask (`app.py`) | **systemd** (`smart-factory.service`) | 8080 HTTPS | `/etc/systemd/system/smart-factory.service` |
 | Node.js (`server.js`) | **systemd** (`robotarmv3-pi.service`) | 8090 WS | `/etc/systemd/system/robotarmv3-pi.service` |
 
-**Important:** Flask must only be managed by systemd. PM2 must not manage Flask. If PM2 has a `pwa-dobot-plc` entry, it will crash-loop (port 8080 already in use) and its repeated Dobot client startup calls will corrupt the SC-B1 serial session, putting all joints offline. See the [Crash Loop](#pm2-crash-loop-all-joints-go-offline) troubleshooting entry.
+**Important:** Flask must only be managed by systemd. PM2 must not manage Flask. If PM2 has a `pwa-dobot-plc` entry, it will crash-loop (port 8080 already in use) and its repeated Dobot client startup calls will corrupt the SC-B1 serial session, putting all joints offline. See the [Crash Loop](#7-pm2-crash-loop-all-joints-go-offline-discovered-2026-04-09) troubleshooting entry.
 
 ### systemd service for Node.js (`/etc/systemd/system/robotarmv3-pi.service`)
 
@@ -94,8 +105,8 @@ sudo systemctl restart robotarmv3-pi.service
 sudo journalctl -u robotarmv3-pi.service -n 50 -f
 
 # Flask app
-sudo systemctl status pwa-dobot-plc.service
-sudo systemctl restart pwa-dobot-plc.service
+sudo systemctl status smart-factory.service
+sudo systemctl restart smart-factory.service
 
 # Check what is on each port
 ss -tlnp | grep -E '8080|8090'
@@ -107,8 +118,8 @@ ss -tlnp | grep -E '8080|8090'
 
 On boot:
 
-1. Systemd starts `robotarmv3-pi.service` → Node.js opens `/dev/ttyACM0`, pings servos 1–6, initialises whichever respond.
-2. Systemd starts `pwa-dobot-plc.service` → Flask starts on port 8080. A background thread (3s delay) calls `open_robot_arm_bridge('localhost', 8090)` to connect the WebSocket bridge.
+1. Systemd starts `robotarmv3-pi.service` → Node.js loads the URDF, opens `/dev/ttyACM0`, pings servos 1–6, initialises whichever respond.
+2. Systemd starts `smart-factory.service` → Flask starts on port 8080. A background thread (3s delay) calls `open_robot_arm_bridge('localhost', 8090)` to connect the WebSocket bridge.
 3. Browser opens `robot-arm.html` → JS polls `/api/robot-arm/status` every 500ms.
 
 If Flask restarts, the bridge auto-reconnects. If Node.js restarts, the Flask bridge connection dies and Flask will return 503 until the bridge is manually reconnected or Flask also restarts.
@@ -117,7 +128,7 @@ If Flask restarts, the bridge auto-reconnects. If Node.js restarts, the Flask br
 
 ## Inverse Kinematics
 
-The arm supports Cartesian XYZ control via a numeric Jacobian-transpose IK solver ported from BenMatrixTSL's Electron app.
+The arm supports Cartesian XYZ control via a numeric Jacobian-transpose IK solver ported from BenMatrixTSL's Electron app (same physical arm).
 
 ### Files
 
@@ -145,8 +156,8 @@ Joint 2 (shoulder pitch) has `zero_offset_degrees="-90"` — when the app comman
 Numeric Jacobian-transpose iterative solver:
 - Runs up to 400 iterations with adaptive step sizing.
 - Convergence threshold: 1–10 mm XYZ error.
-- Returns `null` if the pose is unreachable or outside the workspace.
-- Geometry is loaded from `demo-kinematics.urdf` at Node.js startup.
+- Returns `null` if the pose is unreachable or outside the workspace (~529 mm radius).
+- Geometry is loaded from `demo-kinematics.urdf` once at Node.js startup.
 
 ### Node.js Dependencies
 
@@ -157,61 +168,20 @@ Numeric Jacobian-transpose iterative solver:
 cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install
 ```
 
-### WebSocket Commands
-
-#### moveToXYZ
-```json
-{ "command": "moveToXYZ", "x": 300, "y": 0, "z": 250, "speed": 1500 }
-```
-Runs IK then moves all joints to reach the target position. `speed` is optional (default 1500 steps/s).
-
-Response on success:
-```json
-{ "type": "moving", "angles": [0.0, 30.8, -56.1, -0.0, 14.4], "x": 300, "y": 0, "z": 250 }
-```
-Response if unreachable:
-```json
-{ "type": "error", "message": "moveToXYZ: position unreachable" }
-```
-
-#### inverseKinematics (IK only, no movement)
-```json
-{ "command": "inverseKinematics", "x": 300, "y": 0, "z": 250 }
-```
-Returns angles without moving the arm.
-
-Response:
-```json
-{ "type": "ikResult", "angles": [0.0, 30.8, -56.1, -0.0, 14.4] }
-```
-
-### Flask Endpoint
-
-```
-POST /api/robot-arm/move-xyz
-Body: { "x": 300, "y": 0, "z": 250, "speed": 1500 }
-```
-
-- `x`, `y`, `z` — target position in **millimetres** from the arm's base origin.
-- `speed` — optional servo speed in steps/s (default 1500).
-- `orientation` — optional tool direction vector `{"x":0,"y":0,"z":-1}`.
-
-Returns 400 if the position is unreachable.
-
 ---
 
 ## Codebase Files
 
 | File | Purpose |
 |------|---------|
-| `pwa-dobot-plc/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, and all command handlers including `moveToXYZ` and `inverseKinematics`. |
-| `pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js` | ST3215 servo driver class. Handles packet encoding/decoding, ping, readData, writeData, readQuickStatus. |
+| `pwa-dobot-plc/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, FK/IK integration, and all command handlers. |
+| `pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js` | ST3215 servo driver. Packet encoding/decoding, ping, readData, writeData, readQuickStatus, `holdCurrentPosition()`. |
 | `pwa-dobot-plc/robotarmv3-pi-service/kinematics.js` | Numeric Jacobian-transpose IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
 | `pwa-dobot-plc/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
-| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry description (link lengths, joint axes, limits). |
-| `pwa-dobot-plc/backend/app.py` | Flask app. Contains robot arm bridge state, `open_robot_arm_bridge()`, `send_robot_arm_command()`, all `/api/robot-arm/*` endpoints, and the auto-connect startup thread. |
-| `pwa-dobot-plc/frontend/robot-arm.html` | Browser UI — 4 tabs: Joint Control, Live Status, Settings, Debug. |
-| `pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js` | Frontend JS — status polling, joint card rendering, slider/input sync, all button event handlers. |
+| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint axes, limits). |
+| `pwa-dobot-plc/backend/app.py` | Flask app. Robot arm bridge state, `open_robot_arm_bridge()`, `send_robot_arm_command()`, all `/api/robot-arm/*` endpoints, auto-connect startup thread. |
+| `pwa-dobot-plc/frontend/robot-arm.html` | Browser UI — 4 tabs: Joint Control (includes XYZ section), Live Status, Settings, Debug. |
+| `pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js` | Frontend JS — status polling, joint card rendering, XYZ readout, PLC DB125 variable display, all button event handlers. |
 
 ---
 
@@ -221,13 +191,14 @@ All endpoints are relative to the Flask base URL (e.g. `https://<pi-ip>:8080`).
 
 | Method | URL | Body / notes |
 |--------|-----|--------------|
-| `GET` | `/api/robot-arm/status` | Returns bridge state and live joint status |
+| `GET` | `/api/robot-arm/status` | Returns bridge state and live joint status (including `currentXYZ`) |
 | `POST` | `/api/robot-arm/connect` | `{"host":"localhost","port":8090}` — opens WS bridge |
 | `POST` | `/api/robot-arm/disconnect` | Closes WS bridge |
-| `POST` | `/api/robot-arm/move` | `{"joint":1,"angle":45.0,"speed":1500}` |
+| `POST` | `/api/robot-arm/move` | `{"joint":1,"angle":45.0,"speed":1500}` — move one joint by angle |
 | `POST` | `/api/robot-arm/move-xyz` | `{"x":300,"y":0,"z":250,"speed":1500}` — IK then move all joints |
-| `POST` | `/api/robot-arm/stop` | Stops all joints |
+| `POST` | `/api/robot-arm/stop` | Stops all joints (disables torque) |
 | `POST` | `/api/robot-arm/command` | Generic passthrough — body is any WS command + optional `"_recvTimeout":N` (seconds) |
+| `POST` | `/api/robot-arm/scan` | `{"maxId":6}` — scan servo bus for responding IDs |
 
 The passthrough endpoint lets you send any Node.js WebSocket command directly from the browser without a dedicated Flask route.
 
@@ -241,7 +212,7 @@ WebSocket URL (internal, not browser-accessible): `ws://localhost:8090`
 ```json
 { "command": "getStatus" }
 ```
-Response:
+Response includes live joint data and the current end-effector XYZ position computed via forward kinematics:
 ```json
 {
   "type": "status",
@@ -259,10 +230,12 @@ Response:
       "isMoving": false,
       "torqueEnabled": true
     }
-  ]
+  ],
+  "currentXYZ": { "x": 305.1, "y": 1.4, "z": -21.4 }
 }
 ```
-`available: false` means the servo did not respond to its initial ping at startup.
+`available: false` means the servo did not respond to its initial ping at startup.  
+`currentXYZ` is `null` if fewer than 5 joints are available (FK cannot be computed).
 
 ### moveJoint
 ```json
@@ -270,11 +243,62 @@ Response:
 ```
 Speed range: 0–3400 steps/s. Angle range: -180–180°.
 
+### moveToXYZ
+```json
+{ "command": "moveToXYZ", "x": 300, "y": 0, "z": 250, "speed": 1500 }
+```
+Runs inverse kinematics then issues `moveToAngle` for all joints. `speed` is optional (default 1500 steps/s). `orientation` is an optional tool direction vector `{"x":0,"y":0,"z":-1}`.
+
+Response on success:
+```json
+{ "type": "moving", "angles": [0.0, 30.8, -56.1, -0.0, 14.4], "x": 300, "y": 0, "z": 250 }
+```
+Response if unreachable:
+```json
+{ "type": "error", "message": "moveToXYZ: position unreachable" }
+```
+
+### inverseKinematics (IK only, no movement)
+```json
+{ "command": "inverseKinematics", "x": 300, "y": 0, "z": 250 }
+```
+Returns the computed joint angles without moving the arm. Useful for validating a target before committing.
+
+Response:
+```json
+{ "type": "ikResult", "angles": [0.0, 30.8, -56.1, -0.0, 14.4] }
+```
+
+### holdAllJoints
+```json
+{ "command": "holdAllJoints" }
+```
+Reads the present position of each joint and writes it back as the goal position, then enables torque. Joints lock in place at exactly where they are — no snapping to a stale commanded angle. This is what the **Torque On** button calls.
+
+Response:
+```json
+{
+  "type": "success",
+  "message": "Holding all joints at current position",
+  "results": [
+    { "joint": 1, "held": true },
+    { "joint": 2, "held": true }
+  ]
+}
+```
+
+### holdJoint
+```json
+{ "command": "holdJoint", "joint": 1 }
+```
+Same as `holdAllJoints` but for a single joint.
+
 ### stopJoint / stopAllJoints
 ```json
 { "command": "stopJoint", "joint": 1 }
 { "command": "stopAllJoints" }
 ```
+Disables torque — joint becomes free to move by hand.
 
 ### setSpeed / setAcceleration
 ```json
@@ -359,7 +383,15 @@ After Flask restarts, the WebSocket bridge to Node.js was not established until 
 2. `sudo systemctl restart robotarmv3-pi.service` — restart Node.js so `initializeServos()` runs cleanly.
 3. `POST /api/robot-arm/connect {"host":"localhost","port":8090}` — re-establish the Flask bridge.
 
-**Prevention:** Flask must only be managed by systemd. Never re-add it to PM2.
+**Prevention:** Flask must only be managed by systemd (`smart-factory.service`). Never re-add it to PM2.
+
+### 8. Torque On snapping joints to stale angle
+
+**Symptom:** Pressing Torque On causes joints to jerk to an unexpected position.
+
+**Cause:** `TORQUE_ENABLE = 1` commands the servo to reach its last written goal position, not its current physical position. If the arm was moved by hand while torque was off, the stale goal is now different from where the joint sits.
+
+**Fix:** `holdCurrentPosition()` in `robotArmST3215.js` reads the present position register and writes it back as the goal before enabling torque. The **Torque On** button now calls `holdAllJoints` which does this for all joints.
 
 ---
 
@@ -367,7 +399,7 @@ After Flask restarts, the WebSocket bridge to Node.js was not established until 
 
 ### All joints offline / status returns `available: false`
 
-1. Check for PM2 crash loop (see above): `pm2 list`. If `pwa-dobot-plc` appears, delete it.
+1. Check for PM2 crash loop: `pm2 list`. If `pwa-dobot-plc` appears, delete it.
 2. Check Node.js service: `sudo systemctl status robotarmv3-pi.service`.
 3. Restart Node.js and reconnect the bridge:
    ```bash
@@ -389,6 +421,16 @@ Flask bridge not connected to Node.js.
     -X POST -H 'Content-Type: application/json' \
     -d '{"host":"localhost","port":8090}'
   ```
+
+### Torque On causes joints to jerk or snap
+
+The stale goal position in the servo doesn't match the current physical position. Use the **Torque On** button (which now calls `holdAllJoints`) rather than sending `startServo` directly. If calling the WS API manually, use `holdAllJoints` instead of `startServo`.
+
+### IK returns unreachable / move-xyz returns 400
+
+- The target XYZ is outside the arm's workspace (~529 mm radius from base origin).
+- Z must be above the base plane — very low Z values are mechanically unreachable.
+- Try a position closer to the centre of the workspace (e.g. `x=250, y=0, z=200`).
 
 ### Read timeouts (READ TIMEOUT in logs)
 
@@ -427,10 +469,10 @@ ssh pi@rpi "cd ~/sf2 && git pull"
 To restart both services after a code update:
 
 ```bash
-ssh pi@rpi "sudo systemctl restart robotarmv3-pi.service && sudo systemctl restart pwa-dobot-plc.service"
+ssh pi@rpi "sudo systemctl restart robotarmv3-pi.service && sudo systemctl restart smart-factory.service"
 ```
 
-Node.js dependencies (only needed if `package.json` changes):
+Node.js dependencies (only needed if `package.json` changes, e.g. when `@xmldom/xmldom` was added):
 
 ```bash
 ssh pi@rpi "cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install"

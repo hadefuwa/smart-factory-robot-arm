@@ -2677,44 +2677,87 @@ def hotspot_status():
         'leases_count': 0,
         'ok': False,
         'error': None,
+        'ap_interface': 'wlan0',
+        'ap_ip': None,
+        'failed_checks': [],
     }
 
     try:
+        def _service_is_active(service_name: str) -> bool:
+            """Check service state with systemctl, then fallback to process check."""
+            try:
+                result = subprocess.run(
+                    ['systemctl', 'is-active', service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                if result.stdout.strip() == 'active':
+                    return True
+            except Exception:
+                pass
+
+            # Fallback when systemctl is unavailable or service units are unusual.
+            try:
+                proc = subprocess.run(
+                    ['pgrep', '-x', service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                return proc.returncode == 0
+            except Exception:
+                return False
+
+        # Detect AP interface from hostapd config when available.
+        ap_interface = 'wlan0'
+        try:
+            hostapd_cfg = '/etc/hostapd/hostapd.conf'
+            if os.path.exists(hostapd_cfg):
+                with open(hostapd_cfg, 'r', encoding='utf-8', errors='ignore') as f:
+                    for raw_line in f:
+                        line = raw_line.strip()
+                        if line.startswith('interface='):
+                            value = line.split('=', 1)[1].strip()
+                            if value:
+                                ap_interface = value
+                            break
+        except Exception as e:
+            logger.warning(f"Error reading hostapd interface from config: {e}")
+        status['ap_interface'] = ap_interface
+
         # Check hostapd service
         try:
-            hostapd_result = subprocess.run(
-                ['systemctl', 'is-active', 'hostapd'],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            status['hostapd_active'] = hostapd_result.stdout.strip() == 'active'
+            status['hostapd_active'] = _service_is_active('hostapd')
         except Exception as e:
             logger.warning(f"Error checking hostapd status: {e}")
 
         # Check dnsmasq service
         try:
-            dnsmasq_result = subprocess.run(
-                ['systemctl', 'is-active', 'dnsmasq'],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            status['dnsmasq_active'] = dnsmasq_result.stdout.strip() == 'active'
+            status['dnsmasq_active'] = _service_is_active('dnsmasq')
         except Exception as e:
             logger.warning(f"Error checking dnsmasq status: {e}")
 
-        # Check wlan0 IP address
+        # Check AP interface IP address
         try:
             ip_result = subprocess.run(
-                ['ip', 'addr', 'show', 'wlan0'],
+                ['ip', '-4', '-o', 'addr', 'show', ap_interface],
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
-            status['wlan0_has_ap_ip'] = '192.168.4.1' in ip_result.stdout
+            ap_ip = None
+            for line in ip_result.stdout.splitlines():
+                parts = line.split()
+                if 'inet' in parts:
+                    inet_idx = parts.index('inet')
+                    if inet_idx + 1 < len(parts):
+                        ap_ip = parts[inet_idx + 1].split('/')[0]
+                        break
+            status['ap_ip'] = ap_ip
+            status['wlan0_has_ap_ip'] = ap_ip == '192.168.4.1'
         except Exception as e:
-            logger.warning(f"Error checking wlan0 IP address: {e}")
+            logger.warning(f"Error checking {ap_interface} IP address: {e}")
 
         # Count DHCP leases (connected devices)
         try:
@@ -2732,6 +2775,16 @@ def hotspot_status():
             status['dnsmasq_active'] and
             status['wlan0_has_ap_ip']
         )
+
+        if not status['hostapd_active']:
+            status['failed_checks'].append('hostapd service is not active')
+        if not status['dnsmasq_active']:
+            status['failed_checks'].append('dnsmasq service is not active')
+        if not status['wlan0_has_ap_ip']:
+            current_ip = status.get('ap_ip') or 'none'
+            status['failed_checks'].append(
+                f"{status['ap_interface']} IP is {current_ip}, expected 192.168.4.1"
+            )
 
         return jsonify(status)
     except Exception as e:
