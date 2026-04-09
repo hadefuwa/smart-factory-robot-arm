@@ -26,447 +26,413 @@
     body.sf-page-plc .sf-content {
       display: grid;
       gap: 1rem;
+      align-content: start;
     }
 
-    body.sf-page-plc .sf-section-label {
+    body.sf-page-plc .sf-template-pagehead {
+      padding-bottom: 0.4rem;
+    }
+
+    .plc-setup-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.8rem;
+      background: var(--sf-base-100);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .plc-setup-header-copy {
+      display: grid;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+
+    .plc-setup-header-copy h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      color: var(--sf-base-content);
+    }
+
+    .plc-setup-header-copy p {
+      margin: 0;
+      font-size: 0.84rem;
+      color: var(--sf-base-muted);
+      line-height: 1.45;
+      max-width: 70ch;
+    }
+
+    .plc-status-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.8rem;
+      background: var(--sf-base-100);
+    }
+
+    .plc-status-item {
+      display: grid;
+      gap: 0.2rem;
+      min-width: 0;
+    }
+
+    .plc-status-item span {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    .plc-status-item strong,
+    .plc-status-item code {
+      font-size: 0.86rem;
+      color: var(--sf-base-content);
+      word-break: break-word;
+    }
+
+    .plc-status-item code {
+      padding: 0;
+      border: none;
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .plc-page-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.35rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.8rem;
+      background: var(--sf-base-200);
+    }
+
+    .plc-page-tab {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      margin: 0 0 -0.15rem;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      min-height: 2.5rem;
+      padding: 0.65rem 0.95rem;
+      border: 1px solid transparent;
+      border-radius: 0.6rem;
+      background: transparent;
       color: var(--sf-base-muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
     }
 
-    body.sf-page-plc .sf-section-label::before {
-      content: "";
-      width: 2.25rem;
-      height: 1px;
-      background: linear-gradient(90deg, var(--sf-warning-ui), transparent);
+    .plc-page-tab:hover {
+      background: color-mix(in srgb, var(--sf-base-100) 90%, transparent);
+      color: var(--sf-base-content);
     }
 
-    body.sf-page-plc .sf-page-hero {
-      margin-bottom: 0;
+    .plc-page-tab.active {
+      background: var(--sf-base-100);
+      border-color: var(--sf-base-300);
+      color: var(--sf-base-content);
     }
 
-    body.sf-page-plc .sf-page-hero-copy {
-      display: grid;
-      gap: 0.75rem;
+    .plc-page-tab .material-icons {
+      font-size: 1rem;
     }
 
-    body.sf-page-plc .sf-page-hero-copy p:last-child {
-      max-width: 66ch;
-    }
-
-    body.sf-page-plc .sf-page-hero-chips {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      align-items: stretch;
-    }
-
-    body.sf-page-plc .sf-page-hero-chips > div {
-      display: grid;
-      gap: 0.2rem;
-      min-height: 5.25rem;
-      align-content: center;
-    }
-
-    body.sf-page-plc .sf-panel {
-      display: grid;
+    .plc-panel {
+      display: none;
       gap: 1rem;
+      padding: 1rem 1.1rem 1.1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.8rem;
+      background: var(--sf-base-100);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     }
 
-    body.sf-page-plc .sf-panel-head {
+    .plc-panel.active {
+      display: grid;
+    }
+
+    .plc-panel-header {
       display: flex;
-      align-items: start;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 1rem;
     }
 
-    body.sf-page-plc .sf-panel-head::after {
-      content: "";
-      width: 2.75rem;
-      height: 2.75rem;
-      border-radius: 0.95rem;
-      border: 1px solid var(--sf-base-300);
-      background:
-        radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--sf-warning-ui) 24%, transparent), transparent 60%),
-        var(--sf-base-200);
-      flex: 0 0 auto;
+    .plc-panel-copy {
+      display: grid;
+      gap: 0.25rem;
     }
 
-    body.sf-page-plc .sf-plc-summary-card code {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.2rem 0.45rem;
-      margin-inline: 0.2rem;
-      border-radius: 0.55rem;
-      border: 1px solid var(--sf-base-300);
-      background: var(--sf-base-100);
+    .plc-panel-copy h3 {
+      margin: 0;
+      font-size: 0.98rem;
       color: var(--sf-base-content);
-      font-size: 0.82rem;
     }
 
-    .db-map-grid {
+    .plc-panel-copy p {
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--sf-base-muted);
+      line-height: 1.4;
+      max-width: 72ch;
+    }
+
+    .plc-save-message {
+      min-height: 1.15rem;
+      font-size: 0.76rem;
+      color: var(--sf-base-muted);
+      text-align: right;
+    }
+
+    .plc-settings-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+      gap: 1rem;
+    }
+
+    .plc-settings-form,
+    .plc-grid-meta {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      align-items: start;
-      margin-bottom: 12px;
+      gap: 0.85rem 1rem;
     }
 
-    .plc-setup-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .plc-setup-form {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
+    .plc-grid-meta {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       align-items: end;
     }
 
-    .plc-setup-form label {
-      display: block;
-      font-size: 10px;
+    .plc-field {
+      display: grid;
+      gap: 0.3rem;
+    }
+
+    .plc-field label {
+      font-size: 0.72rem;
+      font-weight: 700;
       color: var(--sf-base-muted);
-      margin-bottom: 3px;
     }
 
-    .plc-setup-form input {
+    .plc-field input,
+    .plc-field select {
       width: 100%;
-      padding: 0.55rem 0.7rem;
-      background: var(--sf-base-100);
+      min-height: 2.45rem;
+      padding: 0.6rem 0.75rem;
       border: 1px solid var(--sf-base-300);
+      border-radius: 0.5rem;
+      background: var(--sf-base-100);
       color: var(--sf-base-content);
-      font-size: 12px;
-      border-radius: 8px;
-      min-height: 2.5rem;
+      font-size: 0.84rem;
     }
 
-    .plc-setup-list {
+    .plc-side-card {
+      display: grid;
+      gap: 0.75rem;
+      padding: 0.95rem 1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.65rem;
+      background: color-mix(in srgb, var(--sf-base-200) 72%, var(--sf-base-100));
+    }
+
+    .plc-side-card h4 {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--sf-base-content);
+    }
+
+    .plc-side-card p {
+      margin: 0;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--sf-base-muted);
+    }
+
+    .plc-side-list {
       display: grid;
       gap: 0.55rem;
-      font-size: 0.84rem;
-      color: var(--sf-base-muted);
     }
 
-    .plc-setup-list strong {
+    .plc-side-list strong {
       color: var(--sf-base-content);
     }
 
-    .sf-page-plc .sf-plc-editor-stage {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .sf-page-plc .sf-plc-editor-note {
-      display: grid;
-      gap: 0.25rem;
-      padding: 1rem 1.1rem;
-      border: 1px solid var(--sf-base-300);
-      border-radius: 1rem;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 92%, transparent), color-mix(in srgb, var(--sf-base-200) 85%, transparent));
-    }
-
-    .sf-page-plc .sf-plc-editor-note strong {
-      font-size: 0.92rem;
-      color: var(--sf-base-content);
-    }
-
-    .sf-page-plc .sf-plc-editor-note span {
-      font-size: 0.82rem;
-      color: var(--sf-base-muted);
-      line-height: 1.5;
-    }
-
-    .db-map-panel {
-      margin-bottom: 0;
-      padding: 1rem;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 94%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
-      border: 1px solid var(--sf-base-300);
-      border-radius: 16px;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    }
-
-    .db-map-panel .db-map-header {
+    .plc-actions {
       display: flex;
-      justify-content: space-between;
-      gap: 10px;
       flex-wrap: wrap;
-      align-items: flex-start;
-      margin-bottom: 8px;
+      gap: 0.65rem;
+      align-items: center;
     }
 
-    .db-map-panel .db-map-title {
-      margin: 0 0 4px 0;
-      font-size: 0.95rem;
-      color: var(--sf-base-content);
-    }
-
-    .db-map-panel .db-map-copy {
-      color: var(--sf-base-muted);
+    .plc-actions .btn {
+      min-height: 2.45rem;
+      padding: 0.65rem 0.95rem !important;
+      border-radius: 0.55rem;
       font-size: 0.78rem;
-      line-height: 1.35;
-      margin: 0;
-      max-width: 720px;
+      font-weight: 700;
     }
 
-    .db-map-panel .db-map-controls {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-      gap: 8px;
-      margin-bottom: 10px;
+    .plc-sheet-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    .db-map-panel .db-map-controls label {
-      display: block;
-      font-size: 10px;
+    .plc-sheet-note {
+      font-size: 0.76rem;
       color: var(--sf-base-muted);
-      margin-bottom: 3px;
     }
 
-    .db-map-panel .db-map-controls input,
-    .db-map-panel .db-map-controls select {
-      width: 100%;
-      padding: 0.55rem 0.7rem;
-      background: var(--sf-base-100);
+    .plc-sheet {
       border: 1px solid var(--sf-base-300);
-      color: var(--sf-base-content);
-      font-size: 12px;
-      border-radius: 8px;
-      min-height: 2.5rem;
-    }
-
-    .db-map-panel .db-map-table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 0;
-      table-layout: fixed;
-      border-radius: 12px;
+      border-radius: 0.65rem;
+      background: var(--sf-base-100);
       overflow: hidden;
     }
 
-    .db-map-panel .db-map-table th {
-      text-align: left;
-      padding: 6px 5px;
-      font-size: 10px;
-      color: var(--sf-base-muted);
-      border-bottom: 1px solid var(--sf-base-300);
-      white-space: nowrap;
+    .plc-sheet-scroll {
+      max-height: 58vh;
+      overflow: auto;
     }
 
-    .db-map-panel .db-map-table td {
-      padding: 8px 6px;
+    .plc-sheet-table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      font-size: 0.8rem;
+    }
+
+    .plc-sheet-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 0.55rem 0.65rem;
+      border-right: 1px solid var(--sf-base-300);
       border-bottom: 1px solid var(--sf-base-300);
+      background: color-mix(in srgb, var(--sf-base-200) 82%, var(--sf-base-100));
+      color: var(--sf-base-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      text-align: left;
+    }
+
+    .plc-sheet-table thead th:last-child,
+    .plc-sheet-table tbody td:last-child {
+      border-right: none;
+    }
+
+    .plc-sheet-table tbody td {
+      padding: 0;
+      border-right: 1px solid var(--sf-base-300);
+      border-bottom: 1px solid var(--sf-base-300);
+      background: var(--sf-base-100);
       vertical-align: middle;
     }
 
-    .db-map-panel .db-map-tag {
-      font-size: 11px;
+    .plc-sheet-table tbody tr:nth-child(even) td {
+      background: color-mix(in srgb, var(--sf-base-200) 42%, var(--sf-base-100));
+    }
+
+    .plc-sheet-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .plc-sheet-tag,
+    .plc-sheet-type,
+    .plc-sheet-address {
+      display: flex;
+      align-items: center;
+      min-height: 2.35rem;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .plc-sheet-tag {
       font-weight: 600;
       color: var(--sf-base-content);
-      line-height: 1.3;
     }
 
-    .db-map-panel .db-map-type {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 56px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      border: 1px solid var(--sf-base-300);
-      background: var(--sf-base-200);
-      color: var(--sf-base-muted);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+    .plc-sheet-type {
       text-transform: uppercase;
-    }
-
-    .db-map-panel .db-map-number {
-      width: 100%;
-      min-width: 64px;
-      max-width: 84px;
-      padding: 0.45rem 0.55rem;
-      border-radius: 8px;
-      border: 1px solid var(--sf-base-300);
-      background: var(--sf-base-100);
-      color: var(--sf-base-content);
-      font-size: 12px;
-    }
-
-    .db-map-panel .db-map-na {
+      letter-spacing: 0.03em;
+      font-size: 0.72rem;
       color: var(--sf-base-muted);
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
-    .db-map-panel .db-map-preview {
-      display: inline-flex;
-      align-items: center;
-      min-height: 32px;
-      padding: 6px 10px;
-      border-radius: 8px;
-      border: 1px solid color-mix(in srgb, var(--sf-info-ui) 22%, var(--sf-base-300));
-      background: color-mix(in srgb, var(--sf-info-ui) 8%, var(--sf-base-100));
+    .plc-sheet-address {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
       color: var(--sf-info-ui);
-      font-size: 11px;
-      font-weight: 600;
       white-space: nowrap;
     }
 
-    .db-map-panel .db-map-actions {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .db-map-panel .db-map-actions .btn {
-      padding: 0.75rem 0.85rem !important;
-      margin: 0;
-      font-size: 11px;
-      line-height: 1.2;
-      border-radius: 0.9rem;
-    }
-
-    .sf-page-plc .sf-plc-ops-grid {
-      display: grid;
-      grid-template-columns: 1.05fr 1fr;
-      gap: 1rem;
-    }
-
-    .sf-page-plc .sf-plc-status-panel {
-      padding: 1rem;
-      border: 1px solid var(--sf-base-300);
-      border-radius: 1rem;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 94%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
-    }
-
-    .sf-page-plc .status-panel {
-      margin-bottom: 0;
-    }
-
-    .sf-page-plc .status-row {
-      grid-template-columns: minmax(0, 180px) 1fr;
-      padding: 0.9rem 0;
-      border-color: var(--sf-base-300);
-    }
-
-    .sf-page-plc .controls {
-      margin: 0;
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.75rem;
-    }
-
-    .sf-page-plc .btn-control {
+    .plc-sheet-input {
       width: 100%;
-      min-height: 2.9rem;
-      padding: 0.8rem 0.95rem;
-      border-radius: 0.95rem;
-      font-size: 0.82rem;
-    }
-
-    .sf-page-plc .stats-grid {
-      margin-top: 0;
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.8rem;
-    }
-
-    .sf-page-plc .stat-box {
-      margin: 0;
-      border-radius: 1rem;
-      padding: 1rem 0.9rem;
-      text-align: left;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 96%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
-      border: 1px solid var(--sf-base-300);
-      box-shadow: none;
-    }
-
-    .sf-page-plc .stat-value {
-      font-size: clamp(1.05rem, 2vw, 1.45rem);
-    }
-
-    .sf-page-plc .sf-plc-control-stack {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .sf-page-plc .sf-plc-control-block {
-      display: grid;
-      gap: 0.75rem;
-      padding: 1rem;
-      border-radius: 1rem;
-      border: 1px solid var(--sf-base-300);
-      background: linear-gradient(180deg, color-mix(in srgb, var(--sf-base-100) 96%, transparent), color-mix(in srgb, var(--sf-base-200) 88%, transparent));
-    }
-
-    .sf-page-plc .sf-plc-control-block h4 {
-      margin: 0;
-      font-size: 0.95rem;
+      min-height: 2.35rem;
+      padding: 0.45rem 0.55rem;
+      border: none;
+      background: transparent;
       color: var(--sf-base-content);
-    }
-
-    .sf-page-plc .sf-plc-control-block p {
-      margin: 0;
-      color: var(--sf-base-muted) !important;
       font-size: 0.8rem;
-      line-height: 1.45;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
-    .sf-page-plc .sf-plc-log {
-      min-height: 24rem;
-      border-radius: 1rem;
-      border: 1px solid var(--sf-base-300);
-      background: var(--sf-base-100);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    .plc-sheet-input:focus {
+      outline: 2px solid color-mix(in srgb, var(--sf-info-ui) 50%, transparent);
+      outline-offset: -2px;
+      background: color-mix(in srgb, var(--sf-info-ui) 8%, var(--sf-base-100));
+    }
+
+    .plc-sheet-na {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.35rem;
+      color: var(--sf-base-muted);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
     @media (max-width: 1200px) {
-      .db-map-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .plc-setup-grid,
-      .plc-setup-form {
-        grid-template-columns: 1fr;
-      }
-
-      .sf-page-plc .sf-plc-ops-grid {
+      .plc-settings-grid {
         grid-template-columns: 1fr;
       }
     }
 
     @media (max-width: 900px) {
-      .sf-page-plc .sf-page-hero-chips,
-      .sf-page-plc .stats-grid,
-      .sf-page-plc .controls,
-      .db-map-panel .db-map-actions {
+      .plc-status-strip,
+      .plc-grid-meta,
+      .plc-settings-form {
         grid-template-columns: 1fr;
       }
     }
 
     @media (max-width: 720px) {
-      body.sf-page-plc .sf-panel-head {
+      .plc-panel-header,
+      .plc-setup-header {
         flex-direction: column;
       }
 
-      body.sf-page-plc .sf-panel-head::after {
-        display: none;
+      .plc-page-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
       }
 
-      .sf-page-plc .status-row {
-        grid-template-columns: 1fr;
-        gap: 0.35rem;
+      .plc-page-tab {
+        white-space: nowrap;
       }
     }
   </style>
@@ -549,353 +515,245 @@
         </div>
 
         <main class="sf-content">
-
-          <section class="sf-page-hero sf-page-hero--plc">
-            <div class="sf-page-hero-copy">
-              <p class="sf-page-kicker">PLC Setup</p>
-              <h2>Set the PLC connection and manage the main, camera, and robot arm DB mappings from one page.</h2>
-              <p>
-                This page is now focused on future setup work: changing the PLC IP, rack, slot, and the important variable locations for DB123, DB124, and DB125, while still keeping the live monitor and log available for troubleshooting.
-              </p>
+          <section class="plc-setup-header">
+            <div class="plc-setup-header-copy">
+              <h2>PLC connection and DB mapping settings</h2>
+              <p>Update the PLC endpoint and maintain the main, camera, and robot arm DB locations in a compact settings workspace.</p>
             </div>
-            <div class="sf-page-hero-chips">
-              <div>
-                <span>Focus</span>
-                <strong>Setup</strong>
+            <div class="plc-save-message" id="globalStatusMessage">Saved values are loaded from the current app config.</div>
+          </section>
+
+          <section class="plc-status-strip" aria-label="Saved PLC summary">
+            <div class="plc-status-item">
+              <span>PLC IP</span>
+              <strong id="headerPlcIp">192.168.7.2</strong>
+            </div>
+            <div class="plc-status-item">
+              <span>Main DB</span>
+              <code id="headerMainDb">DB123</code>
+            </div>
+            <div class="plc-status-item">
+              <span>Camera DB</span>
+              <code id="headerCameraDb">DB124</code>
+            </div>
+            <div class="plc-status-item">
+              <span>Robot DB</span>
+              <code id="headerRobotDb">DB125</code>
+            </div>
+          </section>
+
+          <section class="plc-page-tabs" aria-label="PLC setup sections">
+            <button type="button" class="plc-page-tab active" data-panel="connection"><i class="material-icons">lan</i>PLC Connection</button>
+            <button type="button" class="plc-page-tab" data-panel="main"><i class="material-icons">table_chart</i>DB123 Main</button>
+            <button type="button" class="plc-page-tab" data-panel="camera"><i class="material-icons">videocam</i>DB124 Camera</button>
+            <button type="button" class="plc-page-tab" data-panel="robot"><i class="material-icons">precision_manufacturing</i>DB125 Robot</button>
+          </section>
+
+          <section class="plc-panel active" data-panel="connection">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>PLC connection settings</h3>
+                <p>Save the PLC IP, rack, slot, and worker cycle time. These values persist through the existing config flow and are applied to the running worker.</p>
               </div>
-              <div>
-                <span>Mappings</span>
-                <strong>DB123 / DB124 / DB125</strong>
+              <div class="plc-save-message" id="plcSetupSaveMessage"></div>
+            </div>
+
+            <div class="plc-settings-grid">
+              <div class="plc-settings-form">
+                <div class="plc-field">
+                  <label for="plcIpAddress">PLC IP address</label>
+                  <input type="text" id="plcIpAddress" value="192.168.7.2" inputmode="decimal">
+                </div>
+                <div class="plc-field">
+                  <label for="plcCycleTimeMs">Cycle time (ms)</label>
+                  <input type="number" id="plcCycleTimeMs" min="10" max="5000" value="100">
+                </div>
+                <div class="plc-field">
+                  <label for="plcRack">Rack</label>
+                  <input type="number" id="plcRack" min="0" max="10" value="0">
+                </div>
+                <div class="plc-field">
+                  <label for="plcSlot">Slot</label>
+                  <input type="number" id="plcSlot" min="0" max="10" value="1">
+                </div>
               </div>
-              <div>
-                <span>Target</span>
-                <strong>S7-1200</strong>
+
+              <aside class="plc-side-card">
+                <h4>Saved configuration</h4>
+                <div class="plc-side-list">
+                  <p><strong>IP:</strong> <span id="savedPlcIp">192.168.7.2</span></p>
+                  <p><strong>Rack/Slot:</strong> <span id="savedPlcRackSlot">0 / 1</span></p>
+                  <p><strong>Cycle time:</strong> <span id="savedPlcCycle">100 ms</span></p>
+                </div>
+              </aside>
+            </div>
+
+            <div class="plc-actions">
+              <button type="button" class="btn btn-sm btn-primary" id="savePlcSetupBtn">Save PLC Setup</button>
+              <button type="button" class="btn btn-sm btn-outline" id="reloadPlcSetupBtn">Reload Saved Values</button>
+            </div>
+          </section>
+
+          <section class="plc-panel" data-panel="main">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>DB123 main mapping</h3>
+                <p>Main process DB for HMI, robot, conveyors, counters, gantry, and system variables.</p>
+              </div>
+              <div class="plc-save-message" id="mainDbSaveMessage"></div>
+            </div>
+
+            <div class="plc-grid-meta">
+              <div class="plc-field">
+                <label for="mainDbNumber">DB number</label>
+                <input type="number" id="mainDbNumber" min="1" max="999" value="123">
+              </div>
+              <div class="plc-field">
+                <label for="mainDbTotalSize">Total size</label>
+                <input type="number" id="mainDbTotalSize" min="1" max="512" value="80">
+              </div>
+              <div class="plc-field">
+                <label for="mainDbEnabled">Enabled</label>
+                <select id="mainDbEnabled">
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="plc-sheet-toolbar">
+              <div class="plc-sheet-note">Spreadsheet-style editor with sticky headers and compact rows.</div>
+              <div class="plc-actions">
+                <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn">Save DB123</button>
+                <button type="button" class="btn btn-sm btn-outline" id="reloadMainDbConfigBtn">Reload</button>
+                <button type="button" class="btn btn-sm btn-outline" id="resetMainDbDefaultsBtn">Reset Defaults</button>
+              </div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 34%;">Tag</th>
+                      <th style="width: 14%;">Type</th>
+                      <th style="width: 12%;">Byte</th>
+                      <th style="width: 12%;">Bit</th>
+                      <th style="width: 28%;">Address</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mainDbEditorBody"></tbody>
+                </table>
               </div>
             </div>
           </section>
 
-          <p class="sf-section-label">Setup Summary</p>
-          <section class="sf-stage sf-stage-1">
-            <article class="sf-panel sf-plc-summary-card">
-              <header class="sf-panel-head">
-                <div>
-                  <h3>PLC Setup Overview</h3>
-                  <p>
-                    PLC IP: <code id="headerPlcIp">192.168.7.2</code> |
-                    Main DB: <code id="headerMainDb">DB123</code> |
-                    Camera start: <code id="headerStartAddress">DB124.DBX0.0</code> |
-                    Camera connected: <code id="headerConnectedAddress">DB124.DBX0.1</code> |
-                    Robot DB: <code id="headerRobotDb">DB125</code>
-                  </p>
-                </div>
-              </header>
-            </article>
-          </section>
-
-          <p class="sf-section-label">PLC Connection</p>
-          <section class="sf-stage sf-stage-2">
-            <div class="plc-setup-grid">
-              <section class="db-map-panel">
-                <div class="db-map-header">
-                  <div>
-                    <h5 class="db-map-title">PLC Connection Settings</h5>
-                    <p class="db-map-copy">Save the PLC network details used by the app. IP, rack, and slot are persisted and pushed into the running worker so the backend can reconnect using the updated values.</p>
-                  </div>
-                  <div id="plcSetupSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                </div>
-
-                <div class="plc-setup-form">
-                  <div>
-                    <label>PLC IP Address</label>
-                    <input type="text" id="plcIpAddress" value="192.168.7.2" inputmode="decimal">
-                  </div>
-                  <div>
-                    <label>Rack</label>
-                    <input type="number" id="plcRack" min="0" max="10" value="0">
-                  </div>
-                  <div>
-                    <label>Slot</label>
-                    <input type="number" id="plcSlot" min="0" max="10" value="1">
-                  </div>
-                  <div>
-                    <label>Cycle Time (ms)</label>
-                    <input type="number" id="plcCycleTimeMs" min="10" max="5000" value="100">
-                  </div>
-                </div>
-
-                <div class="db-map-actions">
-                  <button type="button" class="btn btn-sm btn-primary" id="savePlcSetupBtn">Save PLC Setup</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="reloadPlcSetupBtn">Reload Saved Values</button>
-                  <span></span>
-                </div>
-              </section>
-
-              <section class="db-map-panel">
-                <div class="db-map-header">
-                  <div>
-                    <h5 class="db-map-title">Stored Mapping Areas</h5>
-                    <p class="db-map-copy">Use this page as the source of truth for the PLC endpoint and the DB locations you expect to change later.</p>
-                  </div>
-                </div>
-
-                <div class="plc-setup-list">
-                  <div><strong>DB123</strong> main line mapping for HMI, conveyors, gantry, counters, and main robot values.</div>
-                  <div><strong>DB124</strong> camera handshake and result bits for the vision workflow.</div>
-                  <div><strong>DB125</strong> robot arm bridge status, commands, and target/current position values.</div>
-                </div>
-              </section>
-            </div>
-          </section>
-
-          <p class="sf-section-label">DB Mapping Editors</p>
-          <section class="sf-stage sf-stage-2 sf-plc-editor-stage">
-            <div class="sf-plc-editor-note">
-              <strong>Runtime-safe mapping updates</strong>
-              <span>Each mapping panel stores its own DB number, total size, enabled state, and tag offsets so future PLC changes can be handled directly from the app instead of editing files by hand.</span>
-            </div>
-            <div class="db-map-grid">
-
-              <!-- DB123 Editor -->
-              <section class="db-map-panel">
-                <div class="db-map-header">
-                  <div>
-                    <h5 class="db-map-title">DB123 Main Mapping</h5>
-                    <p class="db-map-copy">Edit the Pi-side main-process DB number and tag offsets used for HMI, robot, conveyors, counters, gantry, system, pallet, and overrides.</p>
-                  </div>
-                  <div id="mainDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                </div>
-
-                <div class="db-map-controls">
-                  <div>
-                    <label>DB Number</label>
-                    <input type="number" id="mainDbNumber" min="1" max="999" value="123">
-                  </div>
-                  <div>
-                    <label>Total Size</label>
-                    <input type="number" id="mainDbTotalSize" min="1" max="512" value="80">
-                  </div>
-                  <div>
-                    <label>Enabled</label>
-                    <select id="mainDbEnabled">
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                  <table class="db-map-table">
-                    <thead>
-                      <tr>
-                        <th>Tag</th>
-                        <th>Type</th>
-                        <th>Byte</th>
-                        <th>Bit</th>
-                        <th>Address Preview</th>
-                      </tr>
-                    </thead>
-                    <tbody id="mainDbEditorBody"></tbody>
-                  </table>
-                </div>
-
-                <div class="db-map-actions">
-                  <button type="button" class="btn btn-sm btn-primary" id="saveMainDbConfigBtn">Save DB123 Mapping</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="reloadMainDbConfigBtn">Reload Saved Values</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="resetMainDbDefaultsBtn">Reset Defaults</button>
-                </div>
-              </section>
-
-              <!-- DB124 Editor -->
-              <section class="db-map-panel">
-                <div class="db-map-header">
-                  <div>
-                    <h5 class="db-map-title">DB124 Camera Mapping</h5>
-                    <p class="db-map-copy">Edit the DB number and tag offsets used for the vision block. Saved changes are written to runtime config and applied to the running worker.</p>
-                  </div>
-                  <div id="cameraDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                </div>
-
-                <div class="db-map-controls">
-                  <div>
-                    <label>DB Number</label>
-                    <input type="number" id="cameraDbNumber" min="1" max="999" value="124">
-                  </div>
-                  <div>
-                    <label>Total Size</label>
-                    <input type="number" id="cameraDbTotalSize" min="1" max="512" value="2">
-                  </div>
-                  <div>
-                    <label>Enabled</label>
-                    <select id="cameraDbEnabled">
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                  <table class="db-map-table">
-                    <thead>
-                      <tr>
-                        <th>Tag</th>
-                        <th>Type</th>
-                        <th>Byte</th>
-                        <th>Bit</th>
-                        <th>Address Preview</th>
-                      </tr>
-                    </thead>
-                    <tbody id="cameraDbEditorBody"></tbody>
-                  </table>
-                </div>
-
-                <div class="db-map-actions">
-                  <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn">Save DB124 Mapping</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="reloadCameraDbConfigBtn">Reload Saved Values</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="resetCameraDbDefaultsBtn">Reset Defaults</button>
-                </div>
-              </section>
-
-              <section class="db-map-panel">
-                <div class="db-map-header">
-                  <div>
-                    <h5 class="db-map-title">DB125 Robot Arm Mapping</h5>
-                    <p class="db-map-copy">Edit the robot arm bridge DB used for robot status, current position, commands, and target position values.</p>
-                  </div>
-                  <div id="robotDbSaveMessage" style="font-size: 11px; min-height: 18px; text-align: right;"></div>
-                </div>
-
-                <div class="db-map-controls">
-                  <div>
-                    <label>DB Number</label>
-                    <input type="number" id="robotDbNumber" min="1" max="999" value="125">
-                  </div>
-                  <div>
-                    <label>Total Size</label>
-                    <input type="number" id="robotDbTotalSize" min="1" max="512" value="20">
-                  </div>
-                  <div>
-                    <label>Enabled</label>
-                    <select id="robotDbEnabled">
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                  <table class="db-map-table">
-                    <thead>
-                      <tr>
-                        <th>Tag</th>
-                        <th>Type</th>
-                        <th>Byte</th>
-                        <th>Bit</th>
-                        <th>Address Preview</th>
-                      </tr>
-                    </thead>
-                    <tbody id="robotDbEditorBody"></tbody>
-                  </table>
-                </div>
-
-                <div class="db-map-actions">
-                  <button type="button" class="btn btn-sm btn-primary" id="saveRobotDbConfigBtn">Save DB125 Mapping</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="reloadRobotDbConfigBtn">Reload Saved Values</button>
-                  <button type="button" class="btn btn-sm btn-outline" id="resetRobotDbDefaultsBtn">Reset Defaults</button>
-                </div>
-              </section>
-
-            </div>
-          </section>
-
-          <p class="sf-section-label">Live Monitor</p>
-          <section class="sf-plc-ops-grid sf-stage sf-stage-3">
-
-            <article class="sf-panel">
-              <header class="sf-panel-head">
-                <div>
-                  <h3>PLC Status</h3>
-                  <p>Connection, active bit state, polling controls, and runtime counters.</p>
-                </div>
-              </header>
-
-              <div class="sf-plc-control-stack">
-                <div class="sf-plc-status-panel">
-                  <div class="status-panel">
-                    <div class="status-row">
-                      <div class="status-label">PLC Connected:</div>
-                      <div class="status-value" id="plcConnected">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label" id="startBitAddressLabel">DB124.DBX0.0:</div>
-                      <div class="status-value" id="startBitValue">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Last Update:</div>
-                      <div class="status-value" id="lastUpdate">-</div>
-                    </div>
-                    <div class="status-row">
-                      <div class="status-label">Poll Interval:</div>
-                      <div class="status-value" id="pollInterval">500ms</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="sf-plc-control-block">
-                  <h4>Polling Controls</h4>
-                  <p>Switch between faster troubleshooting intervals or slower long-running monitoring without leaving the diagnostics page.</p>
-                  <div class="controls">
-                    <button class="btn-control" onclick="setPollInterval(250)">250ms</button>
-                    <button class="btn-control" onclick="setPollInterval(500)">500ms</button>
-                    <button class="btn-control" onclick="setPollInterval(1000)">1000ms</button>
-                    <button class="btn-control" onclick="setPollInterval(2000)">2000ms</button>
-                    <button class="btn-control" onclick="clearLog()">Clear Log</button>
-                    <button class="btn-control" onclick="togglePause()">Pause/Resume</button>
-                  </div>
-                </div>
-
-                <div class="sf-plc-control-block">
-                  <h4>Runtime Statistics</h4>
-                  <p>Quick counters for read activity, bit distribution, errors, and session uptime.</p>
-                  <div class="stats-grid">
-                    <div class="stat-box">
-                      <div class="stat-label">Total Reads</div>
-                      <div class="stat-value" id="totalReads">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">TRUE Count</div>
-                      <div class="stat-value" id="trueCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">FALSE Count</div>
-                      <div class="stat-value" id="falseCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">Errors</div>
-                      <div class="stat-value" id="errorCount">0</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">Uptime</div>
-                      <div class="stat-value" id="uptime">00:00</div>
-                    </div>
-                    <div class="stat-box">
-                      <div class="stat-label">TRUE %</div>
-                      <div class="stat-value" id="truePercent">0%</div>
-                    </div>
-                  </div>
-                </div>
+          <section class="plc-panel" data-panel="camera">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>DB124 camera mapping</h3>
+                <p>Camera handshake and result mapping for the vision workflow.</p>
               </div>
-            </article>
+              <div class="plc-save-message" id="cameraDbSaveMessage"></div>
+            </div>
 
-            <article class="sf-panel">
-              <header class="sf-panel-head">
-                <div>
-                  <h3>Activity Log</h3>
-                  <p>Runtime read/write events and operator actions.</p>
-                </div>
-              </header>
-              <div id="logPanel" class="log-panel sf-plc-log"></div>
-            </article>
+            <div class="plc-grid-meta">
+              <div class="plc-field">
+                <label for="cameraDbNumber">DB number</label>
+                <input type="number" id="cameraDbNumber" min="1" max="999" value="124">
+              </div>
+              <div class="plc-field">
+                <label for="cameraDbTotalSize">Total size</label>
+                <input type="number" id="cameraDbTotalSize" min="1" max="512" value="2">
+              </div>
+              <div class="plc-field">
+                <label for="cameraDbEnabled">Enabled</label>
+                <select id="cameraDbEnabled">
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+            </div>
 
+            <div class="plc-sheet-toolbar">
+              <div class="plc-sheet-note">Use this sheet to keep camera bit locations aligned with the PLC program.</div>
+              <div class="plc-actions">
+                <button type="button" class="btn btn-sm btn-primary" id="saveCameraDbConfigBtn">Save DB124</button>
+                <button type="button" class="btn btn-sm btn-outline" id="reloadCameraDbConfigBtn">Reload</button>
+                <button type="button" class="btn btn-sm btn-outline" id="resetCameraDbDefaultsBtn">Reset Defaults</button>
+              </div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 34%;">Tag</th>
+                      <th style="width: 14%;">Type</th>
+                      <th style="width: 12%;">Byte</th>
+                      <th style="width: 12%;">Bit</th>
+                      <th style="width: 28%;">Address</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cameraDbEditorBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="plc-panel" data-panel="robot">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>DB125 robot arm mapping</h3>
+                <p>Robot arm bridge DB for status, commands, and target/current position values.</p>
+              </div>
+              <div class="plc-save-message" id="robotDbSaveMessage"></div>
+            </div>
+
+            <div class="plc-grid-meta">
+              <div class="plc-field">
+                <label for="robotDbNumber">DB number</label>
+                <input type="number" id="robotDbNumber" min="1" max="999" value="125">
+              </div>
+              <div class="plc-field">
+                <label for="robotDbTotalSize">Total size</label>
+                <input type="number" id="robotDbTotalSize" min="1" max="512" value="20">
+              </div>
+              <div class="plc-field">
+                <label for="robotDbEnabled">Enabled</label>
+                <select id="robotDbEnabled">
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="plc-sheet-toolbar">
+              <div class="plc-sheet-note">Robot bridge offsets are stored separately so DB125 can be changed without code edits.</div>
+              <div class="plc-actions">
+                <button type="button" class="btn btn-sm btn-primary" id="saveRobotDbConfigBtn">Save DB125</button>
+                <button type="button" class="btn btn-sm btn-outline" id="reloadRobotDbConfigBtn">Reload</button>
+                <button type="button" class="btn btn-sm btn-outline" id="resetRobotDbDefaultsBtn">Reset Defaults</button>
+              </div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 34%;">Tag</th>
+                      <th style="width: 14%;">Type</th>
+                      <th style="width: 12%;">Byte</th>
+                      <th style="width: 12%;">Bit</th>
+                      <th style="width: 28%;">Address</th>
+                    </tr>
+                  </thead>
+                  <tbody id="robotDbEditorBody"></tbody>
+                </table>
+              </div>
+            </div>
           </section>
 
         </main>
@@ -918,10 +776,6 @@
     // ========== PLC SETUP LOGIC ==========
     const API_BASE = window.location.origin;
 
-    let pollIntervalMs = 500;
-    let pollTimer = null;
-    let paused = false;
-    let startTime = Date.now();
     const MAIN_DB_TAG_FIELDS = [
       { key: 'hmi_start', label: 'HMI Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'hmi_stop', label: 'HMI Stop', type: 'bool', defaultByte: 0, defaultBit: 1 },
@@ -977,6 +831,7 @@
       { key: 'conveyor2_override', label: 'Conveyor2 Override', type: 'bool', defaultByte: 78, defaultBit: 1 },
       { key: 'linear_override', label: 'Linear Override', type: 'bool', defaultByte: 78, defaultBit: 2 }
     ];
+
     const CAMERA_DB_TAG_FIELDS = [
       { key: 'start', label: 'Start', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'connected', label: 'Connected', type: 'bool', defaultByte: 0, defaultBit: 1 },
@@ -988,6 +843,7 @@
       { key: 'white_cube_detected', label: 'White Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 7 },
       { key: 'metal_cube_detected', label: 'Metal Cube Detected', type: 'bool', defaultByte: 1, defaultBit: 0 }
     ];
+
     const ROBOT_DB_TAG_FIELDS = [
       { key: 'connected', label: 'Connected', type: 'bool', defaultByte: 0, defaultBit: 0 },
       { key: 'busy', label: 'Busy', type: 'bool', defaultByte: 0, defaultBit: 1 },
@@ -1010,11 +866,37 @@
       { key: 'target_z', label: 'Target Z', type: 'int', defaultByte: 18 }
     ];
 
-    let stats = {
-      total: 0,
-      trueCount: 0,
-      falseCount: 0,
-      errors: 0
+    const MAIN_DB_OPTIONS = {
+      scope: 'main',
+      bodyId: 'mainDbEditorBody',
+      dbNumberId: 'mainDbNumber',
+      totalSizeId: 'mainDbTotalSize',
+      enabledId: 'mainDbEnabled',
+      previewPrefix: 'main-preview',
+      defaultDbNumber: 123,
+      defaultTotalSize: 80
+    };
+
+    const CAMERA_DB_OPTIONS = {
+      scope: 'camera',
+      bodyId: 'cameraDbEditorBody',
+      dbNumberId: 'cameraDbNumber',
+      totalSizeId: 'cameraDbTotalSize',
+      enabledId: 'cameraDbEnabled',
+      previewPrefix: 'camera-preview',
+      defaultDbNumber: 124,
+      defaultTotalSize: 2
+    };
+
+    const ROBOT_DB_OPTIONS = {
+      scope: 'robot',
+      bodyId: 'robotDbEditorBody',
+      dbNumberId: 'robotDbNumber',
+      totalSizeId: 'robotDbTotalSize',
+      enabledId: 'robotDbEnabled',
+      previewPrefix: 'robot-preview',
+      defaultDbNumber: 125,
+      defaultTotalSize: 20
     };
 
     function getDbNumber(inputId, fallbackDbNumber) {
@@ -1022,33 +904,53 @@
       return Math.max(1, Math.min(999, parseInt(dbInput && dbInput.value, 10) || fallbackDbNumber));
     }
 
-    function setStartBitAddressDisplay(byte, bit) {
-      const addr = 'DB' + getDbNumber('cameraDbNumber', 124) + '.DBX' + byte + '.' + bit;
-      const headerEl = document.getElementById('headerStartAddress');
-      const labelEl = document.getElementById('startBitAddressLabel');
-      if (headerEl) headerEl.textContent = addr;
-      if (labelEl) labelEl.textContent = addr + ':';
+    function setStatusMessage(elementId, message, tone = 'muted') {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      element.textContent = message || '';
+      const toneMap = {
+        muted: 'var(--sf-base-muted)',
+        success: 'var(--accent-green, #4caf50)',
+        error: 'var(--accent-red, #f44336)'
+      };
+      element.style.color = toneMap[tone] || toneMap.muted;
     }
 
-    function setConnectedBitAddressDisplay(byte, bit) {
-      const addr = 'DB' + getDbNumber('cameraDbNumber', 124) + '.DBX' + byte + '.' + bit;
-      const headerEl = document.getElementById('headerConnectedAddress');
-      if (headerEl) headerEl.textContent = addr;
+    function setGlobalStatus(message, tone = 'muted') {
+      setStatusMessage('globalStatusMessage', message, tone);
     }
 
     function setPlcIpDisplay(ipAddress) {
+      const safeIp = ipAddress || 'Not set';
       const headerEl = document.getElementById('headerPlcIp');
-      if (headerEl) headerEl.textContent = ipAddress || 'unknown';
+      const savedEl = document.getElementById('savedPlcIp');
+      if (headerEl) headerEl.textContent = safeIp;
+      if (savedEl) savedEl.textContent = safeIp;
+    }
+
+    function setSavedRackSlot(rack, slot) {
+      const savedEl = document.getElementById('savedPlcRackSlot');
+      if (savedEl) savedEl.textContent = `${rack} / ${slot}`;
+    }
+
+    function setSavedCycle(cycle) {
+      const savedEl = document.getElementById('savedPlcCycle');
+      if (savedEl) savedEl.textContent = `${cycle} ms`;
     }
 
     function setMainDbDisplay() {
       const headerEl = document.getElementById('headerMainDb');
-      if (headerEl) headerEl.textContent = 'DB' + getDbNumber('mainDbNumber', 123);
+      if (headerEl) headerEl.textContent = `DB${getDbNumber('mainDbNumber', 123)}`;
+    }
+
+    function setCameraDbDisplay() {
+      const headerEl = document.getElementById('headerCameraDb');
+      if (headerEl) headerEl.textContent = `DB${getDbNumber('cameraDbNumber', 124)}`;
     }
 
     function setRobotDbDisplay() {
       const headerEl = document.getElementById('headerRobotDb');
-      if (headerEl) headerEl.textContent = 'DB' + getDbNumber('robotDbNumber', 125);
+      if (headerEl) headerEl.textContent = `DB${getDbNumber('robotDbNumber', 125)}`;
     }
 
     function getDefaultDbConfig(fields, dbNumber, totalSize) {
@@ -1065,6 +967,18 @@
         total_size: totalSize,
         tags
       };
+    }
+
+    function getDefaultMainDbConfig() {
+      return getDefaultDbConfig(MAIN_DB_TAG_FIELDS, 123, 80);
+    }
+
+    function getDefaultCameraDbConfig() {
+      return getDefaultDbConfig(CAMERA_DB_TAG_FIELDS, 124, 2);
+    }
+
+    function getDefaultRobotDbConfig() {
+      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 20);
     }
 
     function getAddressPreview(dbNumber, field, byteValue, bitValue) {
@@ -1092,11 +1006,11 @@
 
         return `
           <tr>
-            <td><div class="db-map-tag">${field.label}</div></td>
-            <td><span class="db-map-type">${field.type}</span></td>
+            <td class="plc-sheet-tag">${field.label}</td>
+            <td><span class="plc-sheet-type">${field.type.toUpperCase()}</span></td>
             <td>
               <input
-                class="db-map-number"
+                class="plc-sheet-input"
                 type="number"
                 min="0"
                 max="255"
@@ -1109,7 +1023,7 @@
             <td>
               ${field.type === 'bool' ? `
                 <input
-                  class="db-map-number"
+                  class="plc-sheet-input"
                   type="number"
                   min="0"
                   max="7"
@@ -1118,9 +1032,9 @@
                   data-tag="${field.key}"
                   data-part="bit"
                 >
-              ` : '<span class="db-map-na">N/A</span>'}
+              ` : '<span class="plc-sheet-na">N/A</span>'}
             </td>
-            <td><span class="db-map-preview" id="${options.previewPrefix}-${field.key}">${address}</span></td>
+            <td><span class="plc-sheet-address" id="${options.previewPrefix}-${field.key}">${address}</span></td>
           </tr>
         `;
       }).join('');
@@ -1133,30 +1047,24 @@
         const byteInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="byte"]`);
         const bitInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="bit"]`);
         if (!byteInput) return;
+
         const byteValue = Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte));
         byteInput.value = byteValue;
         let preview = getAddressPreview(getDbNumber(options.dbNumberId, options.defaultDbNumber), field, byteValue, field.defaultBit);
-        if (field.type === 'bool') {
+
+        if (field.type === 'bool' && bitInput) {
           const bitValue = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || field.defaultBit));
           bitInput.value = bitValue;
           preview = getAddressPreview(getDbNumber(options.dbNumberId, options.defaultDbNumber), field, byteValue, bitValue);
         }
+
         const previewEl = document.getElementById(`${options.previewPrefix}-${field.key}`);
         if (previewEl) previewEl.textContent = preview;
-
-        if (options.scope === 'main') {
-          setMainDbDisplay();
-        }
-        if (options.scope === 'camera' && field.key === 'start') {
-          setStartBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
-        }
-        if (options.scope === 'camera' && field.key === 'connected') {
-          setConnectedBitAddressDisplay(byteValue, parseInt(bitInput.value, 10) || field.defaultBit);
-        }
-        if (options.scope === 'robot') {
-          setRobotDbDisplay();
-        }
       });
+
+      if (options.scope === 'main') setMainDbDisplay();
+      if (options.scope === 'camera') setCameraDbDisplay();
+      if (options.scope === 'robot') setRobotDbDisplay();
     }
 
     function collectDbConfigFromEditor(fields, options) {
@@ -1165,10 +1073,10 @@
         const byteInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="byte"]`);
         const bitInput = document.querySelector(`[data-scope="${options.scope}"][data-tag="${field.key}"][data-part="bit"]`);
         const entry = {
-          byte: Math.max(0, Math.min(255, parseInt(byteInput.value, 10) || field.defaultByte))
+          byte: Math.max(0, Math.min(255, parseInt(byteInput && byteInput.value, 10) || field.defaultByte))
         };
         if (field.type === 'bool') {
-          entry.bit = Math.max(0, Math.min(7, parseInt(bitInput.value, 10) || field.defaultBit));
+          entry.bit = Math.max(0, Math.min(7, parseInt(bitInput && bitInput.value, 10) || field.defaultBit));
         }
         tags[field.key] = entry;
       });
@@ -1181,119 +1089,96 @@
       };
     }
 
-    function getDefaultMainDbConfig() {
-      return getDefaultDbConfig(MAIN_DB_TAG_FIELDS, 123, 80);
-    }
-
-    function getDefaultCameraDbConfig() {
-      return getDefaultDbConfig(CAMERA_DB_TAG_FIELDS, 124, 2);
-    }
-
-    function getDefaultRobotDbConfig() {
-      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 20);
+    function mergeDbConfig(defaults, savedConfig) {
+      return {
+        ...defaults,
+        ...(savedConfig || {}),
+        tags: {
+          ...defaults.tags,
+          ...(((savedConfig || {}).tags) || {})
+        }
+      };
     }
 
     function populatePlcSetup(config) {
       const plcConfig = (config && config.plc) || {};
-      document.getElementById('plcIpAddress').value = plcConfig.ip || '192.168.7.2';
-      document.getElementById('plcRack').value = Number.isFinite(parseInt(plcConfig.rack, 10)) ? parseInt(plcConfig.rack, 10) : 0;
-      document.getElementById('plcSlot').value = Number.isFinite(parseInt(plcConfig.slot, 10)) ? parseInt(plcConfig.slot, 10) : 1;
-      document.getElementById('plcCycleTimeMs').value = Number.isFinite(parseInt(plcConfig.cycle_time_ms, 10)) ? parseInt(plcConfig.cycle_time_ms, 10) : 100;
-      setPlcIpDisplay(document.getElementById('plcIpAddress').value.trim());
+      const ip = plcConfig.ip || '192.168.7.2';
+      const rack = Number.isFinite(parseInt(plcConfig.rack, 10)) ? parseInt(plcConfig.rack, 10) : 0;
+      const slot = Number.isFinite(parseInt(plcConfig.slot, 10)) ? parseInt(plcConfig.slot, 10) : 1;
+      const cycle = Number.isFinite(parseInt(plcConfig.cycle_time_ms, 10)) ? parseInt(plcConfig.cycle_time_ms, 10) : 100;
+
+      document.getElementById('plcIpAddress').value = ip;
+      document.getElementById('plcRack').value = rack;
+      document.getElementById('plcSlot').value = slot;
+      document.getElementById('plcCycleTimeMs').value = cycle;
+
+      setPlcIpDisplay(ip);
+      setSavedRackSlot(rack, slot);
+      setSavedCycle(cycle);
+    }
+
+    function activatePanel(panelName, updateHash = true) {
+      const safePanel = ['connection', 'main', 'camera', 'robot'].includes(panelName) ? panelName : 'connection';
+
+      document.querySelectorAll('.plc-page-tab').forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.panel === safePanel);
+      });
+
+      document.querySelectorAll('.plc-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.panel === safePanel);
+      });
+
+      if (updateHash) {
+        history.replaceState(null, '', `#${safePanel}`);
+      }
+    }
+
+    function bindPreviewListeners(fields, options) {
+      const tbody = document.getElementById(options.bodyId);
+      const dbNumberInput = document.getElementById(options.dbNumberId);
+
+      if (tbody) {
+        tbody.addEventListener('input', () => updateDbPreviews(fields, options));
+      }
+
+      if (dbNumberInput) {
+        dbNumberInput.addEventListener('input', () => updateDbPreviews(fields, options));
+      }
     }
 
     async function loadDbConfigs() {
       try {
-        const response = await fetch(API_BASE + '/api/config', { signal: AbortSignal.timeout(5000) });
+        const response = await fetch(`${API_BASE}/api/config`, { signal: AbortSignal.timeout(5000) });
         const config = await response.json();
+        const plcConfig = (config && config.plc) || {};
+
         populatePlcSetup(config);
-        const mainDbConfig = ((config.plc || {}).db123) || getDefaultMainDbConfig();
-        const cameraDbConfig = ((config.plc || {}).db124) || getDefaultCameraDbConfig();
-        const robotDbConfig = ((config.plc || {}).db125) || getDefaultRobotDbConfig();
-        renderDbEditor(MAIN_DB_TAG_FIELDS, {
-          ...getDefaultMainDbConfig(),
-          ...mainDbConfig,
-          tags: { ...getDefaultMainDbConfig().tags, ...(mainDbConfig.tags || {}) }
-        }, {
-          scope: 'main',
-          bodyId: 'mainDbEditorBody',
-          dbNumberId: 'mainDbNumber',
-          totalSizeId: 'mainDbTotalSize',
-          enabledId: 'mainDbEnabled',
-          previewPrefix: 'main-preview',
-          defaultDbNumber: 123,
-          defaultTotalSize: 80
-        });
-        setMainDbDisplay();
-        renderDbEditor(CAMERA_DB_TAG_FIELDS, {
-          ...getDefaultCameraDbConfig(),
-          ...cameraDbConfig,
-          tags: { ...getDefaultCameraDbConfig().tags, ...(cameraDbConfig.tags || {}) }
-        }, {
-          scope: 'camera',
-          bodyId: 'cameraDbEditorBody',
-          dbNumberId: 'cameraDbNumber',
-          totalSizeId: 'cameraDbTotalSize',
-          enabledId: 'cameraDbEnabled',
-          previewPrefix: 'camera-preview',
-          defaultDbNumber: 124,
-          defaultTotalSize: 2
-        });
-        renderDbEditor(ROBOT_DB_TAG_FIELDS, {
-          ...getDefaultRobotDbConfig(),
-          ...robotDbConfig,
-          tags: { ...getDefaultRobotDbConfig().tags, ...(robotDbConfig.tags || {}) }
-        }, {
-          scope: 'robot',
-          bodyId: 'robotDbEditorBody',
-          dbNumberId: 'robotDbNumber',
-          totalSizeId: 'robotDbTotalSize',
-          enabledId: 'robotDbEnabled',
-          previewPrefix: 'robot-preview',
-          defaultDbNumber: 125,
-          defaultTotalSize: 20
-        });
-        setRobotDbDisplay();
-      } catch (e) {
-        console.error('Load PLC config failed:', e);
+
+        renderDbEditor(MAIN_DB_TAG_FIELDS, mergeDbConfig(getDefaultMainDbConfig(), plcConfig.db123), MAIN_DB_OPTIONS);
+        renderDbEditor(CAMERA_DB_TAG_FIELDS, mergeDbConfig(getDefaultCameraDbConfig(), plcConfig.db124), CAMERA_DB_OPTIONS);
+        renderDbEditor(ROBOT_DB_TAG_FIELDS, mergeDbConfig(getDefaultRobotDbConfig(), plcConfig.db125), ROBOT_DB_OPTIONS);
+
+        setGlobalStatus('Saved values are loaded from the current app config.');
+        setStatusMessage('plcSetupSaveMessage', 'Ready');
+        setStatusMessage('mainDbSaveMessage', 'Ready');
+        setStatusMessage('cameraDbSaveMessage', 'Ready');
+        setStatusMessage('robotDbSaveMessage', 'Ready');
+      } catch (error) {
+        console.error('Load PLC config failed:', error);
         populatePlcSetup({ plc: {} });
-        renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), {
-          scope: 'main',
-          bodyId: 'mainDbEditorBody',
-          dbNumberId: 'mainDbNumber',
-          totalSizeId: 'mainDbTotalSize',
-          enabledId: 'mainDbEnabled',
-          previewPrefix: 'main-preview',
-          defaultDbNumber: 123,
-          defaultTotalSize: 80
-        });
-        setMainDbDisplay();
-        renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), {
-          scope: 'camera',
-          bodyId: 'cameraDbEditorBody',
-          dbNumberId: 'cameraDbNumber',
-          totalSizeId: 'cameraDbTotalSize',
-          enabledId: 'cameraDbEnabled',
-          previewPrefix: 'camera-preview',
-          defaultDbNumber: 124,
-          defaultTotalSize: 2
-        });
-        renderDbEditor(ROBOT_DB_TAG_FIELDS, getDefaultRobotDbConfig(), {
-          scope: 'robot',
-          bodyId: 'robotDbEditorBody',
-          dbNumberId: 'robotDbNumber',
-          totalSizeId: 'robotDbTotalSize',
-          enabledId: 'robotDbEnabled',
-          previewPrefix: 'robot-preview',
-          defaultDbNumber: 125,
-          defaultTotalSize: 20
-        });
-        setRobotDbDisplay();
+        renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), MAIN_DB_OPTIONS);
+        renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), CAMERA_DB_OPTIONS);
+        renderDbEditor(ROBOT_DB_TAG_FIELDS, getDefaultRobotDbConfig(), ROBOT_DB_OPTIONS);
+
+        setGlobalStatus('Using fallback defaults because saved PLC config could not be loaded.', 'error');
+        setStatusMessage('plcSetupSaveMessage', 'Offline defaults loaded', 'error');
+        setStatusMessage('mainDbSaveMessage', 'Offline defaults loaded', 'error');
+        setStatusMessage('cameraDbSaveMessage', 'Offline defaults loaded', 'error');
+        setStatusMessage('robotDbSaveMessage', 'Offline defaults loaded', 'error');
       }
     }
 
     async function savePlcSetup() {
-      const msgEl = document.getElementById('plcSetupSaveMessage');
       const btn = document.getElementById('savePlcSetupBtn');
       const plcPayload = {
         ip: document.getElementById('plcIpAddress').value.trim(),
@@ -1301,411 +1186,146 @@
         slot: Math.max(0, Math.min(10, parseInt(document.getElementById('plcSlot').value, 10) || 1)),
         cycle_time_ms: Math.max(10, Math.min(5000, parseInt(document.getElementById('plcCycleTimeMs').value, 10) || 100))
       };
+
       btn.disabled = true;
-      msgEl.textContent = 'Saving...';
-      msgEl.style.color = '';
+      setStatusMessage('plcSetupSaveMessage', 'Saving...');
+      setGlobalStatus('Saving PLC connection settings...');
+
       try {
-        const response = await fetch(API_BASE + '/api/config', {
+        const response = await fetch(`${API_BASE}/api/config`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ plc: plcPayload }),
           signal: AbortSignal.timeout(5000)
         });
         const data = await response.json();
+
         if (data.success) {
           setPlcIpDisplay(plcPayload.ip);
-          msgEl.textContent = `Saved PLC setup for ${plcPayload.ip}. Worker will reconnect using the new settings.`;
-          msgEl.style.color = 'var(--accent-green, #4caf50)';
+          setSavedRackSlot(plcPayload.rack, plcPayload.slot);
+          setSavedCycle(plcPayload.cycle_time_ms);
+          setStatusMessage('plcSetupSaveMessage', `Saved ${plcPayload.ip}`, 'success');
+          setGlobalStatus('PLC connection settings saved. The worker will reconnect using the updated endpoint.', 'success');
         } else {
-          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
-          msgEl.style.color = 'var(--accent-red, #f44336)';
+          const message = data.error || 'Unknown error';
+          setStatusMessage('plcSetupSaveMessage', `Error: ${message}`, 'error');
+          setGlobalStatus(`PLC connection settings could not be saved: ${message}`, 'error');
         }
-      } catch (e) {
-        msgEl.textContent = 'Error: ' + e.message;
-        msgEl.style.color = 'var(--accent-red, #f44336)';
+      } catch (error) {
+        setStatusMessage('plcSetupSaveMessage', `Error: ${error.message}`, 'error');
+        setGlobalStatus(`PLC connection settings could not be saved: ${error.message}`, 'error');
       }
+
       btn.disabled = false;
     }
 
-    async function saveMainDbConfig() {
-      updateDbPreviews(MAIN_DB_TAG_FIELDS, {
-        scope: 'main',
-        bodyId: 'mainDbEditorBody',
-        dbNumberId: 'mainDbNumber',
-        totalSizeId: 'mainDbTotalSize',
-        enabledId: 'mainDbEnabled',
-        previewPrefix: 'main-preview',
-        defaultDbNumber: 123,
-        defaultTotalSize: 80
-      });
-      const msgEl = document.getElementById('mainDbSaveMessage');
-      const btn = document.getElementById('saveMainDbConfigBtn');
-      const mainDbConfig = collectDbConfigFromEditor(MAIN_DB_TAG_FIELDS, {
-        scope: 'main',
-        dbNumberId: 'mainDbNumber',
-        totalSizeId: 'mainDbTotalSize',
-        enabledId: 'mainDbEnabled',
-        defaultDbNumber: 123,
-        defaultTotalSize: 80
-      });
-      btn.disabled = true;
-      msgEl.textContent = 'Saving...';
-      msgEl.style.color = '';
+    async function saveDbConfig(fields, options, payloadKey, messageId, label) {
+      const buttonIdMap = {
+        main: 'saveMainDbConfigBtn',
+        camera: 'saveCameraDbConfigBtn',
+        robot: 'saveRobotDbConfigBtn'
+      };
+      const button = document.getElementById(buttonIdMap[options.scope]);
+
+      updateDbPreviews(fields, options);
+      const dbConfig = collectDbConfigFromEditor(fields, options);
+
+      button.disabled = true;
+      setStatusMessage(messageId, 'Saving...');
+      setGlobalStatus(`Saving ${label} mapping...`);
+
       try {
-        const response = await fetch(API_BASE + '/api/config', {
+        const response = await fetch(`${API_BASE}/api/config`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plc: { db123: mainDbConfig } }),
+          body: JSON.stringify({ plc: { [payloadKey]: dbConfig } }),
           signal: AbortSignal.timeout(5000)
         });
         const data = await response.json();
+
         if (data.success) {
-          msgEl.textContent = `Saved main mapping for DB${mainDbConfig.db_number}. Live worker updated.`;
-          msgEl.style.color = 'var(--accent-green, #4caf50)';
+          if (options.scope === 'main') setMainDbDisplay();
+          if (options.scope === 'camera') setCameraDbDisplay();
+          if (options.scope === 'robot') setRobotDbDisplay();
+
+          setStatusMessage(messageId, `Saved DB${dbConfig.db_number}`, 'success');
+          setGlobalStatus(`${label} mapping saved for DB${dbConfig.db_number}.`, 'success');
         } else {
-          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
-          msgEl.style.color = 'var(--accent-red, #f44336)';
+          const message = data.error || 'Unknown error';
+          setStatusMessage(messageId, `Error: ${message}`, 'error');
+          setGlobalStatus(`${label} mapping could not be saved: ${message}`, 'error');
         }
-      } catch (e) {
-        msgEl.textContent = 'Error: ' + e.message;
-        msgEl.style.color = 'var(--accent-red, #f44336)';
+      } catch (error) {
+        setStatusMessage(messageId, `Error: ${error.message}`, 'error');
+        setGlobalStatus(`${label} mapping could not be saved: ${error.message}`, 'error');
       }
-      btn.disabled = false;
+
+      button.disabled = false;
     }
 
-    async function saveRobotDbConfig() {
-      updateDbPreviews(ROBOT_DB_TAG_FIELDS, {
-        scope: 'robot',
-        bodyId: 'robotDbEditorBody',
-        dbNumberId: 'robotDbNumber',
-        totalSizeId: 'robotDbTotalSize',
-        enabledId: 'robotDbEnabled',
-        previewPrefix: 'robot-preview',
-        defaultDbNumber: 125,
-        defaultTotalSize: 20
+    function bindTabNavigation() {
+      document.querySelectorAll('.plc-page-tab').forEach((tab) => {
+        tab.addEventListener('click', () => activatePanel(tab.dataset.panel));
       });
-      const msgEl = document.getElementById('robotDbSaveMessage');
-      const btn = document.getElementById('saveRobotDbConfigBtn');
-      const robotDbConfig = collectDbConfigFromEditor(ROBOT_DB_TAG_FIELDS, {
-        scope: 'robot',
-        dbNumberId: 'robotDbNumber',
-        totalSizeId: 'robotDbTotalSize',
-        enabledId: 'robotDbEnabled',
-        defaultDbNumber: 125,
-        defaultTotalSize: 20
-      });
-      btn.disabled = true;
-      msgEl.textContent = 'Saving...';
-      msgEl.style.color = '';
-      try {
-        const response = await fetch(API_BASE + '/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plc: { db125: robotDbConfig } }),
-          signal: AbortSignal.timeout(5000)
-        });
-        const data = await response.json();
-        if (data.success) {
-          setRobotDbDisplay();
-          msgEl.textContent = `Saved robot mapping for DB${robotDbConfig.db_number}.`;
-          msgEl.style.color = 'var(--accent-green, #4caf50)';
-        } else {
-          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
-          msgEl.style.color = 'var(--accent-red, #f44336)';
-        }
-      } catch (e) {
-        msgEl.textContent = 'Error: ' + e.message;
-        msgEl.style.color = 'var(--accent-red, #f44336)';
-      }
-      btn.disabled = false;
+
+      const requestedPanel = (window.location.hash || '').replace('#', '');
+      activatePanel(requestedPanel || 'connection', false);
     }
 
-    async function saveCameraDbConfig() {
-      updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
-        scope: 'camera',
-        bodyId: 'cameraDbEditorBody',
-        dbNumberId: 'cameraDbNumber',
-        totalSizeId: 'cameraDbTotalSize',
-        enabledId: 'cameraDbEnabled',
-        previewPrefix: 'camera-preview',
-        defaultDbNumber: 124,
-        defaultTotalSize: 2
-      });
-      const msgEl = document.getElementById('cameraDbSaveMessage');
-      const btn = document.getElementById('saveCameraDbConfigBtn');
-      const cameraDbConfig = collectDbConfigFromEditor(CAMERA_DB_TAG_FIELDS, {
-        scope: 'camera',
-        dbNumberId: 'cameraDbNumber',
-        totalSizeId: 'cameraDbTotalSize',
-        enabledId: 'cameraDbEnabled',
-        defaultDbNumber: 124,
-        defaultTotalSize: 2
-      });
-      btn.disabled = true;
-      msgEl.textContent = 'Saving...';
-      msgEl.style.color = '';
-      try {
-        const response = await fetch(API_BASE + '/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            plc: {
-              db124: cameraDbConfig
-            }
-          }),
-          signal: AbortSignal.timeout(5000)
-        });
-        const data = await response.json();
-        if (data.success) {
-          msgEl.textContent = `Saved camera mapping for DB${cameraDbConfig.db_number}. Live worker updated.`;
-          msgEl.style.color = 'var(--accent-green, #4caf50)';
-        } else {
-          msgEl.textContent = 'Error: ' + (data.error || 'Unknown');
-          msgEl.style.color = 'var(--accent-red, #f44336)';
-        }
-      } catch (e) {
-        msgEl.textContent = 'Error: ' + e.message;
-        msgEl.style.color = 'var(--accent-red, #f44336)';
-      }
-      btn.disabled = false;
-    }
+    document.addEventListener('DOMContentLoaded', () => {
+      bindTabNavigation();
+      bindPreviewListeners(MAIN_DB_TAG_FIELDS, MAIN_DB_OPTIONS);
+      bindPreviewListeners(CAMERA_DB_TAG_FIELDS, CAMERA_DB_OPTIONS);
+      bindPreviewListeners(ROBOT_DB_TAG_FIELDS, ROBOT_DB_OPTIONS);
 
-    // Run on page load
-    document.addEventListener('DOMContentLoaded', function() {
-      loadDbConfigs();
       document.getElementById('savePlcSetupBtn').addEventListener('click', savePlcSetup);
       document.getElementById('reloadPlcSetupBtn').addEventListener('click', loadDbConfigs);
-      document.getElementById('plcIpAddress').addEventListener('input', () => setPlcIpDisplay(document.getElementById('plcIpAddress').value.trim()));
-      document.getElementById('saveMainDbConfigBtn').addEventListener('click', saveMainDbConfig);
+
+      document.getElementById('plcIpAddress').addEventListener('input', (event) => {
+        setPlcIpDisplay(event.target.value.trim());
+      });
+      document.getElementById('plcRack').addEventListener('input', () => {
+        setSavedRackSlot(
+          Math.max(0, Math.min(10, parseInt(document.getElementById('plcRack').value, 10) || 0)),
+          Math.max(0, Math.min(10, parseInt(document.getElementById('plcSlot').value, 10) || 1))
+        );
+      });
+      document.getElementById('plcSlot').addEventListener('input', () => {
+        setSavedRackSlot(
+          Math.max(0, Math.min(10, parseInt(document.getElementById('plcRack').value, 10) || 0)),
+          Math.max(0, Math.min(10, parseInt(document.getElementById('plcSlot').value, 10) || 1))
+        );
+      });
+      document.getElementById('plcCycleTimeMs').addEventListener('input', () => {
+        setSavedCycle(Math.max(10, Math.min(5000, parseInt(document.getElementById('plcCycleTimeMs').value, 10) || 100)));
+      });
+
+      document.getElementById('saveMainDbConfigBtn').addEventListener('click', () => saveDbConfig(MAIN_DB_TAG_FIELDS, MAIN_DB_OPTIONS, 'db123', 'mainDbSaveMessage', 'Main DB'));
+      document.getElementById('saveCameraDbConfigBtn').addEventListener('click', () => saveDbConfig(CAMERA_DB_TAG_FIELDS, CAMERA_DB_OPTIONS, 'db124', 'cameraDbSaveMessage', 'Camera DB'));
+      document.getElementById('saveRobotDbConfigBtn').addEventListener('click', () => saveDbConfig(ROBOT_DB_TAG_FIELDS, ROBOT_DB_OPTIONS, 'db125', 'robotDbSaveMessage', 'Robot DB'));
+
       document.getElementById('reloadMainDbConfigBtn').addEventListener('click', loadDbConfigs);
-      document.getElementById('resetMainDbDefaultsBtn').addEventListener('click', () => renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), {
-        scope: 'main',
-        bodyId: 'mainDbEditorBody',
-        dbNumberId: 'mainDbNumber',
-        totalSizeId: 'mainDbTotalSize',
-        enabledId: 'mainDbEnabled',
-        previewPrefix: 'main-preview',
-        defaultDbNumber: 123,
-        defaultTotalSize: 80
-      }));
-      document.getElementById('saveCameraDbConfigBtn').addEventListener('click', saveCameraDbConfig);
       document.getElementById('reloadCameraDbConfigBtn').addEventListener('click', loadDbConfigs);
-      document.getElementById('resetCameraDbDefaultsBtn').addEventListener('click', () => renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), {
-        scope: 'camera',
-        bodyId: 'cameraDbEditorBody',
-        dbNumberId: 'cameraDbNumber',
-        totalSizeId: 'cameraDbTotalSize',
-        enabledId: 'cameraDbEnabled',
-        previewPrefix: 'camera-preview',
-        defaultDbNumber: 124,
-        defaultTotalSize: 2
-      }));
-      document.getElementById('saveRobotDbConfigBtn').addEventListener('click', saveRobotDbConfig);
       document.getElementById('reloadRobotDbConfigBtn').addEventListener('click', loadDbConfigs);
-      document.getElementById('resetRobotDbDefaultsBtn').addEventListener('click', () => renderDbEditor(ROBOT_DB_TAG_FIELDS, getDefaultRobotDbConfig(), {
-        scope: 'robot',
-        bodyId: 'robotDbEditorBody',
-        dbNumberId: 'robotDbNumber',
-        totalSizeId: 'robotDbTotalSize',
-        enabledId: 'robotDbEnabled',
-        previewPrefix: 'robot-preview',
-        defaultDbNumber: 125,
-        defaultTotalSize: 20
-      }));
-      document.getElementById('mainDbEditorBody').addEventListener('input', () => updateDbPreviews(MAIN_DB_TAG_FIELDS, {
-        scope: 'main',
-        bodyId: 'mainDbEditorBody',
-        dbNumberId: 'mainDbNumber',
-        totalSizeId: 'mainDbTotalSize',
-        enabledId: 'mainDbEnabled',
-        previewPrefix: 'main-preview',
-        defaultDbNumber: 123,
-        defaultTotalSize: 80
-      }));
-      document.getElementById('mainDbNumber').addEventListener('input', () => updateDbPreviews(MAIN_DB_TAG_FIELDS, {
-        scope: 'main',
-        bodyId: 'mainDbEditorBody',
-        dbNumberId: 'mainDbNumber',
-        totalSizeId: 'mainDbTotalSize',
-        enabledId: 'mainDbEnabled',
-        previewPrefix: 'main-preview',
-        defaultDbNumber: 123,
-        defaultTotalSize: 80
-      }));
-      document.getElementById('cameraDbEditorBody').addEventListener('input', () => updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
-        scope: 'camera',
-        bodyId: 'cameraDbEditorBody',
-        dbNumberId: 'cameraDbNumber',
-        totalSizeId: 'cameraDbTotalSize',
-        enabledId: 'cameraDbEnabled',
-        previewPrefix: 'camera-preview',
-        defaultDbNumber: 124,
-        defaultTotalSize: 2
-      }));
-      document.getElementById('cameraDbNumber').addEventListener('input', () => updateDbPreviews(CAMERA_DB_TAG_FIELDS, {
-        scope: 'camera',
-        bodyId: 'cameraDbEditorBody',
-        dbNumberId: 'cameraDbNumber',
-        totalSizeId: 'cameraDbTotalSize',
-        enabledId: 'cameraDbEnabled',
-        previewPrefix: 'camera-preview',
-        defaultDbNumber: 124,
-        defaultTotalSize: 2
-      }));
-      document.getElementById('robotDbEditorBody').addEventListener('input', () => updateDbPreviews(ROBOT_DB_TAG_FIELDS, {
-        scope: 'robot',
-        bodyId: 'robotDbEditorBody',
-        dbNumberId: 'robotDbNumber',
-        totalSizeId: 'robotDbTotalSize',
-        enabledId: 'robotDbEnabled',
-        previewPrefix: 'robot-preview',
-        defaultDbNumber: 125,
-        defaultTotalSize: 20
-      }));
-      document.getElementById('robotDbNumber').addEventListener('input', () => updateDbPreviews(ROBOT_DB_TAG_FIELDS, {
-        scope: 'robot',
-        bodyId: 'robotDbEditorBody',
-        dbNumberId: 'robotDbNumber',
-        totalSizeId: 'robotDbTotalSize',
-        enabledId: 'robotDbEnabled',
-        previewPrefix: 'robot-preview',
-        defaultDbNumber: 125,
-        defaultTotalSize: 20
-      }));
+
+      document.getElementById('resetMainDbDefaultsBtn').addEventListener('click', () => {
+        renderDbEditor(MAIN_DB_TAG_FIELDS, getDefaultMainDbConfig(), MAIN_DB_OPTIONS);
+        setStatusMessage('mainDbSaveMessage', 'Defaults restored');
+        setGlobalStatus('Main DB defaults restored in the editor. Save to persist them.');
+      });
+      document.getElementById('resetCameraDbDefaultsBtn').addEventListener('click', () => {
+        renderDbEditor(CAMERA_DB_TAG_FIELDS, getDefaultCameraDbConfig(), CAMERA_DB_OPTIONS);
+        setStatusMessage('cameraDbSaveMessage', 'Defaults restored');
+        setGlobalStatus('Camera DB defaults restored in the editor. Save to persist them.');
+      });
+      document.getElementById('resetRobotDbDefaultsBtn').addEventListener('click', () => {
+        renderDbEditor(ROBOT_DB_TAG_FIELDS, getDefaultRobotDbConfig(), ROBOT_DB_OPTIONS);
+        setStatusMessage('robotDbSaveMessage', 'Defaults restored');
+        setGlobalStatus('Robot DB defaults restored in the editor. Save to persist them.');
+      });
+
+      loadDbConfigs();
     });
-
-    function addLog(message, isTrue = null) {
-      const logPanel = document.getElementById('logPanel');
-      const timestamp = new Date().toLocaleTimeString() + '.' + new Date().getMilliseconds().toString().padStart(3, '0');
-      const entry = document.createElement('div');
-      entry.className = 'log-entry';
-
-      let valueClass = '';
-      if (isTrue === true) valueClass = 'log-true';
-      else if (isTrue === false) valueClass = 'log-false';
-
-      entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="${valueClass}">${message}</span>`;
-
-      logPanel.insertBefore(entry, logPanel.firstChild);
-
-      // Keep only last 100 entries
-      while (logPanel.children.length > 100) {
-        logPanel.removeChild(logPanel.lastChild);
-      }
-    }
-
-    function updateStats() {
-      document.getElementById('totalReads').textContent = stats.total;
-      document.getElementById('trueCount').textContent = stats.trueCount;
-      document.getElementById('falseCount').textContent = stats.falseCount;
-      document.getElementById('errorCount').textContent = stats.errors;
-
-      const percent = stats.total > 0 ? ((stats.trueCount / stats.total) * 100).toFixed(1) : 0;
-      document.getElementById('truePercent').textContent = percent + '%';
-
-      // Update uptime
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const minutes = Math.floor(elapsed / 60);
-      const seconds = elapsed % 60;
-      document.getElementById('uptime').textContent =
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-
-    async function pollStartBit() {
-      if (paused) return;
-
-      try {
-        const response = await fetch(`${API_BASE}/api/plc/camera/start`, {
-          signal: AbortSignal.timeout(5000)
-        });
-
-        const data = await response.json();
-
-        stats.total++;
-
-        if (data.success) {
-          const startValue = data.start;
-
-          // Keep address display in sync with server (configurable start bit)
-          if (data.start_byte !== undefined && data.start_bit !== undefined) {
-            setStartBitAddressDisplay(data.start_byte, data.start_bit);
-          }
-          if (data.connected_byte !== undefined && data.connected_bit !== undefined) {
-            setConnectedBitAddressDisplay(data.connected_byte, data.connected_bit);
-          }
-
-          if (startValue) {
-            stats.trueCount++;
-            addLog(`Start bit = TRUE`, true);
-          } else {
-            stats.falseCount++;
-            addLog(`Start bit = FALSE`, false);
-          }
-
-          // Update UI
-          const valueElement = document.getElementById('startBitValue');
-          if (startValue) {
-            valueElement.textContent = 'TRUE ⚡';
-            valueElement.className = 'status-value active';
-          } else {
-            valueElement.textContent = 'FALSE ⚫';
-            valueElement.className = 'status-value inactive';
-          }
-
-          document.getElementById('plcConnected').textContent = data.plc_connected ? 'YES ✓' : 'NO ✗';
-          document.getElementById('plcConnected').className = data.plc_connected ? 'status-value active' : 'status-value inactive';
-
-        } else {
-          stats.errors++;
-          addLog(`ERROR: ${data.error || 'Unknown error'}`);
-        }
-
-        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-        updateStats();
-
-      } catch (error) {
-        stats.errors++;
-        addLog(`EXCEPTION: ${error.message}`);
-        updateStats();
-      }
-    }
-
-    function setPollInterval(ms) {
-      pollIntervalMs = ms;
-      document.getElementById('pollInterval').textContent = ms + 'ms';
-
-      if (pollTimer) {
-        clearInterval(pollTimer);
-      }
-
-      pollTimer = setInterval(pollStartBit, pollIntervalMs);
-      addLog(`Poll interval changed to ${ms}ms`);
-    }
-
-    function clearLog() {
-      document.getElementById('logPanel').innerHTML = '';
-      stats = { total: 0, trueCount: 0, falseCount: 0, errors: 0 };
-      startTime = Date.now();
-      updateStats();
-      addLog('Log cleared');
-    }
-
-    function togglePause() {
-      paused = !paused;
-      addLog(paused ? 'PAUSED' : 'RESUMED');
-    }
-
-    // Start polling
-    setPollInterval(500);
-
-    // Update uptime every second
-    setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const minutes = Math.floor(elapsed / 60);
-      const seconds = elapsed % 60;
-      document.getElementById('uptime').textContent =
-        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }, 1000);
   </script>
 </body>
 </html>
