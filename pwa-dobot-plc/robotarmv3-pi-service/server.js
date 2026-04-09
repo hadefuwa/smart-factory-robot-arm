@@ -1023,7 +1023,7 @@ async function handleCommand(ws, data) {
         case 'moveToXYZ': {
             // Compute IK from target XYZ then issue moveJoint for each joint.
             // Body: { command: "moveToXYZ", x, y, z, speed?: number, orientation?: {x,y,z} }
-            const { x: mX, y: mY, z: mZ, speed: mSpeed, orientation: mOri } = msg;
+            const { x: mX, y: mY, z: mZ, speed: mSpeed, orientation: mOri } = data;
             if (mX === undefined || mY === undefined || mZ === undefined) {
                 ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: x, y, z required' }));
                 break;
@@ -1054,7 +1054,7 @@ async function handleCommand(ws, data) {
             // Compute joint angles from a target XYZ position (mm).
             // Body: { command: "inverseKinematics", x, y, z, orientation?: {x,y,z} }
             // Returns: { type: "ikResult", angles: [j1..j5] } (degrees) or { type: "error" }
-            const { x: ikX, y: ikY, z: ikZ, orientation: ikOri } = msg;
+            const { x: ikX, y: ikY, z: ikZ, orientation: ikOri } = data;
             if (ikX === undefined || ikY === undefined || ikZ === undefined) {
                 ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: x, y, z required' }));
                 break;
