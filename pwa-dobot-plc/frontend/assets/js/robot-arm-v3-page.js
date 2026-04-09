@@ -527,45 +527,51 @@
   // ── polling ───────────────────────────────────────────────────────────────
 
   async function pollStatus() {
+    // Poll arm bridge and PLC data independently so a bridge failure
+    // never wipes the PLC target display.
+    var armData = null;
+    var plcDb125 = null;
+
     try {
-      var results = await Promise.all([
-        apiRequest('/api/robot-arm/status'),
-        apiRequest('/api/plc/db125/read').catch(function () { return null; })
-      ]);
-      var data = results[0];
-      var plcDb125 = results[1];
+      armData = await apiRequest('/api/robot-arm/status');
+    } catch (_) {}
+
+    try {
+      plcDb125 = await apiRequest('/api/plc/db125/read');
+    } catch (_) {}
+
+    // ── PLC data (always update, regardless of bridge state) ──
+    plcAuto.latestPlcData = plcDb125;
+    var plcConnected = !!(plcDb125 && plcDb125.plc_connected);
+    renderPlcDb125(plcDb125);
+    renderPlcTargetXYZ(plcDb125 ? plcDb125.tags : null, plcConnected);
+
+    // ── Live status box ──
+    var tEl = el('lastPollTime');
+    if (tEl) tEl.textContent = 'Last: ' + new Date().toLocaleTimeString();
+
+    // ── Robot arm bridge ──
+    if (armData) {
       var box = el('statusBox');
-      if (box) box.textContent = JSON.stringify(data, null, 2);
-      var tEl = el('lastPollTime');
-      if (tEl) tEl.textContent = 'Last: ' + new Date().toLocaleTimeString();
-      renderPlcDb125(plcDb125);
-
-      // Cache latest PLC data for the auto-move tick
-      plcAuto.latestPlcData = plcDb125;
-      var plcConnected = !!(plcDb125 && plcDb125.plc_connected);
-      renderPlcTargetXYZ(plcDb125 ? plcDb125.tags : null, plcConnected);
-
-      if (data.connected) {
+      if (box) box.textContent = JSON.stringify(armData, null, 2);
+      if (armData.connected) {
         state.bridgeConnected = true;
         setConnected(true, 'Online');
-        var joints = (data.status && data.status.joints) || [];
+        var joints = (armData.status && armData.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
-        renderCurrentXYZ((data.status && data.status.currentXYZ) || null);
+        renderCurrentXYZ((armData.status && armData.status.currentXYZ) || null);
       } else {
         state.bridgeConnected = false;
         setConnected(false, 'Offline');
         renderCurrentXYZ(null);
       }
-      updatePlcAutoBadge();
-    } catch (e) {
+    } else {
       state.bridgeConnected = false;
       setConnected(false, 'Error');
-      var box2 = el('statusBox');
-      if (box2) box2.textContent = 'Poll error: ' + e.message;
-      renderPlcDb125(null);
-      renderPlcTargetXYZ(null, false);
-      updatePlcAutoBadge();
+      renderCurrentXYZ(null);
     }
+
+    updatePlcAutoBadge();
   }
 
   function startPolling() {
