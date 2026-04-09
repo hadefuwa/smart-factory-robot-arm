@@ -103,6 +103,56 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
+    .plc-live-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.75rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--sf-base-300);
+      border-radius: 0.8rem;
+      background: color-mix(in srgb, var(--sf-base-200) 72%, var(--sf-base-100));
+    }
+
+    .plc-live-item {
+      display: grid;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+
+    .plc-live-item span {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sf-base-muted);
+    }
+
+    .plc-live-primary {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--sf-base-content);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .plc-live-primary.is-online {
+      color: var(--accent-green, #4caf50);
+    }
+
+    .plc-live-primary.is-offline {
+      color: var(--accent-red, #f44336);
+    }
+
+    .plc-live-secondary {
+      font-size: 0.75rem;
+      color: var(--sf-base-muted);
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .plc-page-tabs {
       display: flex;
       flex-wrap: wrap;
@@ -413,6 +463,7 @@
     }
 
     @media (max-width: 900px) {
+      .plc-live-strip,
       .plc-status-strip,
       .plc-grid-meta,
       .plc-settings-form {
@@ -583,6 +634,39 @@
             <div class="plc-status-item">
               <span>Robot DB</span>
               <code id="headerRobotDb">DB125</code>
+            </div>
+          </section>
+
+          <section class="plc-live-strip" aria-label="Live PLC status">
+            <div class="plc-live-item">
+              <span>PLC Link</span>
+              <strong class="plc-live-primary is-offline" id="livePlcState">Offline</strong>
+              <div class="plc-live-secondary" id="livePlcDetail">Waiting for live status</div>
+            </div>
+            <div class="plc-live-item">
+              <span>Worker Cache</span>
+              <strong class="plc-live-primary" id="liveCacheAge">Unknown</strong>
+              <div class="plc-live-secondary" id="liveCacheDetail">No recent update yet</div>
+            </div>
+            <div class="plc-live-item">
+              <span>Camera Handshake</span>
+              <strong class="plc-live-primary" id="liveCameraState">Unknown</strong>
+              <div class="plc-live-secondary" id="liveCameraDetail">Start -, Busy -, Done -</div>
+            </div>
+            <div class="plc-live-item">
+              <span>Detection Bits</span>
+              <strong class="plc-live-primary" id="liveDetectionState">Unknown</strong>
+              <div class="plc-live-secondary" id="liveDetectionDetail">Y -, W -, M -, Reject -</div>
+            </div>
+            <div class="plc-live-item">
+              <span>Robot Bridge</span>
+              <strong class="plc-live-primary" id="liveRobotState">Unknown</strong>
+              <div class="plc-live-secondary" id="liveRobotDetail">Conn -, Busy -, Cycle -</div>
+            </div>
+            <div class="plc-live-item">
+              <span>Robot Position</span>
+              <strong class="plc-live-primary" id="liveRobotPose">X -, Y -, Z -</strong>
+              <div class="plc-live-secondary" id="liveRobotPoseDetail">Target X -, Y -, Z -</div>
             </div>
           </section>
 
@@ -844,6 +928,117 @@
         setTitleConnectionStatus(Boolean(data && data.connected));
       } catch (error) {
         setTitleConnectionStatus(false);
+      }
+    }
+
+    function setText(id, value) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    }
+
+    function setLiveTone(id, isOnline) {
+      const element = document.getElementById(id);
+      if (!element) return;
+      element.classList.toggle('is-online', Boolean(isOnline));
+      element.classList.toggle('is-offline', !isOnline);
+    }
+
+    function formatBoolLabel(value) {
+      return value ? 'On' : 'Off';
+    }
+
+    function formatCacheAge(lastUpdateSeconds) {
+      const parsed = Number(lastUpdateSeconds);
+      if (!Number.isFinite(parsed) || parsed <= 0) return 'Unknown';
+      const ageSeconds = Math.max(0, Math.round(Date.now() / 1000 - parsed));
+      if (ageSeconds < 2) return 'Just now';
+      if (ageSeconds < 60) return `${ageSeconds}s ago`;
+      const minutes = Math.floor(ageSeconds / 60);
+      const seconds = ageSeconds % 60;
+      return `${minutes}m ${seconds}s ago`;
+    }
+
+    function renderLiveStatus(statusData, cameraData, robotData) {
+      const plcOnline = Boolean(statusData && statusData.connected);
+      const lastError = (statusData && statusData.last_error) || '';
+      setText('livePlcState', plcOnline ? 'Online' : 'Offline');
+      setLiveTone('livePlcState', plcOnline);
+      setText(
+        'livePlcDetail',
+        plcOnline
+          ? `IP ${statusData.ip || 'unknown'}${Number.isFinite(Number(statusData.rack)) ? ` • Rack ${statusData.rack}` : ''}${Number.isFinite(Number(statusData.slot)) ? ` • Slot ${statusData.slot}` : ''}`
+          : (lastError ? `Last error: ${lastError}` : 'No active PLC connection')
+      );
+
+      const robotLastUpdate = robotData && Number(robotData.last_update);
+      setText('liveCacheAge', formatCacheAge(robotLastUpdate));
+      setText(
+        'liveCacheDetail',
+        robotLastUpdate
+          ? `Last worker update ${new Date(robotLastUpdate * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+          : 'Worker cache timestamp not available'
+      );
+
+      const cameraTags = (cameraData && cameraData.tags) || {};
+      const cameraConnected = Boolean(cameraTags.connected);
+      const cameraBusy = Boolean(cameraTags.busy);
+      const cameraCompleted = Boolean(cameraTags.completed);
+      const cameraStart = Boolean(cameraTags.start);
+      let cameraState = 'Idle';
+      if (!cameraConnected) cameraState = 'Disconnected';
+      else if (cameraBusy) cameraState = 'Busy';
+      else if (cameraCompleted) cameraState = 'Completed';
+      else if (cameraStart) cameraState = 'Start Requested';
+      setText('liveCameraState', cameraState);
+      setLiveTone('liveCameraState', cameraConnected);
+      setText('liveCameraDetail', `Start ${formatBoolLabel(cameraStart)} • Busy ${formatBoolLabel(cameraBusy)} • Done ${formatBoolLabel(cameraCompleted)}`);
+
+      const yellow = Boolean(cameraTags.yellow_cube_detected);
+      const white = Boolean(cameraTags.white_cube_detected);
+      const metal = Boolean(cameraTags.metal_cube_detected);
+      const reject = Boolean(cameraTags.reject_command_from_plc || cameraTags.defect_detected);
+      let detectionState = 'None Active';
+      if (yellow || white || metal) detectionState = 'Cube Detected';
+      if (reject) detectionState = 'Reject / Defect';
+      setText('liveDetectionState', detectionState);
+      setLiveTone('liveDetectionState', yellow || white || metal || reject);
+      setText('liveDetectionDetail', `Y ${formatBoolLabel(yellow)} • W ${formatBoolLabel(white)} • M ${formatBoolLabel(metal)} • Reject ${formatBoolLabel(reject)}`);
+
+      const robotTags = (robotData && robotData.tags) || {};
+      const robotConnected = Boolean(robotTags.connected);
+      const robotBusy = Boolean(robotTags.busy);
+      const robotCycle = Boolean(robotTags.cycle_complete);
+      let robotState = 'Disconnected';
+      if (robotConnected && robotBusy) robotState = 'Busy';
+      else if (robotConnected && robotCycle) robotState = 'Cycle Complete';
+      else if (robotConnected) robotState = 'Ready';
+      setText('liveRobotState', robotState);
+      setLiveTone('liveRobotState', robotConnected);
+      setText('liveRobotDetail', `Conn ${formatBoolLabel(robotConnected)} • Busy ${formatBoolLabel(robotBusy)} • Cycle ${formatBoolLabel(robotCycle)}`);
+
+      setText('liveRobotPose', `X ${robotTags.x_position ?? '-'}, Y ${robotTags.y_position ?? '-'}, Z ${robotTags.z_position ?? '-'}`);
+      setText('liveRobotPoseDetail', `Target X ${robotTags.target_x ?? '-'}, Y ${robotTags.target_y ?? '-'}, Z ${robotTags.target_z ?? '-'}`);
+    }
+
+    async function refreshLivePlcSummary() {
+      try {
+        const [statusResponse, cameraResponse, robotResponse] = await Promise.all([
+          fetch(`${API_BASE}/api/plc/status`, { signal: AbortSignal.timeout(5000) }),
+          fetch(`${API_BASE}/api/plc/camera/read`, { signal: AbortSignal.timeout(5000) }),
+          fetch(`${API_BASE}/api/plc/robot/read`, { signal: AbortSignal.timeout(5000) })
+        ]);
+
+        const statusData = statusResponse.ok ? await statusResponse.json() : { connected: false, last_error: `HTTP ${statusResponse.status}` };
+        const cameraData = cameraResponse.ok ? await cameraResponse.json() : { tags: {} };
+        const robotData = robotResponse.ok ? await robotResponse.json() : { tags: {} };
+
+        renderLiveStatus(statusData, cameraData, robotData);
+      } catch (error) {
+        renderLiveStatus(
+          { connected: false, last_error: error.message },
+          { tags: {} },
+          { tags: {} }
+        );
       }
     }
 
@@ -1242,7 +1437,10 @@
         setStatusMessage('cameraDbSaveMessage', 'Offline defaults loaded', 'error');
         setStatusMessage('robotDbSaveMessage', 'Offline defaults loaded', 'error');
       }
-      await refreshPlcConnectionBadge();
+      await Promise.all([
+        refreshPlcConnectionBadge(),
+        refreshLivePlcSummary()
+      ]);
     }
 
     async function savePlcSetup() {
@@ -1283,7 +1481,10 @@
         setGlobalStatus(`PLC connection settings could not be saved: ${error.message}`, 'error');
       }
 
-      await refreshPlcConnectionBadge();
+      await Promise.all([
+        refreshPlcConnectionBadge(),
+        refreshLivePlcSummary()
+      ]);
 
       btn.disabled = false;
     }
@@ -1329,6 +1530,7 @@
         setGlobalStatus(`${label} mapping could not be saved: ${error.message}`, 'error');
       }
 
+      await refreshLivePlcSummary();
       button.disabled = false;
     }
 
@@ -1395,6 +1597,7 @@
 
       loadDbConfigs();
       setInterval(refreshPlcConnectionBadge, 4000);
+      setInterval(refreshLivePlcSummary, 5000);
     });
   </script>
 </body>

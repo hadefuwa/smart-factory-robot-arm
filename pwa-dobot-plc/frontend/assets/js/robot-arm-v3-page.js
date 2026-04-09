@@ -8,26 +8,28 @@
     lastJoints: []
   };
 
+  // Groups: 'Robot State' = robot→PLC status flags, 'Position' = live XYZ readback,
+  //         'PLC Commands' = PLC→robot command bits and target coordinates
   var PLC_DB125_FIELDS = [
-    { key: 'connected', label: 'Connected', type: 'bool' },
-    { key: 'busy', label: 'Busy', type: 'bool' },
-    { key: 'move_complete', label: 'Move Complete', type: 'bool' },
-    { key: 'at_home', label: 'At Home', type: 'bool' },
-    { key: 'at_pickup_position', label: 'At Pickup', type: 'bool' },
-    { key: 'at_pallet_position', label: 'At Pallet', type: 'bool' },
-    { key: 'at_quarantine_position', label: 'At Quarantine', type: 'bool' },
-    { key: 'gripper_active', label: 'Gripper Active', type: 'bool' },
-    { key: 'cycle_complete', label: 'Cycle Complete', type: 'bool' },
-    { key: 'robot_status_code', label: 'Status Code', type: 'int' },
-    { key: 'error_code', label: 'Error Code', type: 'int' },
-    { key: 'x_position', label: 'X Position', type: 'int', unit: 'mm' },
-    { key: 'y_position', label: 'Y Position', type: 'int', unit: 'mm' },
-    { key: 'z_position', label: 'Z Position', type: 'int', unit: 'mm' },
-    { key: 'home_command', label: 'Home Command', type: 'bool' },
-    { key: 'pickup_command', label: 'Pickup Command', type: 'bool' },
-    { key: 'target_x', label: 'Target X', type: 'int', unit: 'mm' },
-    { key: 'target_y', label: 'Target Y', type: 'int', unit: 'mm' },
-    { key: 'target_z', label: 'Target Z', type: 'int', unit: 'mm' }
+    { key: 'connected',             label: 'Connected',      type: 'bool', group: 'Robot State' },
+    { key: 'busy',                  label: 'Busy',           type: 'bool', group: 'Robot State' },
+    { key: 'move_complete',         label: 'Move Complete',  type: 'bool', group: 'Robot State' },
+    { key: 'at_home',               label: 'At Home',        type: 'bool', group: 'Robot State' },
+    { key: 'at_pickup_position',    label: 'At Pickup',      type: 'bool', group: 'Robot State' },
+    { key: 'at_pallet_position',    label: 'At Pallet',      type: 'bool', group: 'Robot State' },
+    { key: 'at_quarantine_position',label: 'At Quarantine',  type: 'bool', group: 'Robot State' },
+    { key: 'gripper_active',        label: 'Gripper Active', type: 'bool', group: 'Robot State' },
+    { key: 'cycle_complete',        label: 'Cycle Complete', type: 'bool', group: 'Robot State' },
+    { key: 'robot_status_code',     label: 'Status Code',    type: 'int',  group: 'Robot State' },
+    { key: 'error_code',            label: 'Error Code',     type: 'int',  group: 'Robot State' },
+    { key: 'x_position',            label: 'X Position',     type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'y_position',            label: 'Y Position',     type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'z_position',            label: 'Z Position',     type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'home_command',          label: 'Home Cmd',       type: 'bool', group: 'PLC Commands' },
+    { key: 'pickup_command',        label: 'Pickup Cmd',     type: 'bool', group: 'PLC Commands' },
+    { key: 'target_x',              label: 'Target X',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
+    { key: 'target_y',              label: 'Target Y',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
+    { key: 'target_z',              label: 'Target Z',       type: 'int',  unit: 'mm', group: 'PLC Commands' }
   ];
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -63,9 +65,9 @@
     if (e) e.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   }
 
-  function formatPlcValue(field, value) {
+  function formatPlcValue(field, value, plcConnected) {
+    if (!plcConnected || value === null || value === undefined) return '—';
     if (field.type === 'bool') return value ? 'TRUE' : 'FALSE';
-    if (value === null || value === undefined) return '—';
     return String(value) + (field.unit ? ' ' + field.unit : '');
   }
 
@@ -80,24 +82,47 @@
     var plcConnected = !!(payload && payload.plc_connected);
 
     if (badge) {
-      badge.textContent = 'PLC DB' + dbNumber + (plcConnected ? ' • Online' : ' • Offline');
+      badge.textContent = 'DB' + dbNumber + (plcConnected ? ' \u2022 Online' : ' \u2022 Offline');
+      badge.className = 'plc-pill' + (plcConnected ? ' online' : '');
     }
 
-    grid.innerHTML = PLC_DB125_FIELDS.map(function (field) {
-      var value = tags[field.key];
-      var mappingInfo = mapping[field.key] || {};
-      var address = field.type === 'bool'
-        ? ('DB' + dbNumber + '.DBX' + (mappingInfo.byte || 0) + '.' + (mappingInfo.bit || 0))
-        : ('DB' + dbNumber + '.DBW' + (mappingInfo.byte || 0));
-      var boolClass = field.type === 'bool' ? (value ? ' bool-true' : ' bool-false') : '';
+    // Build grouped output
+    var groupOrder = ['Robot State', 'Position', 'PLC Commands'];
+    var grouped = {};
+    PLC_DB125_FIELDS.forEach(function (f) {
+      var g = f.group || 'Other';
+      if (!grouped[g]) grouped[g] = [];
+      grouped[g].push(f);
+    });
 
-      return '' +
-        '<div class="plc-var-card">' +
-          '<div class="plc-var-label">' + field.label + '</div>' +
-          '<div class="plc-var-value' + boolClass + '">' + formatPlcValue(field, value) + '</div>' +
-          '<div class="plc-var-meta">' + address + '</div>' +
-        '</div>';
-    }).join('');
+    var html = '';
+    groupOrder.forEach(function (groupName) {
+      var fields = grouped[groupName];
+      if (!fields || !fields.length) return;
+      html += '<div class="plc-group">';
+      html += '<div class="plc-group-title">' + groupName + '</div>';
+      html += '<div class="plc-var-grid">';
+      fields.forEach(function (field) {
+        var value = tags[field.key];
+        var mappingInfo = mapping[field.key] || {};
+        var address = field.type === 'bool'
+          ? ('DB' + dbNumber + '.DBX' + (mappingInfo.byte !== undefined ? mappingInfo.byte : 0) + '.' + (mappingInfo.bit !== undefined ? mappingInfo.bit : 0))
+          : ('DB' + dbNumber + '.DBW' + (mappingInfo.byte !== undefined ? mappingInfo.byte : 0));
+        var displayVal = formatPlcValue(field, value, plcConnected);
+        var valClass = !plcConnected
+          ? ' offline'
+          : (field.type === 'bool' ? (value ? ' bool-true' : ' bool-false') : '');
+        html +=
+          '<div class="plc-var-card">' +
+            '<div class="plc-var-label">' + field.label + '</div>' +
+            '<div class="plc-var-value' + valClass + '">' + displayVal + '</div>' +
+            '<div class="plc-var-meta">' + address + '</div>' +
+          '</div>';
+      });
+      html += '</div></div>';
+    });
+
+    grid.innerHTML = html;
   }
 
   async function withBtn(btn, fn) {

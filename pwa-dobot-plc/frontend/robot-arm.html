@@ -98,13 +98,17 @@
     .plc-vars-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     .plc-vars-note { font-size: 0.76rem; color: var(--text-muted); line-height: 1.45; }
     .plc-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); }
-    .plc-var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.7rem; }
+    .plc-pill.online { color: var(--status-success); border-color: var(--status-success); }
+    .plc-group { margin-bottom: 0.85rem; }
+    .plc-group-title { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.45rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+    .plc-var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 0.6rem; }
     .plc-var-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem 0.85rem; }
     .plc-var-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.35rem; }
     .plc-var-value { font-size: 1.05rem; font-weight: 700; color: var(--text-white); font-family: var(--font-mono); }
     .plc-var-meta { font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem; }
     .plc-var-value.bool-true { color: var(--status-success); }
     .plc-var-value.bool-false { color: var(--text-secondary); }
+    .plc-var-value.offline { color: var(--text-muted); font-size: 0.9rem; }
   </style>
 </head>
 <body class="dashboard-v2 sf-page-robot-arm">
@@ -334,8 +338,8 @@
                 <p class="plc-vars-note">These values are read from the PLC robot arm mapping in DB125 and are shown separately from the live robot bridge status.</p>
                 <span class="plc-pill" id="plcDb125Badge">PLC DB125</span>
               </div>
-              <div class="plc-var-grid" id="plcVarGrid">
-                <!-- JS injects PLC DB125 values -->
+              <div id="plcVarGrid">
+                <!-- JS injects PLC DB125 values grouped by Robot State / Position / PLC Commands -->
               </div>
             </div>
           </div>
