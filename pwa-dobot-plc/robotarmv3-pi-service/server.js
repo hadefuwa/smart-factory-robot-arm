@@ -16,8 +16,11 @@
 const WebSocket = require('ws');
 const os = require('os');
 const fs = require('fs');
+const path = require('path');
 const { exec } = require('child_process');
 const RobotArm = require('./robotArmST3215');
+const { parseURDF } = require('./urdfParser');
+const { RobotKinematics } = require('./kinematics');
 
 // Configuration
 const PORT = parseInt(process.env.ROBOT_ARM_PORT || "8080");
@@ -29,6 +32,17 @@ const SERIAL_BAUDRATE = 1000000; // ST3215 bus baud rate for this Pi setup
 let DEBUG = false;
 // Simple performance logging flag (set to true to see timing info)
 const PERF_DEBUG = false;
+
+// Inverse kinematics — loaded once at startup from the URDF alongside this file
+const robotKinematics = new RobotKinematics();
+try {
+    const urdfPath = path.join(__dirname, 'demo-kinematics.urdf');
+    const urdfXml = fs.readFileSync(urdfPath, 'utf8');
+    robotKinematics.loadURDF(urdfXml);
+    console.log('Kinematics: URDF loaded successfully');
+} catch (err) {
+    console.error('Kinematics: Failed to load URDF —', err.message);
+}
 
 
 // In-memory log ring buffer for debug endpoint
@@ -1003,6 +1017,60 @@ async function handleCommand(ws, data) {
         case 'getLogs': {
             const count = Math.min(data.count || 50, LOG_RING_MAX);
             ws.send(JSON.stringify({ type: 'logs', entries: LOG_RING.slice(-count) }));
+            break;
+        }
+
+        case 'moveToXYZ': {
+            // Compute IK from target XYZ then issue moveJoint for each joint.
+            // Body: { command: "moveToXYZ", x, y, z, speed?: number, orientation?: {x,y,z} }
+            const { x: mX, y: mY, z: mZ, speed: mSpeed, orientation: mOri } = msg;
+            if (mX === undefined || mY === undefined || mZ === undefined) {
+                ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: x, y, z required' }));
+                break;
+            }
+            if (!robotKinematics.isConfigured()) {
+                ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: URDF not loaded' }));
+                break;
+            }
+            const xyzPose = { x: Number(mX), y: Number(mY), z: Number(mZ) };
+            if (mOri) xyzPose.orientation = mOri;
+            const xyzAngles = robotKinematics.inverseKinematics(xyzPose, null);
+            if (!xyzAngles) {
+                ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: position unreachable' }));
+                break;
+            }
+            // Send moveToAngle for each available joint (already inside queueCommand context)
+            const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
+            for (let ji = 0; ji < xyzAngles.length; ji++) {
+                if (servos[ji] !== null) {
+                    await servos[ji].moveToAngle(xyzAngles[ji], moveSpeed);
+                }
+            }
+            ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
+            break;
+        }
+
+        case 'inverseKinematics': {
+            // Compute joint angles from a target XYZ position (mm).
+            // Body: { command: "inverseKinematics", x, y, z, orientation?: {x,y,z} }
+            // Returns: { type: "ikResult", angles: [j1..j5] } (degrees) or { type: "error" }
+            const { x: ikX, y: ikY, z: ikZ, orientation: ikOri } = msg;
+            if (ikX === undefined || ikY === undefined || ikZ === undefined) {
+                ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: x, y, z required' }));
+                break;
+            }
+            if (!robotKinematics.isConfigured()) {
+                ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: URDF not loaded' }));
+                break;
+            }
+            const targetPose = { x: Number(ikX), y: Number(ikY), z: Number(ikZ) };
+            if (ikOri) targetPose.orientation = ikOri;
+            const angles = robotKinematics.inverseKinematics(targetPose, null);
+            if (!angles) {
+                ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: position unreachable' }));
+            } else {
+                ws.send(JSON.stringify({ type: 'ikResult', angles }));
+            }
             break;
         }
 

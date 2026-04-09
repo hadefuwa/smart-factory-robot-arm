@@ -1427,6 +1427,40 @@ def robot_arm_command():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/robot-arm/move-xyz', methods=['POST'])
+def robot_arm_move_xyz():
+    """
+    Move the robot arm to a Cartesian XYZ position using inverse kinematics.
+    Body: { "x": mm, "y": mm, "z": mm, "speed": steps/s (optional), "orientation": {x,y,z} (optional) }
+    The Node.js service computes IK then sends moveJoint for each joint.
+    """
+    data = request.get_json(silent=True) or {}
+    x = data.get('x')
+    y = data.get('y')
+    z = data.get('z')
+
+    if x is None or y is None or z is None:
+        return jsonify({'success': False, 'error': 'Missing required fields: x, y, z'}), 400
+
+    payload = {'command': 'moveToXYZ', 'x': float(x), 'y': float(y), 'z': float(z)}
+    if 'speed' in data:
+        payload['speed'] = int(data['speed'])
+    if 'orientation' in data:
+        payload['orientation'] = data['orientation']
+
+    with robot_arm_bridge_lock:
+        if not robot_arm_bridge_state.get('connected'):
+            return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
+        try:
+            response = send_robot_arm_command(payload)
+            success = response.get('type') in ('success', 'ikResult', 'moving')
+            status_code = 200 if success else 400
+            return jsonify({'success': success, 'bridge_response': response}), status_code
+        except Exception as e:
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/robot-arm/scan', methods=['POST'])
 def robot_arm_scan():
     """

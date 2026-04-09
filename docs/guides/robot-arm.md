@@ -115,12 +115,100 @@ If Flask restarts, the bridge auto-reconnects. If Node.js restarts, the Flask br
 
 ---
 
+## Inverse Kinematics
+
+The arm supports Cartesian XYZ control via a numeric Jacobian-transpose IK solver ported from BenMatrixTSL's Electron app.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `pwa-dobot-plc/robotarmv3-pi-service/kinematics.js` | IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
+| `pwa-dobot-plc/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
+| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint limits, axis definitions). |
+
+### Arm Geometry (from URDF)
+
+| Segment | Length |
+|---------|--------|
+| Base height (floor → J1) | 122 mm |
+| Upper arm (J2 → J3) | 161.78 mm |
+| Forearm (J3 → J4) | 148.20 mm |
+| Wrist (J4 → J5) | 30 mm |
+| Tool offset (J5 → tip) | 42 mm |
+| **Approximate max reach** | **~529 mm** |
+
+Joint 2 (shoulder pitch) has `zero_offset_degrees="-90"` — when the app commands 0°, the physical joint sits at -90° from the URDF zero. This is applied automatically by `kinematics.js`.
+
+### Algorithm
+
+Numeric Jacobian-transpose iterative solver:
+- Runs up to 400 iterations with adaptive step sizing.
+- Convergence threshold: 1–10 mm XYZ error.
+- Returns `null` if the pose is unreachable or outside the workspace.
+- Geometry is loaded from `demo-kinematics.urdf` at Node.js startup.
+
+### Node.js Dependencies
+
+`@xmldom/xmldom` is required (added to `package.json`) to run the URDF parser in Node.js — `DOMParser` is a browser-only API not present in Node.
+
+```bash
+# On the Pi, after pulling new code:
+cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install
+```
+
+### WebSocket Commands
+
+#### moveToXYZ
+```json
+{ "command": "moveToXYZ", "x": 300, "y": 0, "z": 250, "speed": 1500 }
+```
+Runs IK then moves all joints to reach the target position. `speed` is optional (default 1500 steps/s).
+
+Response on success:
+```json
+{ "type": "moving", "angles": [0.0, 30.8, -56.1, -0.0, 14.4], "x": 300, "y": 0, "z": 250 }
+```
+Response if unreachable:
+```json
+{ "type": "error", "message": "moveToXYZ: position unreachable" }
+```
+
+#### inverseKinematics (IK only, no movement)
+```json
+{ "command": "inverseKinematics", "x": 300, "y": 0, "z": 250 }
+```
+Returns angles without moving the arm.
+
+Response:
+```json
+{ "type": "ikResult", "angles": [0.0, 30.8, -56.1, -0.0, 14.4] }
+```
+
+### Flask Endpoint
+
+```
+POST /api/robot-arm/move-xyz
+Body: { "x": 300, "y": 0, "z": 250, "speed": 1500 }
+```
+
+- `x`, `y`, `z` — target position in **millimetres** from the arm's base origin.
+- `speed` — optional servo speed in steps/s (default 1500).
+- `orientation` — optional tool direction vector `{"x":0,"y":0,"z":-1}`.
+
+Returns 400 if the position is unreachable.
+
+---
+
 ## Codebase Files
 
 | File | Purpose |
 |------|---------|
-| `pwa-dobot-plc/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, and all command handlers. |
+| `pwa-dobot-plc/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, and all command handlers including `moveToXYZ` and `inverseKinematics`. |
 | `pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js` | ST3215 servo driver class. Handles packet encoding/decoding, ping, readData, writeData, readQuickStatus. |
+| `pwa-dobot-plc/robotarmv3-pi-service/kinematics.js` | Numeric Jacobian-transpose IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
+| `pwa-dobot-plc/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
+| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry description (link lengths, joint axes, limits). |
 | `pwa-dobot-plc/backend/app.py` | Flask app. Contains robot arm bridge state, `open_robot_arm_bridge()`, `send_robot_arm_command()`, all `/api/robot-arm/*` endpoints, and the auto-connect startup thread. |
 | `pwa-dobot-plc/frontend/robot-arm.html` | Browser UI — 4 tabs: Joint Control, Live Status, Settings, Debug. |
 | `pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js` | Frontend JS — status polling, joint card rendering, slider/input sync, all button event handlers. |
@@ -137,6 +225,7 @@ All endpoints are relative to the Flask base URL (e.g. `https://<pi-ip>:8080`).
 | `POST` | `/api/robot-arm/connect` | `{"host":"localhost","port":8090}` — opens WS bridge |
 | `POST` | `/api/robot-arm/disconnect` | Closes WS bridge |
 | `POST` | `/api/robot-arm/move` | `{"joint":1,"angle":45.0,"speed":1500}` |
+| `POST` | `/api/robot-arm/move-xyz` | `{"x":300,"y":0,"z":250,"speed":1500}` — IK then move all joints |
 | `POST` | `/api/robot-arm/stop` | Stops all joints |
 | `POST` | `/api/robot-arm/command` | Generic passthrough — body is any WS command + optional `"_recvTimeout":N` (seconds) |
 
