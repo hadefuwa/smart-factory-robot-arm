@@ -92,6 +92,19 @@
     .dbg-card h5 { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 0.5rem; }
     .dbg-help { font-size: 0.74rem; color: var(--text-muted); margin: -0.15rem 0 0.55rem; line-height: 1.45; }
     .dbg-out { font-family: var(--font-mono); font-size: 0.72rem; background: var(--bg-log); border-radius: 6px; padding: 0.5rem; min-height: 3rem; max-height: 8rem; overflow: auto; color: var(--text-secondary); white-space: pre-wrap; }
+
+    /* PLC variables */
+    .plc-vars-wrap { display: grid; gap: 0.9rem; margin-bottom: 1rem; }
+    .plc-vars-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .plc-vars-note { font-size: 0.76rem; color: var(--text-muted); line-height: 1.45; }
+    .plc-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.65rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); }
+    .plc-var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.7rem; }
+    .plc-var-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem 0.85rem; }
+    .plc-var-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.35rem; }
+    .plc-var-value { font-size: 1.05rem; font-weight: 700; color: var(--text-white); font-family: var(--font-mono); }
+    .plc-var-meta { font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem; }
+    .plc-var-value.bool-true { color: var(--status-success); }
+    .plc-var-value.bool-false { color: var(--text-secondary); }
   </style>
 </head>
 <body class="dashboard-v2 sf-page-robot-arm">
@@ -314,6 +327,19 @@
         <!-- TAB 2 — Live Status                                     -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-status">
+          <div class="ra-section">
+            <div class="ra-section-title">PLC Variables (DB125)</div>
+            <div class="plc-vars-wrap">
+              <div class="plc-vars-head">
+                <p class="plc-vars-note">These values are read from the PLC robot arm mapping in DB125 and are shown separately from the live robot bridge status.</p>
+                <span class="plc-pill" id="plcDb125Badge">PLC DB125</span>
+              </div>
+              <div class="plc-var-grid" id="plcVarGrid">
+                <!-- JS injects PLC DB125 values -->
+              </div>
+            </div>
+          </div>
+
           <div class="ra-section">
             <div class="ra-section-title" style="display:flex;justify-content:space-between">
               <span>Live Servo Status</span>

@@ -18,7 +18,8 @@ def init_plc_worker(
     vision_callback,
     cycle_time_ms: int = 100,
     db123_config=None,
-    db124_config=None
+    db124_config=None,
+    db125_config=None
 ) -> PLCWorker:
     """
     Initialize the PLC worker.
@@ -30,6 +31,7 @@ def init_plc_worker(
         cycle_time_ms: Worker cycle time (default 100ms)
         db123_config: Runtime main DB mapping config
         db124_config: Runtime camera DB mapping config
+        db125_config: Runtime robot DB mapping config
 
     Returns:
         PLCWorker instance
@@ -45,6 +47,7 @@ def init_plc_worker(
         cycle_time_ms=cycle_time_ms,
         main_db_config=db123_config,
         camera_db_config=db124_config,
+        robot_db_config=db125_config,
         camera_service=camera_service,
         vision_processor_callback=vision_callback
     )

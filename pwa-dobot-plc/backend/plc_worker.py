@@ -96,6 +96,28 @@ CAMERA_DB_DEFAULTS = {
     'counter_exceeded': {'byte': 6, 'bit': 4, 'kind': 'bool'},
 }
 
+ROBOT_DB_DEFAULTS = {
+    'connected': {'byte': 0, 'bit': 0, 'kind': 'bool'},
+    'busy': {'byte': 0, 'bit': 1, 'kind': 'bool'},
+    'move_complete': {'byte': 0, 'bit': 2, 'kind': 'bool'},
+    'at_home': {'byte': 0, 'bit': 3, 'kind': 'bool'},
+    'at_pickup_position': {'byte': 0, 'bit': 4, 'kind': 'bool'},
+    'at_pallet_position': {'byte': 0, 'bit': 5, 'kind': 'bool'},
+    'at_quarantine_position': {'byte': 0, 'bit': 6, 'kind': 'bool'},
+    'gripper_active': {'byte': 0, 'bit': 7, 'kind': 'bool'},
+    'cycle_complete': {'byte': 1, 'bit': 0, 'kind': 'bool'},
+    'robot_status_code': {'byte': 2, 'kind': 'int'},
+    'error_code': {'byte': 4, 'kind': 'int'},
+    'x_position': {'byte': 6, 'kind': 'int'},
+    'y_position': {'byte': 8, 'kind': 'int'},
+    'z_position': {'byte': 10, 'kind': 'int'},
+    'home_command': {'byte': 12, 'bit': 0, 'kind': 'bool'},
+    'pickup_command': {'byte': 12, 'bit': 1, 'kind': 'bool'},
+    'target_x': {'byte': 14, 'kind': 'int'},
+    'target_y': {'byte': 16, 'kind': 'int'},
+    'target_z': {'byte': 18, 'kind': 'int'},
+}
+
 
 # ============================================================================
 # Vision Handshake State Machine
@@ -155,6 +177,7 @@ class PLCWorker:
         cycle_time_ms: int = 100,
         main_db_config: Optional[Dict[str, Any]] = None,
         camera_db_config: Optional[Dict[str, Any]] = None,
+        robot_db_config: Optional[Dict[str, Any]] = None,
         camera_service=None,
         vision_processor_callback=None
     ):
@@ -182,10 +205,13 @@ class PLCWorker:
         self.camera_db_number = 124
         self.camera_db_total_size = 8
         self.camera_db_tags = {}
+        self.robot_db_number = 125
+        self.robot_db_total_size = 20
+        self.robot_db_tags = {}
 
         self.camera_service = camera_service
         self.vision_processor_callback = vision_processor_callback
-        self.update_db_configs(main_db_config or {}, camera_db_config or {})
+        self.update_db_configs(main_db_config or {}, camera_db_config or {}, robot_db_config or {})
 
         # Snap7 client (owned exclusively by worker thread)
         self.client: Optional[snap7.client.Client] = None
@@ -218,22 +244,28 @@ class PLCWorker:
             'max_cycle_time_ms': 0.0,
         }
 
-    def update_db_configs(self, main_db_config: Dict[str, Any], camera_db_config: Dict[str, Any]):
+    def update_db_configs(self, main_db_config: Dict[str, Any], camera_db_config: Dict[str, Any], robot_db_config: Dict[str, Any]):
         """Update runtime DB mappings used by the worker."""
         main_db_config = main_db_config or {}
         camera_db_config = camera_db_config or {}
+        robot_db_config = robot_db_config or {}
         self.main_db_number = int(main_db_config.get('db_number', 123))
         self.main_db_total_size = max(80, int(main_db_config.get('total_size', 80)))
         self.main_db_tags = self._build_tag_config(main_db_config.get('tags', {}), MAIN_DB_DEFAULTS)
         self.camera_db_number = int(camera_db_config.get('db_number', 124))
         self.camera_db_total_size = max(8, int(camera_db_config.get('total_size', 8)))
         self.camera_db_tags = self._build_tag_config(camera_db_config.get('tags', {}), CAMERA_DB_DEFAULTS)
+        self.robot_db_number = int(robot_db_config.get('db_number', 125))
+        self.robot_db_total_size = max(20, int(robot_db_config.get('total_size', 20)))
+        self.robot_db_tags = self._build_tag_config(robot_db_config.get('tags', {}), ROBOT_DB_DEFAULTS)
         logger.info(
-            "Updated PLC mappings: main DB%s size=%s, camera DB%s size=%s",
+            "Updated PLC mappings: main DB%s size=%s, camera DB%s size=%s, robot DB%s size=%s",
             self.main_db_number,
             self.main_db_total_size,
             self.camera_db_number,
             self.camera_db_total_size,
+            self.robot_db_number,
+            self.robot_db_total_size,
         )
 
     def update_connection_settings(self, plc_ip: str, rack: int, slot: int):
@@ -274,7 +306,8 @@ class PLCWorker:
         """Backward-compatible shim: update camera mapping from a DB123-style config."""
         self.update_db_configs(
             {'db_number': self.main_db_number, 'total_size': self.main_db_total_size},
-            db123_config
+            db123_config,
+            {'db_number': self.robot_db_number, 'total_size': self.robot_db_total_size}
         )
 
     def _build_tag_config(self, tags: Dict[str, Any], defaults: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
@@ -321,6 +354,18 @@ class PLCWorker:
 
     def _camera_int(self, data: bytearray, tag_name: str, fallback: int = 0) -> int:
         tag = self.camera_db_tags.get(tag_name)
+        if not tag:
+            return fallback
+        return get_int(data, tag['byte'])
+
+    def _robot_bit(self, data: bytearray, tag_name: str, fallback: bool = False) -> bool:
+        tag = self.robot_db_tags.get(tag_name)
+        if not tag or 'bit' not in tag:
+            return fallback
+        return get_bool(data, tag['byte'], tag['bit'])
+
+    def _robot_int(self, data: bytearray, tag_name: str, fallback: int = 0) -> int:
+        tag = self.robot_db_tags.get(tag_name)
         if not tag:
             return fallback
         return get_int(data, tag['byte'])
@@ -373,6 +418,27 @@ class PLCWorker:
             'steel_cube': False,
             'aluminum_cube': False,
             'counter_exceeded': False,
+
+            # Robot arm PLC DB125
+            'db125_connected': False,
+            'db125_busy': False,
+            'db125_move_complete': False,
+            'db125_at_home': False,
+            'db125_at_pickup_position': False,
+            'db125_at_pallet_position': False,
+            'db125_at_quarantine_position': False,
+            'db125_gripper_active': False,
+            'db125_cycle_complete': False,
+            'db125_robot_status_code': 0,
+            'db125_error_code': 0,
+            'db125_x_position': 0,
+            'db125_y_position': 0,
+            'db125_z_position': 0,
+            'db125_home_command': False,
+            'db125_pickup_command': False,
+            'db125_target_x': 0,
+            'db125_target_y': 0,
+            'db125_target_z': 0,
 
             # Objects & Counters (byte 34-47)
             'material_type': 0,
@@ -661,12 +727,14 @@ class PLCWorker:
                 with self.cache_lock:
                     self.cache['connected'] = True
 
-                # 2. BATCH READS - main DB and camera DB
+                # 2. BATCH READS - main DB, camera DB, and robot DB
                 try:
                     main_data = self.client.db_read(self.main_db_number, 0, self.main_db_total_size)
                     camera_data = self.client.db_read(self.camera_db_number, 0, self.camera_db_total_size)
+                    robot_data = self.client.db_read(self.robot_db_number, 0, self.robot_db_total_size)
                     self._decode_main_db(main_data)
                     self._decode_camera_db(camera_data)
+                    self._decode_robot_db(robot_data)
                     with self.cache_lock:
                         self.cache['last_update'] = time.time()
                         self.cache['cycle_count'] += 1
@@ -796,6 +864,29 @@ class PLCWorker:
             self.cache['steel_cube'] = self._camera_bit(data, 'steel_cube')
             self.cache['aluminum_cube'] = self._camera_bit(data, 'aluminum_cube')
             self.cache['counter_exceeded'] = self._camera_bit(data, 'counter_exceeded')
+
+    def _decode_robot_db(self, data: bytearray):
+        """Decode the robot PLC DB into cache (called by worker thread only)."""
+        with self.cache_lock:
+            self.cache['db125_connected'] = self._robot_bit(data, 'connected')
+            self.cache['db125_busy'] = self._robot_bit(data, 'busy')
+            self.cache['db125_move_complete'] = self._robot_bit(data, 'move_complete')
+            self.cache['db125_at_home'] = self._robot_bit(data, 'at_home')
+            self.cache['db125_at_pickup_position'] = self._robot_bit(data, 'at_pickup_position')
+            self.cache['db125_at_pallet_position'] = self._robot_bit(data, 'at_pallet_position')
+            self.cache['db125_at_quarantine_position'] = self._robot_bit(data, 'at_quarantine_position')
+            self.cache['db125_gripper_active'] = self._robot_bit(data, 'gripper_active')
+            self.cache['db125_cycle_complete'] = self._robot_bit(data, 'cycle_complete')
+            self.cache['db125_robot_status_code'] = self._robot_int(data, 'robot_status_code')
+            self.cache['db125_error_code'] = self._robot_int(data, 'error_code')
+            self.cache['db125_x_position'] = self._robot_int(data, 'x_position')
+            self.cache['db125_y_position'] = self._robot_int(data, 'y_position')
+            self.cache['db125_z_position'] = self._robot_int(data, 'z_position')
+            self.cache['db125_home_command'] = self._robot_bit(data, 'home_command')
+            self.cache['db125_pickup_command'] = self._robot_bit(data, 'pickup_command')
+            self.cache['db125_target_x'] = self._robot_int(data, 'target_x')
+            self.cache['db125_target_y'] = self._robot_int(data, 'target_y')
+            self.cache['db125_target_z'] = self._robot_int(data, 'target_z')
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""

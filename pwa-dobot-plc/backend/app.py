@@ -283,6 +283,14 @@ def get_camera_db_number(config: Optional[Dict[str, Any]] = None) -> int:
     return int(get_camera_db_config(config).get('db_number', 124))
 
 
+def get_robot_db_config(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return the configured robot DB125 section."""
+    if config is None:
+        config = load_config()
+    plc_config = config.get('plc', {})
+    return plc_config.get('db125', {})
+
+
 def apply_runtime_plc_config(config: Dict[str, Any]) -> None:
     """Push updated PLC settings and DB mappings into the running PLC worker."""
     worker = getattr(plc_client, 'worker', None) if plc_client else None
@@ -296,7 +304,8 @@ def apply_runtime_plc_config(config: Dict[str, Any]) -> None:
     )
     worker.update_db_configs(
         plc_config.get('db123', {}),
-        get_camera_db_config(config)
+        get_camera_db_config(config),
+        get_robot_db_config(config)
     )
     plc_client.ip = worker.plc_ip
     plc_client.rack = worker.rack
@@ -929,7 +938,8 @@ def init_clients():
             vision_callback=process_vision_cycle_new,  # New callback for worker
             cycle_time_ms=plc_config.get('cycle_time_ms', 100),
             db123_config=plc_config.get('db123', {}),
-            db124_config=get_camera_db_config(config)
+            db124_config=get_camera_db_config(config),
+            db125_config=get_robot_db_config(config)
         )
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
@@ -3237,6 +3247,80 @@ def read_camera_db_tags():
             'db_number': 124,
             'tags': default_tags,
             'plc_connected': False
+        }), 500
+
+
+@app.route('/api/plc/db125/read', methods=['GET'])
+@app.route('/api/plc/robot/read', methods=['GET'])
+def read_robot_db_tags():
+    """Return the cached DB125 robot PLC variables."""
+    default_tags = {
+        'connected': False,
+        'busy': False,
+        'move_complete': False,
+        'at_home': False,
+        'at_pickup_position': False,
+        'at_pallet_position': False,
+        'at_quarantine_position': False,
+        'gripper_active': False,
+        'cycle_complete': False,
+        'robot_status_code': 0,
+        'error_code': 0,
+        'x_position': 0,
+        'y_position': 0,
+        'z_position': 0,
+        'home_command': False,
+        'pickup_command': False,
+        'target_x': 0,
+        'target_y': 0,
+        'target_z': 0
+    }
+
+    try:
+        cache = get_plc_cache() or {}
+        config = load_config()
+        robot_db_config = get_robot_db_config(config)
+        db_number = int(robot_db_config.get('db_number', 125))
+
+        tags = {
+            'connected': bool(cache.get('db125_connected', False)),
+            'busy': bool(cache.get('db125_busy', False)),
+            'move_complete': bool(cache.get('db125_move_complete', False)),
+            'at_home': bool(cache.get('db125_at_home', False)),
+            'at_pickup_position': bool(cache.get('db125_at_pickup_position', False)),
+            'at_pallet_position': bool(cache.get('db125_at_pallet_position', False)),
+            'at_quarantine_position': bool(cache.get('db125_at_quarantine_position', False)),
+            'gripper_active': bool(cache.get('db125_gripper_active', False)),
+            'cycle_complete': bool(cache.get('db125_cycle_complete', False)),
+            'robot_status_code': int(cache.get('db125_robot_status_code', 0)),
+            'error_code': int(cache.get('db125_error_code', 0)),
+            'x_position': int(cache.get('db125_x_position', 0)),
+            'y_position': int(cache.get('db125_y_position', 0)),
+            'z_position': int(cache.get('db125_z_position', 0)),
+            'home_command': bool(cache.get('db125_home_command', False)),
+            'pickup_command': bool(cache.get('db125_pickup_command', False)),
+            'target_x': int(cache.get('db125_target_x', 0)),
+            'target_y': int(cache.get('db125_target_y', 0)),
+            'target_z': int(cache.get('db125_target_z', 0)),
+        }
+
+        return jsonify({
+            'success': True,
+            'db_number': db_number,
+            'tags': tags,
+            'plc_connected': bool(cache.get('connected', False)),
+            'last_update': cache.get('last_update', 0.0),
+            'mapping': robot_db_config.get('tags', {})
+        })
+    except Exception as e:
+        logger.error(f"Error reading robot DB tags: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'db_number': 125,
+            'tags': default_tags,
+            'plc_connected': False,
+            'mapping': {}
         }), 500
 
 @app.route('/api/plc/db40/start', methods=['GET'])
