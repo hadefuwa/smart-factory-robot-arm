@@ -543,8 +543,17 @@
     // ── PLC data (always update, regardless of bridge state) ──
     plcAuto.latestPlcData = plcDb125;
     var plcConnected = !!(plcDb125 && plcDb125.plc_connected);
+    var db125Tags = plcDb125 ? plcDb125.tags : null;
     renderPlcDb125(plcDb125);
-    renderPlcTargetXYZ(plcDb125 ? plcDb125.tags : null, plcConnected);
+    renderPlcTargetXYZ(db125Tags, plcConnected);
+
+    // Update at-position badges on the Positions tab
+    if (db125Tags) {
+      POSITIONS.forEach(function (p) {
+        var atEl = el(p.atId);
+        if (atEl) atEl.classList.toggle('visible', !!(db125Tags[p.atKey]));
+      });
+    }
 
     // ── Live status box ──
     var tEl = el('lastPollTime');
@@ -646,6 +655,99 @@
     });
   }
 
+  // ── Named positions ───────────────────────────────────────────────────────
+
+  var POSITIONS = [
+    { id: 'pickup',     label: 'Pickup',    xId: 'posPickupX',     yId: 'posPickupY',     zId: 'posPickupZ',     msgId: 'posPickupMsg',     atId: 'posAtPickup',     atKey: 'at_pickup_position',     saveBtn: 'posSavePickupBtn',     moveBtn: 'posMovePickupBtn',     wX: 'pickup_x',     wY: 'pickup_y',     wZ: 'pickup_z' },
+    { id: 'quarantine', label: 'Quarantine',xId: 'posQuarantineX', yId: 'posQuarantineY', zId: 'posQuarantineZ', msgId: 'posQuarantineMsg', atId: 'posAtQuarantine', atKey: 'at_quarantine_position',  saveBtn: 'posSaveQuarantineBtn', moveBtn: 'posMoveQuarantineBtn', wX: 'quarantine_x', wY: 'quarantine_y', wZ: 'quarantine_z' },
+    { id: 'pallet',     label: 'Pallet',    xId: 'posPalletX',     yId: 'posPalletY',     zId: 'posPalletZ',     msgId: 'posPalletMsg',     atId: 'posAtPallet',     atKey: 'at_pallet_position',     saveBtn: 'posSavePalletBtn',     moveBtn: 'posMovePalletBtn',     wX: 'pallet_x',     wY: 'pallet_y',     wZ: 'pallet_z' }
+  ];
+
+  function posMsg(msgId, text, isError) {
+    var e = el(msgId);
+    if (!e) return;
+    e.textContent = text;
+    e.style.color = isError ? 'var(--status-danger)' : 'var(--status-success)';
+    clearTimeout(e._t);
+    e._t = setTimeout(function () { e.textContent = ''; }, 4000);
+  }
+
+  function renderPositions(posData, db125Tags) {
+    var badge = el('posBadge');
+    var plcConn = !!(posData && posData.plc_connected);
+    if (badge) {
+      badge.textContent = plcConn ? 'PLC Online' : 'PLC Offline';
+      badge.className = 'plc-pill' + (plcConn ? ' online' : '');
+    }
+    if (!posData || !posData.positions) return;
+    var pos = posData.positions;
+    var db125 = db125Tags || {};
+    POSITIONS.forEach(function (p) {
+      var coord = pos[p.id] || {};
+      // Fill inputs only when user is not focused on them
+      ['x','y','z'].forEach(function (ax) {
+        var inp = el(p[ax + 'Id']);
+        if (inp && document.activeElement !== inp) inp.value = coord[ax] !== undefined ? coord[ax] : '';
+      });
+      // At-position badge
+      var atEl = el(p.atId);
+      if (atEl) atEl.classList.toggle('visible', !!(db125[p.atKey]));
+    });
+  }
+
+  async function loadPositions() {
+    try {
+      var d = await apiRequest('/api/plc/positions/read');
+      renderPositions(d, plcAuto.latestPlcData ? plcAuto.latestPlcData.tags : null);
+    } catch (e) {
+      var badge = el('posBadge');
+      if (badge) { badge.textContent = 'Load Error'; badge.className = 'plc-pill'; }
+    }
+  }
+
+  async function savePosition(pos) {
+    var x = Number(el(pos.xId) && el(pos.xId).value);
+    var y = Number(el(pos.yId) && el(pos.yId).value);
+    var z = Number(el(pos.zId) && el(pos.zId).value);
+    var payload = {};
+    payload[pos.wX] = x; payload[pos.wY] = y; payload[pos.wZ] = z;
+    try {
+      var d = await apiRequest('/api/plc/positions/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (d.success) {
+        posMsg(pos.msgId, 'Saved to PLC', false);
+      } else {
+        posMsg(pos.msgId, (d.errors || ['Write failed']).join(', '), true);
+      }
+    } catch (e) {
+      posMsg(pos.msgId, 'Error: ' + e.message, true);
+    }
+  }
+
+  async function moveToPosition(pos) {
+    var x = Number(el(pos.xId) && el(pos.xId).value);
+    var y = Number(el(pos.yId) && el(pos.yId).value);
+    var z = Number(el(pos.zId) && el(pos.zId).value);
+    try {
+      var d = await apiRequest('/api/robot-arm/move-xyz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: x, y: y, z: z, speed: 1500 })
+      });
+      var resp = d.bridge_response || {};
+      if (d.success) {
+        posMsg(pos.msgId, 'Moving to ' + pos.label + ' position', false);
+      } else {
+        posMsg(pos.msgId, resp.message || 'Move failed', true);
+      }
+    } catch (e) {
+      posMsg(pos.msgId, 'Error: ' + e.message, true);
+    }
+  }
+
   // ── tab system ────────────────────────────────────────────────────────────
 
   function initTabs() {
@@ -715,6 +817,15 @@
     if ((b = el('dbgRegBtn')))       b.addEventListener('click', function () { withBtn(b, dbgReadRegister); });
     if ((b = el('dbgClearBtn')))     b.addEventListener('click', dbgClearAll);
 
+    // Positions tab
+    if ((b = el('posRefreshBtn')))   b.addEventListener('click', function () { withBtn(b, loadPositions); });
+    POSITIONS.forEach(function (pos) {
+      var sb = el(pos.saveBtn);
+      var mb = el(pos.moveBtn);
+      if (sb) sb.addEventListener('click', (function (p) { return function () { withBtn(sb, function () { return savePosition(p); }); }; })(pos));
+      if (mb) mb.addEventListener('click', (function (p) { return function () { withBtn(mb, function () { return moveToPosition(p); }); }; })(pos));
+    });
+
     // PLC auto-move — interval input (apply on change, no button needed)
     var intervalInput = el('plcMoveInterval');
     if (intervalInput) {
@@ -746,6 +857,7 @@
     bindEvents();
     startPolling();
     startPlcAutoMove();
+    loadPositions();
   }
 
   window.addEventListener('beforeunload', function () {

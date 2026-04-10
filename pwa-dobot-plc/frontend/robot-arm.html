@@ -150,6 +150,17 @@
       .xyz-readout { grid-template-columns: 1fr; }
     }
 
+    /* ── Named positions ── */
+    .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .pos-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.1rem; }
+    .pos-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .pos-card-title { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem; }
+    .pos-at-badge { font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 1rem; background: var(--status-success-bg); color: var(--status-success); display: none; }
+    .pos-at-badge.visible { display: inline-block; }
+    .pos-xyz-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.65rem; }
+    .pos-field label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 0.2rem; }
+    .pos-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.65rem; }
+
     /* ── Debug ── */
     .dbg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
     .dbg-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem; }
@@ -246,6 +257,9 @@
           </button>
           <button class="ra-tab" data-tab="settings">
             <i class="material-icons" style="font-size:16px">settings</i> Settings
+          </button>
+          <button class="ra-tab" data-tab="positions">
+            <i class="material-icons" style="font-size:16px">place</i> Positions
           </button>
           <button class="ra-tab" data-tab="debug">
             <i class="material-icons" style="font-size:16px">bug_report</i> Debug
@@ -515,7 +529,137 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- TAB 4 — Debug                                           -->
+        <!-- TAB 4 — Positions                                       -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-positions">
+
+          <div class="ra-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+              <div>
+                <span class="ra-section-title" style="margin:0;display:inline">Named Positions</span>
+                <span class="plc-pill" id="posBadge" style="margin-left:0.5rem">PLC Offline</span>
+              </div>
+              <div style="display:flex;gap:0.5rem">
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="posRefreshBtn">
+                  <i class="material-icons" style="font-size:14px">refresh</i> Refresh from PLC
+                </button>
+              </div>
+            </div>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:1rem">
+              These positions are stored in DB123 on the PLC. Edit the values here and press <strong>Save to PLC</strong> to write them. Changes made on the PLC HMI will appear after pressing <strong>Refresh from PLC</strong> or on the next auto-refresh.
+            </p>
+            <div class="pos-grid">
+
+              <!-- Pickup -->
+              <div class="pos-card">
+                <div class="pos-card-header">
+                  <span class="pos-card-title">
+                    <i class="material-icons" style="font-size:16px;color:var(--accent-start)">file_download</i>
+                    Pickup Position
+                  </span>
+                  <span class="pos-at-badge" id="posAtPickup">At Position</span>
+                </div>
+                <div class="pos-xyz-row">
+                  <div class="pos-field ra-field">
+                    <label>X (mm)</label>
+                    <input class="ra-input" id="posPickupX" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Y (mm)</label>
+                    <input class="ra-input" id="posPickupY" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Z (mm)</label>
+                    <input class="ra-input" id="posPickupZ" type="number" style="width:100%">
+                  </div>
+                </div>
+                <div class="pos-actions">
+                  <button class="ra-btn ra-btn-primary ra-btn-sm" id="posSavePickupBtn">
+                    <i class="material-icons" style="font-size:14px">save</i> Save to PLC
+                  </button>
+                  <button class="ra-btn ra-btn-ghost ra-btn-sm" id="posMovePickupBtn">
+                    <i class="material-icons" style="font-size:14px">send</i> Move Here
+                  </button>
+                </div>
+                <div class="pos-msg" id="posPickupMsg" style="font-size:0.76rem;min-height:1.1em;margin-top:0.4rem"></div>
+              </div>
+
+              <!-- Quarantine -->
+              <div class="pos-card">
+                <div class="pos-card-header">
+                  <span class="pos-card-title">
+                    <i class="material-icons" style="font-size:16px;color:var(--status-warning)">warning</i>
+                    Quarantine Position
+                  </span>
+                  <span class="pos-at-badge" id="posAtQuarantine">At Position</span>
+                </div>
+                <div class="pos-xyz-row">
+                  <div class="pos-field ra-field">
+                    <label>X (mm)</label>
+                    <input class="ra-input" id="posQuarantineX" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Y (mm)</label>
+                    <input class="ra-input" id="posQuarantineY" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Z (mm)</label>
+                    <input class="ra-input" id="posQuarantineZ" type="number" style="width:100%">
+                  </div>
+                </div>
+                <div class="pos-actions">
+                  <button class="ra-btn ra-btn-primary ra-btn-sm" id="posSaveQuarantineBtn">
+                    <i class="material-icons" style="font-size:14px">save</i> Save to PLC
+                  </button>
+                  <button class="ra-btn ra-btn-ghost ra-btn-sm" id="posMoveQuarantineBtn">
+                    <i class="material-icons" style="font-size:14px">send</i> Move Here
+                  </button>
+                </div>
+                <div class="pos-msg" id="posQuarantineMsg" style="font-size:0.76rem;min-height:1.1em;margin-top:0.4rem"></div>
+              </div>
+
+              <!-- Pallet -->
+              <div class="pos-card">
+                <div class="pos-card-header">
+                  <span class="pos-card-title">
+                    <i class="material-icons" style="font-size:16px;color:var(--status-success)">inventory_2</i>
+                    Pallet Home Position
+                  </span>
+                  <span class="pos-at-badge" id="posAtPallet">At Position</span>
+                </div>
+                <div class="pos-xyz-row">
+                  <div class="pos-field ra-field">
+                    <label>X (mm)</label>
+                    <input class="ra-input" id="posPalletX" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Y (mm)</label>
+                    <input class="ra-input" id="posPalletY" type="number" style="width:100%">
+                  </div>
+                  <div class="pos-field ra-field">
+                    <label>Z (mm)</label>
+                    <input class="ra-input" id="posPalletZ" type="number" style="width:100%">
+                  </div>
+                </div>
+                <div class="pos-actions">
+                  <button class="ra-btn ra-btn-primary ra-btn-sm" id="posSavePalletBtn">
+                    <i class="material-icons" style="font-size:14px">save</i> Save to PLC
+                  </button>
+                  <button class="ra-btn ra-btn-ghost ra-btn-sm" id="posMovePalletBtn">
+                    <i class="material-icons" style="font-size:14px">send</i> Move Here
+                  </button>
+                </div>
+                <div class="pos-msg" id="posPalletMsg" style="font-size:0.76rem;min-height:1.1em;margin-top:0.4rem"></div>
+              </div>
+
+            </div>
+            <div id="posSaveMsg" style="font-size:0.82rem;min-height:1.2em;margin-top:0.75rem"></div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 5 — Debug                                           -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-debug">
           <div class="ctrl-row" style="margin-bottom:1rem">

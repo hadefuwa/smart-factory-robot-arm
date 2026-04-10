@@ -355,19 +355,48 @@
   .sf-vision-status-card--warn::before { background: var(--sf-warning-ui); }
   .sf-vision-status-card--bad::before { background: var(--sf-danger-ui); }
 
-  .sf-stage-1 .sf-panel-head { margin-bottom: 0.5rem; }
-  .sf-stage-1 .sf-panel-head h3 { font-size: 1rem; margin-bottom: 0.1rem; }
-  .sf-stage-1 .sf-panel-head p { font-size: 0.75rem; color: var(--sf-base-muted); }
-  .sf-stage-1 #statusLastRefresh { font-size: 0.7rem; }
+  .sf-stage-1 { padding: 0.45rem !important; }
+  .sf-stage-1 .sf-panel-head { display: none; }
+  .sf-stage-1 .flex.items-center.justify-end.mb-3 { display: none; }
+  .sf-stage-1 #statusLastRefresh { font-size: 0.66rem; }
+  .sf-stage-1 .grid {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.1rem;
+    scrollbar-width: thin;
+  }
+  .sf-stage-1 .grid > .sf-vision-status-card {
+    flex: 0 0 auto;
+    width: 154px;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 0.35rem;
+    row-gap: 0;
+    padding: 0.35rem 0.45rem 0.35rem 0.55rem !important;
+    border-radius: 0.6rem;
+  }
   .sf-stage-1 .sf-vision-status-card > div:first-child {
-    font-size: 0.68rem;
+    font-size: 0.58rem;
     font-weight: 700;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0;
     color: var(--sf-base-muted);
     letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .sf-stage-1 .sf-vision-status-card > div:nth-child(2) { font-size: 0.95rem !important; line-height: 1.15; }
-  .sf-stage-1 .sf-vision-status-card > div:nth-child(3) { font-size: 0.68rem; margin-top: 0.15rem; }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(2) {
+    font-size: 0.76rem !important;
+    line-height: 1.05;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(3) { display: none; }
 
   .sf-title-conn-badge {
     display: inline-flex;

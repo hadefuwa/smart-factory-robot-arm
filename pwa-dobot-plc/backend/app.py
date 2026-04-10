@@ -3425,6 +3425,75 @@ def read_robot_db_tags():
             'mapping': {}
         }), 500
 
+@app.route('/api/plc/positions/read', methods=['GET'])
+def read_robot_positions():
+    """Return the three robot arm named positions (pickup, quarantine, pallet home) from the DB123 cache."""
+    cache = get_plc_cache() or {}
+    plc_connected = bool(cache.get('connected', False))
+    return jsonify({
+        'success': True,
+        'plc_connected': plc_connected,
+        'positions': {
+            'pickup': {
+                'x': int(cache.get('pickup_location_x', 0)),
+                'y': int(cache.get('pickup_location_y', 0)),
+                'z': int(cache.get('pickup_location_z', 0)),
+            },
+            'quarantine': {
+                'x': int(cache.get('quarantine_location_x', 0)),
+                'y': int(cache.get('quarantine_location_y', 0)),
+                'z': int(cache.get('quarantine_location_z', 0)),
+            },
+            'pallet': {
+                'x': int(cache.get('pallet_home_x', 0)),
+                'y': int(cache.get('pallet_home_y', 0)),
+                'z': int(cache.get('pallet_home_z', 0)),
+            },
+        }
+    })
+
+
+@app.route('/api/plc/positions/write', methods=['POST'])
+def write_robot_positions():
+    """Write one or more named position fields to DB123 via the PLC write queue."""
+    from snap7.util import set_int as snap7_set_int
+    data = request.get_json(silent=True) or {}
+    # Map: field_name → cache key used in main_db_tags
+    FIELD_MAP = {
+        'pickup_x':      'pickup_location_x',
+        'pickup_y':      'pickup_location_y',
+        'pickup_z':      'pickup_location_z',
+        'quarantine_x':  'quarantine_location_x',
+        'quarantine_y':  'quarantine_location_y',
+        'quarantine_z':  'quarantine_location_z',
+        'pallet_x':      'pallet_home_x',
+        'pallet_y':      'pallet_home_y',
+        'pallet_z':      'pallet_home_z',
+    }
+    if not plc_worker:
+        return jsonify({'success': False, 'error': 'PLC worker not available'}), 503
+    written = []
+    errors = []
+    for req_key, tag_name in FIELD_MAP.items():
+        if req_key not in data:
+            continue
+        try:
+            value = int(data[req_key])
+            tag = plc_worker.main_db_tags.get(tag_name)
+            if not tag:
+                errors.append(f'{req_key}: tag not configured')
+                continue
+            buf = bytearray(2)
+            snap7_set_int(buf, 0, value)
+            plc_worker.queue_write(plc_worker.main_db_number, tag['byte'], buf, f'{tag_name}={value}')
+            written.append(req_key)
+        except Exception as e:
+            errors.append(f'{req_key}: {e}')
+    if errors and not written:
+        return jsonify({'success': False, 'errors': errors}), 400
+    return jsonify({'success': True, 'written': written, 'errors': errors})
+
+
 @app.route('/api/plc/db40/start', methods=['GET'])
 @app.route('/api/plc/camera/start', methods=['GET'])
 def read_camera_start_bit():
