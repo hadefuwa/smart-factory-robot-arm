@@ -169,6 +169,25 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         logger.error(f"Error queueing robot status: {e}")
 
 
+def queue_invalid_target(is_invalid: bool):
+    """
+    Write the Invalid_Target bit (DB125 byte 6 bit 0) to the PLC.
+
+    Args:
+        is_invalid: True when IK failed (target unreachable), False on success.
+    """
+    if plc_worker is None:
+        return
+    try:
+        tag = plc_worker.robot_db_tags['invalid_target']
+        buf = bytearray(1)
+        set_bool(buf, 0, tag['bit'], is_invalid)
+        plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], buf, f"invalid_target={is_invalid}")
+    except Exception as e:
+        logger.error(f"Error queueing invalid_target: {e}")
+
+
+
 def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool = False, aluminum: bool = False):
     """
     Queue cube color detection bits write.

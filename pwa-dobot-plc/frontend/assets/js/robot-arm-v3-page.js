@@ -33,6 +33,7 @@
     { key: 'cycle_complete',        label: 'Cycle Complete', type: 'bool', group: 'Robot State' },
     { key: 'robot_status_code',     label: 'Status Code',    type: 'int',  group: 'Robot State' },
     { key: 'error_code',            label: 'Error Code',     type: 'int',  group: 'Robot State' },
+    { key: 'invalid_target',        label: 'Invalid Target', type: 'bool', group: 'Robot State' },
     { key: 'x_position',            label: 'X Position',     type: 'int',  unit: 'mm', group: 'Position' },
     { key: 'y_position',            label: 'Y Position',     type: 'int',  unit: 'mm', group: 'Position' },
     { key: 'z_position',            label: 'Z Position',     type: 'int',  unit: 'mm', group: 'Position' },

@@ -400,6 +400,7 @@ class PLCWorker:
             'db125_cycle_complete': False,
             'db125_robot_status_code': 0,
             'db125_error_code': 0,
+            'db125_invalid_target': False,
             'db125_x_position': 0,
             'db125_y_position': 0,
             'db125_z_position': 0,
@@ -799,6 +800,7 @@ class PLCWorker:
             self.cache['db125_cycle_complete'] = self._robot_bit(data, 'cycle_complete')
             self.cache['db125_robot_status_code'] = self._robot_int(data, 'robot_status_code')
             self.cache['db125_error_code'] = self._robot_int(data, 'error_code')
+            self.cache['db125_invalid_target'] = self._robot_bit(data, 'invalid_target')
             self.cache['db125_x_position'] = self._robot_int(data, 'x_position')
             self.cache['db125_y_position'] = self._robot_int(data, 'y_position')
             self.cache['db125_z_position'] = self._robot_int(data, 'z_position')

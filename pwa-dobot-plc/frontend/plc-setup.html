@@ -869,7 +869,7 @@
               </div>
               <div class="plc-field">
                 <label for="robotDbTotalSize">Total size</label>
-                <input type="number" id="robotDbTotalSize" min="1" max="512" value="22">
+                <input type="number" id="robotDbTotalSize" min="1" max="512" value="24">
               </div>
               <div class="plc-field">
                 <label for="robotDbEnabled">Enabled</label>
@@ -1149,15 +1149,16 @@
       { key: 'cycle_complete', label: 'Cycle Complete', type: 'bool', defaultByte: 1, defaultBit: 0 },
       { key: 'robot_status_code', label: 'Robot Status Code', type: 'int', defaultByte: 2 },
       { key: 'error_code', label: 'Error Code', type: 'int', defaultByte: 4 },
-      { key: 'x_position', label: 'X Position', type: 'int', defaultByte: 6 },
-      { key: 'y_position', label: 'Y Position', type: 'int', defaultByte: 8 },
-      { key: 'z_position', label: 'Z Position', type: 'int', defaultByte: 10 },
-      { key: 'home_command', label: 'Home Command', type: 'bool', defaultByte: 12, defaultBit: 0 },
-      { key: 'pickup_command', label: 'Pickup Command', type: 'bool', defaultByte: 12, defaultBit: 1 },
-      { key: 'speed', label: 'Speed', type: 'int', defaultByte: 14 },
-      { key: 'target_x', label: 'Target X', type: 'int', defaultByte: 16 },
-      { key: 'target_y', label: 'Target Y', type: 'int', defaultByte: 18 },
-      { key: 'target_z', label: 'Target Z', type: 'int', defaultByte: 20 }
+      { key: 'invalid_target', label: 'Invalid Target', type: 'bool', defaultByte: 6, defaultBit: 0 },
+      { key: 'x_position', label: 'X Position', type: 'int', defaultByte: 8 },
+      { key: 'y_position', label: 'Y Position', type: 'int', defaultByte: 10 },
+      { key: 'z_position', label: 'Z Position', type: 'int', defaultByte: 12 },
+      { key: 'home_command', label: 'Home Command', type: 'bool', defaultByte: 14, defaultBit: 0 },
+      { key: 'pickup_command', label: 'Pickup Command', type: 'bool', defaultByte: 14, defaultBit: 1 },
+      { key: 'speed', label: 'Speed', type: 'int', defaultByte: 16 },
+      { key: 'target_x', label: 'Target X', type: 'int', defaultByte: 18 },
+      { key: 'target_y', label: 'Target Y', type: 'int', defaultByte: 20 },
+      { key: 'target_z', label: 'Target Z', type: 'int', defaultByte: 22 }
     ];
 
     const MAIN_DB_OPTIONS = {
@@ -1193,7 +1194,7 @@
       previewPrefix: 'robot-preview',
       livePrefix: 'robot-live',
       defaultDbNumber: 125,
-      defaultTotalSize: 22
+      defaultTotalSize: 24
     };
 
     function getDbNumber(inputId, fallbackDbNumber) {
@@ -1275,7 +1276,7 @@
     }
 
     function getDefaultRobotDbConfig() {
-      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 22);
+      return getDefaultDbConfig(ROBOT_DB_TAG_FIELDS, 125, 24);
     }
 
     function getAddressPreview(dbNumber, field, byteValue, bitValue) {
@@ -1437,15 +1438,23 @@
         ...(((savedConfig || {}).tags) || {})
       };
 
+      // Migrate v1 layout (no invalid_target, speed at 14, target_x at 16) → v2 layout
       if (
         mergedTags.speed && Number(mergedTags.speed.byte) === 14 &&
-        mergedTags.target_x && Number(mergedTags.target_x.byte) === 14 &&
-        mergedTags.target_y && Number(mergedTags.target_y.byte) === 16 &&
-        mergedTags.target_z && Number(mergedTags.target_z.byte) === 18
+        mergedTags.target_x && Number(mergedTags.target_x.byte) === 16 &&
+        mergedTags.target_y && Number(mergedTags.target_y.byte) === 18 &&
+        mergedTags.target_z && Number(mergedTags.target_z.byte) === 20
       ) {
-        mergedTags.target_x = { ...mergedTags.target_x, byte: 16 };
-        mergedTags.target_y = { ...mergedTags.target_y, byte: 18 };
-        mergedTags.target_z = { ...mergedTags.target_z, byte: 20 };
+        mergedTags.invalid_target = { byte: 6, bit: 0 };
+        mergedTags.x_position  = { ...mergedTags.x_position,  byte: 8  };
+        mergedTags.y_position  = { ...mergedTags.y_position,  byte: 10 };
+        mergedTags.z_position  = { ...mergedTags.z_position,  byte: 12 };
+        mergedTags.home_command   = { ...mergedTags.home_command,   byte: 14, bit: 0 };
+        mergedTags.pickup_command = { ...mergedTags.pickup_command, byte: 14, bit: 1 };
+        mergedTags.speed     = { ...mergedTags.speed,     byte: 16 };
+        mergedTags.target_x  = { ...mergedTags.target_x,  byte: 18 };
+        mergedTags.target_y  = { ...mergedTags.target_y,  byte: 20 };
+        mergedTags.target_z  = { ...mergedTags.target_z,  byte: 22 };
       }
 
       return {

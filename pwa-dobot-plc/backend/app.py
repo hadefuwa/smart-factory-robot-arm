@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target
 from dobot_client import DobotClient
 from camera_service import CameraService
 # DISABLED: Digital twin import commented out to reduce CPU usage
@@ -1525,10 +1525,20 @@ def robot_arm_move_xyz():
         try:
             response = send_robot_arm_command(payload)
             success = response.get('type') in ('success', 'ikResult', 'moving')
+            # Signal PLC whether IK succeeded or failed
+            ik_failed = not success or response.get('type') == 'ikFailed' or (not success and 'unreachable' in str(response).lower())
+            try:
+                queue_invalid_target(ik_failed)
+            except Exception:
+                pass
             status_code = 200 if success else 400
             return jsonify({'success': success, 'bridge_response': response}), status_code
         except Exception as e:
             robot_arm_bridge_state['last_error'] = str(e)
+            try:
+                queue_invalid_target(True)
+            except Exception:
+                pass
             return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -3498,6 +3508,7 @@ def read_robot_db_tags():
         'cycle_complete': False,
         'robot_status_code': 0,
         'error_code': 0,
+        'invalid_target': False,
         'x_position': 0,
         'y_position': 0,
         'z_position': 0,
@@ -3527,6 +3538,7 @@ def read_robot_db_tags():
             'cycle_complete': bool(cache.get('db125_cycle_complete', False)),
             'robot_status_code': int(cache.get('db125_robot_status_code', 0)),
             'error_code': int(cache.get('db125_error_code', 0)),
+            'invalid_target': bool(cache.get('db125_invalid_target', False)),
             'x_position': int(cache.get('db125_x_position', 0)),
             'y_position': int(cache.get('db125_y_position', 0)),
             'z_position': int(cache.get('db125_z_position', 0)),
@@ -3587,10 +3599,15 @@ def read_robot_positions():
 
 @app.route('/api/plc/positions/write', methods=['POST'])
 def write_robot_positions():
-    """Write one or more named position fields to DB123 via the PLC write queue."""
+    """Write one or more named position fields to DB123 via the PLC write queue.
+
+    Validates each complete XYZ set against IK before writing. If IK fails for a
+    position group the entire group is rejected and the PLC values are not changed.
+    """
     from snap7.util import set_int as snap7_set_int
     data = request.get_json(silent=True) or {}
-    # Map: field_name → cache key used in main_db_tags
+
+    # Map: request key → DB123 tag name
     FIELD_MAP = {
         'pickup_x':      'pickup_location_x',
         'pickup_y':      'pickup_location_y',
@@ -3602,13 +3619,59 @@ def write_robot_positions():
         'pallet_y':      'pallet_home_y',
         'pallet_z':      'pallet_home_z',
     }
+
     if not plc_worker:
         return jsonify({'success': False, 'error': 'PLC worker not available'}), 503
+
+    # --- IK validation for complete position groups ---
+    # Only validate a group when all 3 axes are present in the request.
+    POSITION_GROUPS = {
+        'pickup':     ('pickup_x',     'pickup_y',     'pickup_z'),
+        'quarantine': ('quarantine_x', 'quarantine_y', 'quarantine_z'),
+        'pallet':     ('pallet_x',     'pallet_y',     'pallet_z'),
+    }
+    rejected_groups = set()
+    validation_errors = []
+
+    bridge_available = False
+    with robot_arm_bridge_lock:
+        bridge_available = robot_arm_bridge_state.get('connected', False)
+
+    if bridge_available:
+        for group_name, (kx, ky, kz) in POSITION_GROUPS.items():
+            if kx in data and ky in data and kz in data:
+                try:
+                    check_payload = {
+                        'command': 'inverseKinematics',
+                        'x': float(data[kx]),
+                        'y': float(data[ky]),
+                        'z': float(data[kz]),
+                    }
+                    with robot_arm_bridge_lock:
+                        ik_resp = send_robot_arm_command(check_payload)
+                    if ik_resp.get('type') != 'ikResult':
+                        rejected_groups.add(group_name)
+                        validation_errors.append(
+                            f'{group_name}: position unreachable '
+                            f'(x={data[kx]}, y={data[ky]}, z={data[kz]})'
+                        )
+                except Exception as ik_err:
+                    logger.warning(f"IK validation failed for {group_name}: {ik_err}")
+                    # If bridge error, skip validation for this group (don't block the write)
+
+    # Build the set of blocked request keys
+    blocked_keys = set()
+    for group_name, (kx, ky, kz) in POSITION_GROUPS.items():
+        if group_name in rejected_groups:
+            blocked_keys.update([kx, ky, kz])
+
     written = []
-    errors = []
+    errors = list(validation_errors)
     for req_key, tag_name in FIELD_MAP.items():
         if req_key not in data:
             continue
+        if req_key in blocked_keys:
+            continue  # skip — IK rejected this group
         try:
             value = int(data[req_key])
             tag = plc_worker.main_db_tags.get(tag_name)
@@ -3621,9 +3684,10 @@ def write_robot_positions():
             written.append(req_key)
         except Exception as e:
             errors.append(f'{req_key}: {e}')
-    if errors and not written:
-        return jsonify({'success': False, 'errors': errors}), 400
-    return jsonify({'success': True, 'written': written, 'errors': errors})
+
+    if rejected_groups and not written:
+        return jsonify({'success': False, 'errors': errors, 'rejected': list(rejected_groups)}), 400
+    return jsonify({'success': True, 'written': written, 'errors': errors, 'rejected': list(rejected_groups)})
 
 
 @app.route('/api/plc/db40/start', methods=['GET'])
