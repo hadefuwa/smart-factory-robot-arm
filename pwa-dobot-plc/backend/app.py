@@ -3287,7 +3287,6 @@ def get_latest_vision_cycle():
         logger.error(f"Error serving latest vision cycle: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/plc/db123/read', methods=['GET'])
 @app.route('/api/plc/db124/read', methods=['GET'])
 @app.route('/api/plc/camera/read', methods=['GET'])
 def read_camera_db_tags():
@@ -3347,6 +3346,139 @@ def read_camera_db_tags():
             'db_number': 124,
             'tags': default_tags,
             'plc_connected': False
+        }), 500
+
+
+@app.route('/api/plc/main/read', methods=['GET'])
+@app.route('/api/plc/db123/read', methods=['GET'])
+def read_main_db_tags():
+    """Return the cached DB123 main PLC variables."""
+    default_tags = {
+        'hmi_start': False,
+        'hmi_stop': False,
+        'hmi_reset': False,
+        'material_type': 0,
+        'quarantined_count': 0,
+        'defect_count': 0,
+        'aluminum_count': 0,
+        'steel_count': 0,
+        'yellow_count': 0,
+        'white_count': 0,
+        'gantry_home': False,
+        'gantry_busy': False,
+        'gantry_move_done': False,
+        'gantry_pick_up': False,
+        'gantry_place_down': False,
+        'gantry_home_command': False,
+        'gantry_power_ok': False,
+        'gantry_current_position': 0.0,
+        'gantry_target_position': 0.0,
+        'gantry_velocity': 0.0,
+        'gantry_position1': 0.0,
+        'gantry_position2': 0.0,
+        'gantry_home_error': False,
+        'gantry_home_error_fix': False,
+        'system_safety_ok': False,
+        'system_no_faults': False,
+        'system_active_fault': False,
+        'system_state': 0,
+        'system_startup_completed': False,
+        'cube_in_quarantine': False,
+        'pickup_location_x': 0,
+        'pickup_location_y': 0,
+        'pickup_location_z': 0,
+        'quarantine_location_x': 0,
+        'quarantine_location_y': 0,
+        'quarantine_location_z': 0,
+        'pallet_home_x': 0,
+        'pallet_home_y': 0,
+        'pallet_home_z': 0,
+        'pallet_row1': [False, False, False],
+        'pallet_row2': [False, False, False],
+        'pallet_row3': [False, False, False],
+        'pallet_row4': [False, False, False],
+        'pallet_full': False,
+        'conveyor1_override': False,
+        'conveyor2_override': False,
+        'linear_override': False,
+        'confirm_reset': False,
+    }
+
+    try:
+        cache = get_plc_cache() or {}
+        config = load_config()
+        main_db_config = config.get('plc', {}).get('db123', {})
+        db_number = int(main_db_config.get('db_number', 123))
+
+        tags = {
+            'hmi_start': bool(cache.get('hmi_start', False)),
+            'hmi_stop': bool(cache.get('hmi_stop', False)),
+            'hmi_reset': bool(cache.get('hmi_reset', False)),
+            'material_type': int(cache.get('material_type', 0)),
+            'quarantined_count': int(cache.get('quarantined_count', 0)),
+            'defect_count': int(cache.get('defect_count', 0)),
+            'aluminum_count': int(cache.get('aluminum_count', 0)),
+            'steel_count': int(cache.get('steel_count', 0)),
+            'yellow_count': int(cache.get('yellow_count', 0)),
+            'white_count': int(cache.get('white_count', 0)),
+            'gantry_home': bool(cache.get('gantry_home', False)),
+            'gantry_busy': bool(cache.get('gantry_busy', False)),
+            'gantry_move_done': bool(cache.get('gantry_move_done', False)),
+            'gantry_pick_up': bool(cache.get('gantry_pick_up', False)),
+            'gantry_place_down': bool(cache.get('gantry_place_down', False)),
+            'gantry_home_command': bool(cache.get('gantry_home_command', False)),
+            'gantry_power_ok': bool(cache.get('gantry_power_ok', False)),
+            'gantry_current_position': float(cache.get('gantry_current_position', 0.0)),
+            'gantry_target_position': float(cache.get('gantry_target_position', 0.0)),
+            'gantry_velocity': float(cache.get('gantry_velocity', 0.0)),
+            'gantry_position1': float(cache.get('gantry_position1', 0.0)),
+            'gantry_position2': float(cache.get('gantry_position2', 0.0)),
+            'gantry_home_error': bool(cache.get('gantry_home_error', False)),
+            'gantry_home_error_fix': bool(cache.get('gantry_home_error_fix', False)),
+            'system_safety_ok': bool(cache.get('system_safety_ok', False)),
+            'system_no_faults': bool(cache.get('system_no_faults', False)),
+            'system_active_fault': bool(cache.get('system_active_fault', False)),
+            'system_state': int(cache.get('system_state', 0)),
+            'system_startup_completed': bool(cache.get('system_startup_completed', False)),
+            'cube_in_quarantine': bool(cache.get('cube_in_quarantine', False)),
+            'pickup_location_x': int(cache.get('pickup_location_x', 0)),
+            'pickup_location_y': int(cache.get('pickup_location_y', 0)),
+            'pickup_location_z': int(cache.get('pickup_location_z', 0)),
+            'quarantine_location_x': int(cache.get('quarantine_location_x', 0)),
+            'quarantine_location_y': int(cache.get('quarantine_location_y', 0)),
+            'quarantine_location_z': int(cache.get('quarantine_location_z', 0)),
+            'pallet_home_x': int(cache.get('pallet_home_x', 0)),
+            'pallet_home_y': int(cache.get('pallet_home_y', 0)),
+            'pallet_home_z': int(cache.get('pallet_home_z', 0)),
+            'pallet_row1': list(cache.get('pallet_row1', [False, False, False])),
+            'pallet_row2': list(cache.get('pallet_row2', [False, False, False])),
+            'pallet_row3': list(cache.get('pallet_row3', [False, False, False])),
+            'pallet_row4': list(cache.get('pallet_row4', [False, False, False])),
+            'pallet_full': bool(cache.get('pallet_full', False)),
+            'conveyor1_override': bool(cache.get('conveyor1_override', False)),
+            'conveyor2_override': bool(cache.get('conveyor2_override', False)),
+            'linear_override': bool(cache.get('linear_override', False)),
+            'confirm_reset': bool(cache.get('confirm_reset', False)),
+        }
+
+        return jsonify({
+            'success': True,
+            'db_number': db_number,
+            'tags': tags,
+            'plc_connected': bool(cache.get('connected', False)),
+            'last_update': cache.get('last_update', 0.0),
+            'mapping': main_db_config.get('tags', {})
+        })
+    except Exception as e:
+        logger.error(f"Error reading main DB tags: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'db_number': 123,
+            'tags': default_tags,
+            'plc_connected': False,
+            'last_update': 0.0,
+            'mapping': {}
         }), 500
 
 

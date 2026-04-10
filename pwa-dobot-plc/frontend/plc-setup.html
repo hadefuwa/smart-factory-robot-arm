@@ -401,7 +401,8 @@
 
     .plc-sheet-tag,
     .plc-sheet-type,
-    .plc-sheet-address {
+    .plc-sheet-address,
+    .plc-sheet-live {
       display: flex;
       align-items: center;
       min-height: 2.35rem;
@@ -425,6 +426,26 @@
       font-size: 0.76rem;
       color: var(--sf-info-ui);
       white-space: nowrap;
+    }
+
+    .plc-sheet-live {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--sf-base-content);
+      white-space: nowrap;
+    }
+
+    .plc-sheet-live.is-true {
+      color: var(--accent-green, #4caf50);
+    }
+
+    .plc-sheet-live.is-false {
+      color: var(--accent-red, #f44336);
+    }
+
+    .plc-sheet-live.is-muted {
+      color: var(--sf-base-muted);
+      font-weight: 600;
     }
 
     .plc-sheet-input {
@@ -767,7 +788,8 @@
                       <th style="width: 14%;">Type</th>
                       <th style="width: 12%;">Byte</th>
                       <th style="width: 12%;">Bit</th>
-                      <th style="width: 28%;">Address</th>
+                      <th style="width: 18%;">Address</th>
+                      <th style="width: 10%;">Live</th>
                     </tr>
                   </thead>
                   <tbody id="mainDbEditorBody"></tbody>
@@ -821,7 +843,8 @@
                       <th style="width: 14%;">Type</th>
                       <th style="width: 12%;">Byte</th>
                       <th style="width: 12%;">Bit</th>
-                      <th style="width: 28%;">Address</th>
+                      <th style="width: 18%;">Address</th>
+                      <th style="width: 10%;">Live</th>
                     </tr>
                   </thead>
                   <tbody id="cameraDbEditorBody"></tbody>
@@ -875,7 +898,8 @@
                       <th style="width: 14%;">Type</th>
                       <th style="width: 12%;">Byte</th>
                       <th style="width: 12%;">Bit</th>
-                      <th style="width: 28%;">Address</th>
+                      <th style="width: 18%;">Address</th>
+                      <th style="width: 10%;">Live</th>
                     </tr>
                   </thead>
                   <tbody id="robotDbEditorBody"></tbody>
@@ -1022,18 +1046,26 @@
 
     async function refreshLivePlcSummary() {
       try {
-        const [statusResponse, cameraResponse, robotResponse] = await Promise.all([
+        const [statusResponse, mainResponse, cameraResponse, robotResponse] = await Promise.all([
           fetch(`${API_BASE}/api/plc/status`, { signal: AbortSignal.timeout(5000) }),
+          fetch(`${API_BASE}/api/plc/main/read`, { signal: AbortSignal.timeout(5000) }),
           fetch(`${API_BASE}/api/plc/camera/read`, { signal: AbortSignal.timeout(5000) }),
           fetch(`${API_BASE}/api/plc/robot/read`, { signal: AbortSignal.timeout(5000) })
         ]);
 
         const statusData = statusResponse.ok ? await statusResponse.json() : { connected: false, last_error: `HTTP ${statusResponse.status}` };
-        const cameraData = cameraResponse.ok ? await cameraResponse.json() : { tags: {} };
-        const robotData = robotResponse.ok ? await robotResponse.json() : { tags: {} };
+        const mainData = mainResponse.ok ? await mainResponse.json() : { tags: {}, plc_connected: false };
+        const cameraData = cameraResponse.ok ? await cameraResponse.json() : { tags: {}, plc_connected: false };
+        const robotData = robotResponse.ok ? await robotResponse.json() : { tags: {}, plc_connected: false };
 
+        renderDbLiveValues(MAIN_DB_TAG_FIELDS, MAIN_DB_OPTIONS, mainData);
+        renderDbLiveValues(CAMERA_DB_TAG_FIELDS, CAMERA_DB_OPTIONS, cameraData);
+        renderDbLiveValues(ROBOT_DB_TAG_FIELDS, ROBOT_DB_OPTIONS, robotData);
         renderLiveStatus(statusData, cameraData, robotData);
       } catch (error) {
+        renderDbLiveValues(MAIN_DB_TAG_FIELDS, MAIN_DB_OPTIONS, { tags: {}, plc_connected: false });
+        renderDbLiveValues(CAMERA_DB_TAG_FIELDS, CAMERA_DB_OPTIONS, { tags: {}, plc_connected: false });
+        renderDbLiveValues(ROBOT_DB_TAG_FIELDS, ROBOT_DB_OPTIONS, { tags: {}, plc_connected: false });
         renderLiveStatus(
           { connected: false, last_error: error.message },
           { tags: {} },
@@ -1135,6 +1167,7 @@
       totalSizeId: 'mainDbTotalSize',
       enabledId: 'mainDbEnabled',
       previewPrefix: 'main-preview',
+      livePrefix: 'main-live',
       defaultDbNumber: 123,
       defaultTotalSize: 80
     };
@@ -1146,6 +1179,7 @@
       totalSizeId: 'cameraDbTotalSize',
       enabledId: 'cameraDbEnabled',
       previewPrefix: 'camera-preview',
+      livePrefix: 'camera-live',
       defaultDbNumber: 124,
       defaultTotalSize: 2
     };
@@ -1157,6 +1191,7 @@
       totalSizeId: 'robotDbTotalSize',
       enabledId: 'robotDbEnabled',
       previewPrefix: 'robot-preview',
+      livePrefix: 'robot-live',
       defaultDbNumber: 125,
       defaultTotalSize: 22
     };
@@ -1297,6 +1332,7 @@
               ` : '<span class="plc-sheet-na">N/A</span>'}
             </td>
             <td><span class="plc-sheet-address" id="${options.previewPrefix}-${field.key}">${address}</span></td>
+            <td><span class="plc-sheet-live is-muted" id="${options.livePrefix}-${field.key}">--</span></td>
           </tr>
         `;
       }).join('');
@@ -1327,6 +1363,50 @@
       if (options.scope === 'main') setMainDbDisplay();
       if (options.scope === 'camera') setCameraDbDisplay();
       if (options.scope === 'robot') setRobotDbDisplay();
+    }
+
+    function formatDbLiveValue(field, value, plcConnected) {
+      if (!plcConnected) {
+        return { text: 'Offline', tone: 'muted' };
+      }
+      if (value === undefined || value === null) {
+        return { text: '--', tone: 'muted' };
+      }
+      if (Array.isArray(value)) {
+        return {
+          text: value.map((entry) => (entry ? '1' : '0')).join(' '),
+          tone: value.some(Boolean) ? 'true' : 'false'
+        };
+      }
+      if (typeof value === 'boolean') {
+        return { text: value ? 'On' : 'Off', tone: value ? 'true' : 'false' };
+      }
+      if (typeof value === 'number') {
+        return {
+          text: field.type === 'real' ? value.toFixed(2) : String(value),
+          tone: 'neutral'
+        };
+      }
+      return { text: String(value), tone: 'neutral' };
+    }
+
+    function setDbLiveCell(options, key, formatted) {
+      const cell = document.getElementById(`${options.livePrefix}-${key}`);
+      if (!cell) return;
+      cell.textContent = formatted.text;
+      cell.classList.remove('is-true', 'is-false', 'is-muted');
+      if (formatted.tone === 'true') cell.classList.add('is-true');
+      else if (formatted.tone === 'false') cell.classList.add('is-false');
+      else if (formatted.tone === 'muted') cell.classList.add('is-muted');
+    }
+
+    function renderDbLiveValues(fields, options, responseData) {
+      const tags = (responseData && responseData.tags) || {};
+      const plcConnected = Boolean(responseData && responseData.plc_connected);
+      fields.forEach((field) => {
+        const formatted = formatDbLiveValue(field, tags[field.key], plcConnected);
+        setDbLiveCell(options, field.key, formatted);
+      });
     }
 
     function collectDbConfigFromEditor(fields, options) {
