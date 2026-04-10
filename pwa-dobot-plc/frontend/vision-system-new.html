@@ -313,28 +313,61 @@
 
   /* Live status tiles: theme-aware (replaces hard-coded rgba in JS) */
   .sf-vision-status-card {
+    position: relative;
+    overflow: hidden;
+    padding: 0.75rem !important;
+    border-width: 1px;
+    border-radius: 0.85rem;
     transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
   .sf-vision-status-card--neutral {
-    background: var(--sf-base-100);
-    border-color: var(--sf-base-300);
+    background: color-mix(in srgb, var(--sf-base-200) 50%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-base-content) 14%, var(--sf-base-300));
   }
 
   .sf-vision-status-card--good {
-    background: color-mix(in srgb, var(--sf-success-ui) 14%, var(--sf-base-100));
-    border-color: color-mix(in srgb, var(--sf-success-ui) 42%, var(--sf-base-300));
+    background: color-mix(in srgb, var(--sf-success-ui) 20%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-success-ui) 60%, var(--sf-base-300));
   }
 
   .sf-vision-status-card--warn {
-    background: color-mix(in srgb, var(--sf-warning-ui) 14%, var(--sf-base-100));
-    border-color: color-mix(in srgb, var(--sf-warning-ui) 42%, var(--sf-base-300));
+    background: color-mix(in srgb, var(--sf-warning-ui) 20%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-warning-ui) 58%, var(--sf-base-300));
   }
 
   .sf-vision-status-card--bad {
-    background: color-mix(in srgb, var(--sf-danger-ui) 12%, var(--sf-base-100));
-    border-color: color-mix(in srgb, var(--sf-danger-ui) 40%, var(--sf-base-300));
+    background: color-mix(in srgb, var(--sf-danger-ui) 18%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-danger-ui) 56%, var(--sf-base-300));
   }
+
+  .sf-vision-status-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: color-mix(in srgb, var(--sf-base-content) 25%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--good::before { background: var(--sf-success-ui); }
+  .sf-vision-status-card--warn::before { background: var(--sf-warning-ui); }
+  .sf-vision-status-card--bad::before { background: var(--sf-danger-ui); }
+
+  .sf-stage-1 .sf-panel-head { margin-bottom: 0.5rem; }
+  .sf-stage-1 .sf-panel-head h3 { font-size: 1rem; margin-bottom: 0.1rem; }
+  .sf-stage-1 .sf-panel-head p { font-size: 0.75rem; color: var(--sf-base-muted); }
+  .sf-stage-1 #statusLastRefresh { font-size: 0.7rem; }
+  .sf-stage-1 .sf-vision-status-card > div:first-child {
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+    color: var(--sf-base-muted);
+    letter-spacing: 0.02em;
+  }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(2) { font-size: 0.95rem !important; line-height: 1.15; }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(3) { font-size: 0.68rem; margin-top: 0.15rem; }
 
   .sf-title-conn-badge {
     display: inline-flex;
@@ -375,34 +408,40 @@
     50% { opacity: 0.3; }
   }
 
-  /* Keep the vision hero styled as a hero on this page.
-     Global dashboard overrides flatten .sf-page-hero into a plain card. */
-  body.sf-page-vision .sf-page-hero.sf-page-hero--vision {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--sf-primary) 14%, var(--sf-base-100)) 0%,
-      color-mix(in srgb, var(--sf-info-ui) 10%, var(--sf-base-100)) 45%,
-      var(--sf-base-200) 100%
-    ) !important;
-    border: 1px solid color-mix(in srgb, var(--sf-primary) 24%, var(--sf-base-300)) !important;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12) !important;
-    padding: 1.25rem !important;
-    gap: 1rem !important;
+  .sf-vision-quick-info {
+    margin-bottom: 0.85rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--sf-base-300);
+    border-radius: 0.75rem;
+    background: var(--sf-base-100);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
   }
 
-  body.sf-page-vision .sf-page-hero.sf-page-hero--vision .sf-page-hero-copy p {
-    color: var(--sf-base-muted) !important;
+  .sf-vision-quick-info-copy {
+    font-size: 0.76rem;
+    color: var(--sf-base-muted);
+    margin-right: 0.35rem;
   }
 
-  body.sf-page-vision .sf-page-hero.sf-page-hero--vision .sf-page-hero-chips > div {
-    background: var(--sf-base-100) !important;
-    border: 1px solid var(--sf-base-300) !important;
+  .sf-vision-info-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--sf-base-300);
+    background: var(--sf-base-200);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--sf-base-content);
   }
 
-  @media (max-width: 1024px) {
-    body.sf-page-vision .sf-page-hero.sf-page-hero--vision {
-      grid-template-columns: 1fr !important;
-    }
+  .sf-vision-info-pill span {
+    color: var(--sf-base-muted);
+    font-weight: 600;
   }
  </style>
  
@@ -493,28 +532,11 @@
         </div>
 
         <main class="sf-content">
-          <section class="sf-page-hero sf-page-hero--vision">
-            <div class="sf-page-hero-copy">
-              <p class="sf-page-kicker">Production Vision</p>
-              <h2>Run the live camera and voting workflow from a proper Matrix operations surface.</h2>
-              <p>
-                The camera stream, result image, PLC-linked status bits, debug tools, and detection settings stay wired to the same existing handlers while the page body moves to native Matrix layout.
-              </p>
-            </div>
-            <div class="sf-page-hero-chips">
-              <div>
-                <span>Role</span>
-                <strong>Production Vision</strong>
-              </div>
-              <div>
-                <span>Camera</span>
-                <strong>Streaming</strong>
-              </div>
-              <div>
-                <span>PLC</span>
-                <strong>Integrated</strong>
-              </div>
-            </div>
+          <section class="sf-vision-quick-info">
+            <div class="sf-vision-quick-info-copy">Live camera, voting results, and PLC-linked bits in one view.</div>
+            <div class="sf-vision-info-pill"><span>Role</span> Production Vision</div>
+            <div class="sf-vision-info-pill"><span>Camera</span> Streaming</div>
+            <div class="sf-vision-info-pill"><span>PLC</span> Integrated</div>
           </section>
 
           <section class="sf-panel sf-stage sf-stage-1">
@@ -525,7 +547,7 @@
             <div class="flex items-center justify-end mb-3">
               <span id="statusLastRefresh" class="text-xs text-base-content/60">Updating...</span>
             </div>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <div id="statusPlcStartCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
                 <div class="text-xs text-base-content/60 mb-2">PLC Start Bit</div>
                 <div id="statusPlcStartValue" class="text-lg font-bold">--</div>
