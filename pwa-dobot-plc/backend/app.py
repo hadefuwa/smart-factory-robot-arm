@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
+import plc_integration
 from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -3690,7 +3691,8 @@ def write_robot_positions():
         'pallet_z':      'pallet_home_z',
     }
 
-    if not plc_worker:
+    worker = getattr(plc_integration, 'plc_worker', None)
+    if not worker:
         return jsonify({'success': False, 'error': 'PLC worker not available'}), 503
 
     # --- IK validation for complete position groups ---
@@ -3744,13 +3746,13 @@ def write_robot_positions():
             continue  # skip — IK rejected this group
         try:
             value = int(data[req_key])
-            tag = plc_worker.main_db_tags.get(tag_name)
+            tag = worker.main_db_tags.get(tag_name)
             if not tag:
                 errors.append(f'{req_key}: tag not configured')
                 continue
             buf = bytearray(2)
             snap7_set_int(buf, 0, value)
-            plc_worker.queue_write(plc_worker.main_db_number, tag['byte'], buf, f'{tag_name}={value}')
+            worker.queue_write(worker.main_db_number, tag['byte'], buf, f'{tag_name}={value}')
             written.append(req_key)
         except Exception as e:
             errors.append(f'{req_key}: {e}')

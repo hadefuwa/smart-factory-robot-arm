@@ -59,7 +59,17 @@
 
   async function apiRequest(url, options) {
     var response = await fetch(url, options || {});
-    var data = await response.json();
+    var rawText = await response.text();
+    var data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch (_) {
+      var snippet = (rawText || '').trim().slice(0, 120);
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status + ' from ' + url + ': ' + (snippet || 'non-JSON response'));
+      }
+      throw new Error('Invalid JSON response from ' + url + ': ' + (snippet || 'empty response'));
+    }
     if (!response.ok) {
       var msg = 'Request failed';
       if (data) {
