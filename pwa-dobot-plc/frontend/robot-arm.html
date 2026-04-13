@@ -562,6 +562,33 @@
         <div class="ra-panel" id="tab-positions">
 
           <div class="ra-section">
+            <div class="ra-section-title">Setup Tools</div>
+            <div class="ctrl-row" style="margin-bottom:0.7rem">
+              <button class="ra-btn ra-btn-warning ra-btn-sm" id="posTorqueOnBtn">
+                <i class="material-icons" style="font-size:14px">bolt</i> Torque On
+              </button>
+              <button class="ra-btn ra-btn-ghost ra-btn-sm" id="posTorqueOffBtn">
+                <i class="material-icons" style="font-size:14px">power_off</i> Torque Off
+              </button>
+            </div>
+            <div class="xyz-readout">
+              <div class="xyz-readout-item">
+                <span class="xyz-readout-label">Current X</span>
+                <div class="xyz-readout-val" id="posCurX">—<span>mm</span></div>
+              </div>
+              <div class="xyz-readout-item">
+                <span class="xyz-readout-label">Current Y</span>
+                <div class="xyz-readout-val" id="posCurY">—<span>mm</span></div>
+              </div>
+              <div class="xyz-readout-item">
+                <span class="xyz-readout-label">Current Z</span>
+                <div class="xyz-readout-val" id="posCurZ">—<span>mm</span></div>
+              </div>
+            </div>
+            <div id="posToolsMsg" style="font-size:0.8rem;min-height:1.1em;margin-top:0.55rem;color:var(--status-success)"></div>
+          </div>
+
+          <div class="ra-section">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
               <div>
                 <span class="ra-section-title" style="margin:0;display:inline">Named Positions</span>

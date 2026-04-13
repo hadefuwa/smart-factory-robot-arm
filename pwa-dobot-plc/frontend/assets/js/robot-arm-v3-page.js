@@ -157,12 +157,14 @@
   }
 
   function showMsg(msg, isError) {
-    var e = el('jointCtrlMsg');
-    if (!e) return;
-    e.textContent = msg;
-    e.style.color = isError ? 'var(--status-danger)' : 'var(--status-success)';
-    clearTimeout(e._t);
-    e._t = setTimeout(function () { e.textContent = ''; }, 4000);
+    ['jointCtrlMsg', 'posToolsMsg'].forEach(function (id) {
+      var e = el(id);
+      if (!e) return;
+      e.textContent = msg;
+      e.style.color = isError ? 'var(--status-danger)' : 'var(--status-success)';
+      clearTimeout(e._t);
+      e._t = setTimeout(function () { e.textContent = ''; }, 4000);
+    });
   }
 
   // ── connection badge ──────────────────────────────────────────────────────
@@ -331,6 +333,9 @@
     setVal('curX', xyz ? xyz.x : null);
     setVal('curY', xyz ? xyz.y : null);
     setVal('curZ', xyz ? xyz.z : null);
+    setVal('posCurX', xyz ? xyz.x : null);
+    setVal('posCurY', xyz ? xyz.y : null);
+    setVal('posCurZ', xyz ? xyz.z : null);
   }
 
   // ── PLC auto-move ─────────────────────────────────────────────────────────
@@ -938,6 +943,8 @@
 
     // Positions tab
     if ((b = el('posRefreshBtn')))   b.addEventListener('click', function () { withBtn(b, loadPositions); });
+    if ((b = el('posTorqueOnBtn')))  b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(true); }); });
+    if ((b = el('posTorqueOffBtn'))) b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(false); }); });
     POSITIONS.forEach(function (pos) {
       var sb = el(pos.saveBtn);
       var mb = el(pos.moveBtn);
