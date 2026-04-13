@@ -434,30 +434,7 @@ def load_config():
         if not isinstance(tags, dict):
             tags = {}
             db125_cfg['tags'] = tags
-
-        speed_tag = tags.get('speed')
-        target_x_tag = tags.get('target_x')
-        target_y_tag = tags.get('target_y')
-        target_z_tag = tags.get('target_z')
-
-        old_target_layout = (
-            isinstance(target_x_tag, dict) and target_x_tag.get('byte') == 14 and
-            isinstance(target_y_tag, dict) and target_y_tag.get('byte') == 16 and
-            isinstance(target_z_tag, dict) and target_z_tag.get('byte') == 18
-        )
-
-        if not isinstance(speed_tag, dict) and old_target_layout:
-            tags['speed'] = {'byte': 14}
-
-        if isinstance(tags.get('speed'), dict) and tags['speed'].get('byte') == 14:
-            if isinstance(target_x_tag, dict) and target_x_tag.get('byte') == 14:
-                tags['target_x'] = {**target_x_tag, 'byte': 16}
-            if isinstance(target_y_tag, dict) and target_y_tag.get('byte') == 16:
-                tags['target_y'] = {**target_y_tag, 'byte': 18}
-            if isinstance(target_z_tag, dict) and target_z_tag.get('byte') == 18:
-                tags['target_z'] = {**target_z_tag, 'byte': 20}
-
-        db125_cfg['total_size'] = max(int(db125_cfg.get('total_size', 22) or 22), 22)
+        db125_cfg['total_size'] = max(int(db125_cfg.get('total_size', 20) or 20), 20)
         return config
 
     base_config = {}
