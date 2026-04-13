@@ -109,6 +109,9 @@ ROBOT_DB_DEFAULTS = {
     'z_position':             {'byte': 20, 'kind': 'int'},
     'home_command':           {'byte': 22, 'bit': 0, 'kind': 'bool'},
     'pickup_command':         {'byte': 22, 'bit': 1, 'kind': 'bool'},
+    'pallet_command':         {'byte': 22, 'bit': 2, 'kind': 'bool'},
+    'quarantine_command':     {'byte': 22, 'bit': 3, 'kind': 'bool'},
+    'end_effector_command':   {'byte': 22, 'bit': 4, 'kind': 'bool'},
     'speed':                  {'byte': 24, 'kind': 'int'},
     'target_x':               {'byte': 26, 'kind': 'int'},
     'target_y':               {'byte': 28, 'kind': 'int'},
@@ -420,6 +423,9 @@ class PLCWorker:
             'db125_z_position': 0,
             'db125_home_command': False,
             'db125_pickup_command': False,
+            'db125_pallet_command': False,
+            'db125_quarantine_command': False,
+            'db125_end_effector_command': False,
             'db125_speed': 0,
             'db125_target_x': 0,
             'db125_target_y': 0,
@@ -868,6 +874,9 @@ class PLCWorker:
             self.cache['db125_z_position'] = self._robot_int(data, 'z_position')
             self.cache['db125_home_command'] = self._robot_bit(data, 'home_command')
             self.cache['db125_pickup_command'] = self._robot_bit(data, 'pickup_command')
+            self.cache['db125_pallet_command'] = self._robot_bit(data, 'pallet_command')
+            self.cache['db125_quarantine_command'] = self._robot_bit(data, 'quarantine_command')
+            self.cache['db125_end_effector_command'] = self._robot_bit(data, 'end_effector_command')
             self.cache['db125_speed'] = self._robot_int(data, 'speed')
             self.cache['db125_target_x'] = self._robot_int(data, 'target_x')
             self.cache['db125_target_y'] = self._robot_int(data, 'target_y')

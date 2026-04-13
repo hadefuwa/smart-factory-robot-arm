@@ -24,6 +24,9 @@ Z_Position	Int	20
 Commands	Struct	22
 Home	Bool	22
 Pickup	Bool	22.1
+Pallet	Bool	22.2
+Quarantine	Bool	22.3
+End_Effector	Bool	22.4
 Speed	Int	24
 Position	Struct	26
 X_Position	Int	26

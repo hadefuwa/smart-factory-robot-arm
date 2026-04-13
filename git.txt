@@ -1,7 +1,10 @@
 cd C:\Users\HamedA\Documents\sf2
 git status
 git add .
-git commit -m "robot arm connected bit"
+git commit -m "updates"
 git push origin main
 ssh pi@rpi "cd ~/sf2 && git pull"
 ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service"
+
+
+you can ssh onto the pi using pi@rpi but do not make changes to the pi, make changes here on my windows machine and then push to github and pull on the pi like this..

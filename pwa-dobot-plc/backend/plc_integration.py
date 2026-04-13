@@ -426,6 +426,11 @@ class PLCClientCompatWrapper:
             'connected': cache.get('db125_connected', False),
             'busy': cache.get('db125_busy', False),
             'cycle_complete': cache.get('db125_cycle_complete', False),
+            'home_command': cache.get('db125_home_command', False),
+            'pickup_command': cache.get('db125_pickup_command', False),
+            'pallet_command': cache.get('db125_pallet_command', False),
+            'quarantine_command': cache.get('db125_quarantine_command', False),
+            'end_effector_command': cache.get('db125_end_effector_command', False),
         }
 
     def write_vision_tags(self, tags, *args, **kwargs):

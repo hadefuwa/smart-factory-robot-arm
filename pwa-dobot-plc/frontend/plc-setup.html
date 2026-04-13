@@ -1160,6 +1160,9 @@
       { key: 'z_position',             label: 'Z Position',             type: 'int',  defaultByte: 20 },
       { key: 'home_command',           label: 'Home Command',           type: 'bool', defaultByte: 22, defaultBit: 0 },
       { key: 'pickup_command',         label: 'Pickup Command',         type: 'bool', defaultByte: 22, defaultBit: 1 },
+      { key: 'pallet_command',         label: 'Pallet Command',         type: 'bool', defaultByte: 22, defaultBit: 2 },
+      { key: 'quarantine_command',     label: 'Quarantine Command',     type: 'bool', defaultByte: 22, defaultBit: 3 },
+      { key: 'end_effector_command',   label: 'End Effector Command',   type: 'bool', defaultByte: 22, defaultBit: 4 },
       { key: 'speed',                  label: 'Speed',                  type: 'int',  defaultByte: 24 },
       { key: 'target_x',              label: 'Target X',               type: 'int',  defaultByte: 26 },
       { key: 'target_y',              label: 'Target Y',               type: 'int',  defaultByte: 28 },
@@ -1460,6 +1463,9 @@
         mergedTags.z_position        = { ...mergedTags.z_position,        byte: 20 };
         mergedTags.home_command      = { ...mergedTags.home_command,      byte: 22, bit: 0 };
         mergedTags.pickup_command    = { ...mergedTags.pickup_command,    byte: 22, bit: 1 };
+        mergedTags.pallet_command    = { ...mergedTags.pallet_command,    byte: 22, bit: 2 };
+        mergedTags.quarantine_command = { ...mergedTags.quarantine_command, byte: 22, bit: 3 };
+        mergedTags.end_effector_command = { ...mergedTags.end_effector_command, byte: 22, bit: 4 };
         mergedTags.speed             = { ...mergedTags.speed,             byte: 24 };
         mergedTags.target_x         = { ...mergedTags.target_x,         byte: 26 };
         mergedTags.target_y         = { ...mergedTags.target_y,         byte: 28 };
