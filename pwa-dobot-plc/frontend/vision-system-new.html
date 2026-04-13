@@ -1083,13 +1083,14 @@
         const canRead = Boolean(cam.can_read);
         const cameraState = connected ? (canRead ? 'CONNECTED' : 'WARMING UP') : 'DISCONNECTED';
         const color = connected ? (canRead ? '#4caf50' : '#ffb300') : '#f44336';
+        const cameraSource = cam.camera_source ? `Source ${cam.camera_source}` : `Index ${cam.camera_index}`;
         setLiveStatus(
           'statusCameraCard',
           'statusCameraValue',
           'statusCameraMeta',
           cameraState,
           color,
-          connected ? `Index ${cam.camera_index} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable',
+          connected ? `${cameraSource} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable',
           connected ? (canRead ? 'good' : 'warn') : 'bad'
         );
         setTitleConnectionStatus(connected);

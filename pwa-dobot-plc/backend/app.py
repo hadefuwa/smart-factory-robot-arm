@@ -2495,6 +2495,7 @@ def camera_status():
             'connected': connected,
             'can_read': can_read,  # Additional info: can we actually read frames?
             'camera_index': camera_service.camera_index,
+            'camera_source': camera_service.active_camera_source,
             'resolution': {
                 'width': camera_service.width,
                 'height': camera_service.height

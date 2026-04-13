@@ -61,6 +61,7 @@ class CameraService:
             height: Frame height
         """
         self.camera_index = camera_index
+        self.active_camera_source = None
         self.width = width
         self.height = height
         self.camera: Optional[cv2.VideoCapture] = None
@@ -108,8 +109,86 @@ class CameraService:
         self.detection_roi_width = 100   # Width (percentage)
         self.detection_roi_height = 100  # Height (percentage)
         
+    def _camera_candidates(self) -> List:
+        """Build candidate camera sources, preferring the configured source first."""
+        candidates: List = []
+        seen = set()
+
+        def add_candidate(value):
+            if value in seen:
+                return
+            seen.add(value)
+            candidates.append(value)
+
+        configured = self.camera_index
+        add_candidate(configured)
+
+        if isinstance(configured, str):
+            stripped = configured.strip()
+            if stripped.isdigit():
+                add_candidate(int(stripped))
+        elif isinstance(configured, int):
+            for fallback_index in range(4):
+                add_candidate(fallback_index)
+
+        return candidates
+
+    def _open_camera_handle(self, source):
+        """Open a camera source with a sensible backend preference."""
+        if os.name != 'nt':
+            cam = cv2.VideoCapture(source, cv2.CAP_V4L2)
+            if cam is not None and cam.isOpened():
+                return cam
+            if cam is not None:
+                cam.release()
+        return cv2.VideoCapture(source)
+
+    def _stabilize_camera_mode(self) -> bool:
+        """Negotiate a stable mode and verify the camera can return frames."""
+        mode_candidates = []
+        requested = (int(self.width), int(self.height))
+        mode_candidates.append(requested)
+        for fallback in ((1600, 1200), (1280, 720), (640, 480)):
+            if fallback not in mode_candidates:
+                mode_candidates.append(fallback)
+
+        for mode_w, mode_h in mode_candidates:
+            try:
+                # Prefer MJPEG over raw YUYV to reduce USB bandwidth and stalls.
+                self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, mode_w)
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, mode_h)
+                self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+                warm_ok = False
+                for _ in range(3):
+                    ret, frame = self.camera.read()
+                    if ret and frame is not None:
+                        warm_ok = True
+                        self.last_frame = frame
+                        self.frame_time = time.time()
+                        break
+                    time.sleep(0.05)
+
+                if warm_ok:
+                    actual_w = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH) or mode_w)
+                    actual_h = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT) or mode_h)
+                    self.width = actual_w
+                    self.height = actual_h
+                    logger.info(
+                        "Camera mode stabilized at %sx%s (requested %sx%s)",
+                        actual_w, actual_h, mode_w, mode_h
+                    )
+                    return True
+
+                logger.warning("Camera mode %sx%s did not return frames during warm-up", mode_w, mode_h)
+            except Exception as e:
+                logger.warning("Camera mode negotiation failed for %sx%s: %s", mode_w, mode_h, e)
+
+        return False
+
     def initialize_camera(self) -> bool:
-        """Initialize and open camera"""
+        """Initialize and open camera."""
         try:
             with self.lock:
                 if self.camera is not None:
@@ -117,64 +196,36 @@ class CameraService:
                         self.camera.release()
                     except Exception:
                         pass  # Ignore errors when releasing
-                
-                self.camera = cv2.VideoCapture(self.camera_index)
-                
-                if not self.camera.isOpened():
-                    logger.error(f"Failed to open camera at index {self.camera_index}")
-                    self.camera = None
-                    return False
-                
-                # Negotiate a stable camera mode. Some unsupported modes trigger UVC probe failures.
-                mode_candidates = []
-                requested = (int(self.width), int(self.height))
-                mode_candidates.append(requested)
-                for fallback in ((1600, 1200), (1280, 720), (640, 480)):
-                    if fallback not in mode_candidates:
-                        mode_candidates.append(fallback)
+                self.active_camera_source = None
 
-                mode_ok = False
-                for mode_w, mode_h in mode_candidates:
+                for source in self._camera_candidates():
+                    logger.info("Trying camera source: %s", source)
+                    self.camera = self._open_camera_handle(source)
+
+                    if self.camera is None or not self.camera.isOpened():
+                        logger.warning("Failed to open camera source: %s", source)
+                        self.camera = None
+                        continue
+
+                    if self._stabilize_camera_mode():
+                        self.active_camera_source = source
+                        self.read_fail_count = 0
+                        logger.info(
+                            "Camera initialized from source %s (configured %s)",
+                            self.active_camera_source,
+                            self.camera_index
+                        )
+                        return True
+
                     try:
-                        # Prefer MJPEG over raw YUYV to reduce USB bandwidth and stalls.
-                        self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-                        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, mode_w)
-                        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, mode_h)
-                        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-                        warm_ok = False
-                        for _ in range(3):
-                            ret, frame = self.camera.read()
-                            if ret and frame is not None:
-                                warm_ok = True
-                                break
-                            time.sleep(0.05)
-
-                        if warm_ok:
-                            actual_w = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH) or mode_w)
-                            actual_h = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT) or mode_h)
-                            self.width = actual_w
-                            self.height = actual_h
-                            logger.info(
-                                "Camera mode stabilized at %sx%s (requested %sx%s)",
-                                actual_w, actual_h, mode_w, mode_h
-                            )
-                            mode_ok = True
-                            break
-                        else:
-                            logger.warning("Camera mode %sx%s did not return frames during warm-up", mode_w, mode_h)
-                    except Exception as e:
-                        logger.warning("Camera mode negotiation failed for %sx%s: %s", mode_w, mode_h, e)
-
-                if not mode_ok:
-                    logger.error("Camera initialization failed: no stable mode produced frames")
-                    self.camera.release()
+                        self.camera.release()
+                    except Exception:
+                        pass
                     self.camera = None
-                    return False
-                
+
+                logger.error("Camera initialization failed: no stable camera source produced frames")
                 self.read_fail_count = 0
-                logger.info(f"Camera initialized at index {self.camera_index} (may need warm-up)")
-                return True
+                return False
                 
         except Exception as e:
             logger.error(f"Error initializing camera: {e}", exc_info=True)
@@ -185,6 +236,7 @@ class CameraService:
             except Exception:
                 pass
             self.camera = None
+            self.active_camera_source = None
             return False
     
     def release_camera(self):
@@ -193,6 +245,7 @@ class CameraService:
             if self.camera is not None:
                 self.camera.release()
                 self.camera = None
+                self.active_camera_source = None
                 logger.info("Camera released")
             # Reset background subtractor
             if self.bg_subtractor is not None:
