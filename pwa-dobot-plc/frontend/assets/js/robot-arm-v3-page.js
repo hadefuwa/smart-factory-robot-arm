@@ -206,6 +206,9 @@
         // Sync slider → input
         var slider = el('jslider-' + j.joint);
         var input  = el('jinput-' + j.joint);
+        slider.disabled = !plcAuto.manualOverride;
+        input.disabled = !plcAuto.manualOverride;
+        el('jgo-' + j.joint).disabled = !plcAuto.manualOverride;
         slider.addEventListener('input', function () { input.value = slider.value; });
         input.addEventListener('input', function () { slider.value = input.value; });
 
@@ -406,6 +409,12 @@
       var e = el(id);
       if (e) e.disabled = !enabled;
     });
+    for (var joint = 1; joint <= 6; joint++) {
+      ['jslider-', 'jinput-', 'jgo-'].forEach(function (prefix) {
+        var ctrl = el(prefix + joint);
+        if (ctrl) ctrl.disabled = !enabled;
+      });
+    }
     var lock = el('manualMoveLock');
     if (lock) lock.style.display = enabled ? 'none' : '';
   }
