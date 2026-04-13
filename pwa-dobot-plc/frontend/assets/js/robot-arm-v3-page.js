@@ -11,12 +11,14 @@
 
   // PLC auto-move: continuously sends PLC target XYZ to the arm every intervalMs
   var plcAuto = {
-    intervalMs: 100,
+    intervalMs: 300,
     timer: null,
     manualOverride: false,
     overrideSecsLeft: 0,
     overrideCountdownTimer: null,
-    latestPlcData: null     // cache updated by every status poll
+    latestPlcData: null,    // cache updated by every status poll
+    moveRequestInFlight: false,
+    lastSentTargetKey: null
   };
 
   // Groups: 'Robot State' = robot→PLC status flags, 'Position' = live XYZ readback,
@@ -385,6 +387,7 @@
 
   async function plcAutoTick() {
     if (plcAuto.manualOverride) return;
+    if (plcAuto.moveRequestInFlight) return;
     var plcData = plcAuto.latestPlcData;
     if (!plcData || !plcData.plc_connected) return;
     if (!state.bridgeConnected) return;
@@ -392,13 +395,18 @@
     var x = tags.target_x, y = tags.target_y, z = tags.target_z;
     var speed = tags.speed || 1500;
     if (x === undefined || y === undefined || z === undefined) return;
+    var targetKey = [x, y, z, speed].join('|');
+    if (plcAuto.lastSentTargetKey === targetKey) return;
+    plcAuto.moveRequestInFlight = true;
     try {
       await apiRequest('/api/robot-arm/move-xyz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x: x, y: y, z: z, speed: speed })
       });
+      plcAuto.lastSentTargetKey = targetKey;
     } catch (_) {}
+    plcAuto.moveRequestInFlight = false;
   }
 
   function startPlcAutoMove() {
@@ -966,7 +974,7 @@
     var intervalInput = el('plcMoveInterval');
     if (intervalInput) {
       intervalInput.addEventListener('change', function () {
-        var v = Math.max(50, Math.min(5000, Number(intervalInput.value) || 100));
+        var v = Math.max(50, Math.min(5000, Number(intervalInput.value) || 300));
         intervalInput.value = v;
         plcAuto.intervalMs = v;
         startPlcAutoMove();           // restart timer with new interval

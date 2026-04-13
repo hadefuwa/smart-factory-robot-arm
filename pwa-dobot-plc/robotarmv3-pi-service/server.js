@@ -87,6 +87,25 @@ let isWriting = false;
 let commandQueue = [];
 let isProcessingCommand = false;
 const MAX_COMMAND_QUEUE_SIZE = 100; // Maximum queue size (status polls + moves)
+const commandStats = {
+    totalProcessed: 0,
+    maxQueueLengthSeen: 0,
+    byType: {}
+};
+
+function ensureCommandStat(type) {
+    const key = type || 'unknown';
+    if (!commandStats.byType[key]) {
+        commandStats.byType[key] = {
+            count: 0,
+            avgWaitMs: 0,
+            maxWaitMs: 0,
+            avgExecMs: 0,
+            maxExecMs: 0
+        };
+    }
+    return commandStats.byType[key];
+}
 
 /**
  * Queue a write operation to the shared serial port
@@ -128,7 +147,7 @@ async function processWriteQueue() {
  * @param {Function} commandFn - Function that executes the command
  * @returns {Promise} Promise that resolves when command completes
  */
-async function queueCommand(commandFn) {
+async function queueCommand(commandFn, meta) {
     return new Promise((resolve, reject) => {
         // Prevent queue from growing too large (could indicate a problem)
         if (commandQueue.length >= MAX_COMMAND_QUEUE_SIZE) {
@@ -136,7 +155,11 @@ async function queueCommand(commandFn) {
             reject(new Error('Command queue is full, server may be overloaded'));
             return;
         }
-        commandQueue.push({ commandFn, resolve, reject });
+        const commandType = (meta && meta.type) ? String(meta.type) : 'unknown';
+        commandQueue.push({ commandFn, resolve, reject, enqueuedAt: Date.now(), commandType });
+        if (commandQueue.length > commandStats.maxQueueLengthSeen) {
+            commandStats.maxQueueLengthSeen = commandQueue.length;
+        }
         processCommandQueue();
     });
 }
@@ -150,11 +173,21 @@ async function processCommandQueue() {
     }
     
     isProcessingCommand = true;
-    const { commandFn, resolve, reject } = commandQueue.shift();
+    const { commandFn, resolve, reject, enqueuedAt, commandType } = commandQueue.shift();
     
     try {
+        const waitMs = Math.max(0, Date.now() - (enqueuedAt || Date.now()));
+        const startedAt = Date.now();
         await maybeReopenPort();
         const result = await commandFn();
+        const execMs = Math.max(0, Date.now() - startedAt);
+        const stat = ensureCommandStat(commandType);
+        stat.count += 1;
+        stat.avgWaitMs = ((stat.avgWaitMs * (stat.count - 1)) + waitMs) / stat.count;
+        stat.avgExecMs = ((stat.avgExecMs * (stat.count - 1)) + execMs) / stat.count;
+        if (waitMs > stat.maxWaitMs) stat.maxWaitMs = waitMs;
+        if (execMs > stat.maxExecMs) stat.maxExecMs = execMs;
+        commandStats.totalProcessed += 1;
         // Reduced delay after command completes - only 5ms instead of 10ms
         // This helps prevent response conflicts while reducing accumulated lag
         await new Promise(resolve => setTimeout(resolve, 5));
@@ -383,7 +416,7 @@ function startServer() {
                 // Queue the command to ensure only one command is processed at a time
                 await queueCommand(async () => {
                     await handleCommand(ws, data);
-                });
+                }, { type: data && data.command ? data.command : 'unknown' });
             } catch (error) {
                 console.error('Error handling message:', error);
                 ws.send(JSON.stringify({
@@ -1067,6 +1100,17 @@ async function handleCommand(ws, data) {
             break;
         }
 
+        case 'getPerfStats': {
+            const summary = {
+                totalProcessed: commandStats.totalProcessed,
+                queueLength: commandQueue.length,
+                maxQueueLengthSeen: commandStats.maxQueueLengthSeen,
+                byType: commandStats.byType
+            };
+            ws.send(JSON.stringify({ type: 'perfStats', summary: summary }));
+            break;
+        }
+
         case 'moveToXYZ': {
             // Compute IK from target XYZ then issue moveJoint for each joint.
             // Body: { command: "moveToXYZ", x, y, z, speed?: number, orientation?: {x,y,z} }
@@ -1194,7 +1238,7 @@ function startKeepAlive() {
                         lastSerialActivity = Date.now();
                         await s.sendPacket(1, []); // keep SC-B1 active
                         await new Promise(r => setTimeout(r, 15)); // wait for response window
-                    });
+                    }, { type: 'keepAlive' });
                 } catch(e) { /* ignore keep-alive errors */ }
             }
         }
