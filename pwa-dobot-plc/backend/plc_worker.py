@@ -703,10 +703,14 @@ class PLCWorker:
                 except Exception as e:
                     logger.error(f"PLC DB read error: {e}", exc_info=True)
                     self.stats['read_errors'] += 1
+                    # Mark as disconnected so the reconnect callback fires when reads recover
+                    _prev_plc_connected = False
+                    self.connected = False
                     continue
 
-                # 3. UPDATE CAMERA CONNECTED STATUS
+                # 3. UPDATE CAMERA/ROBOT CONNECTED STATUS
                 self._update_camera_connected()
+                self._update_robot_connected()
 
                 # 4. VISION HANDSHAKE STATE MACHINE
                 self._process_vision_handshake()
@@ -887,6 +891,38 @@ class PLCWorker:
 
         except Exception as e:
             logger.debug(f"Error updating camera connected status: {e}")
+
+    def _update_robot_connected(self):
+        """Update robot bridge connected status in PLC."""
+        try:
+            from app import robot_arm_bridge_state
+
+            robot_connected = bool(robot_arm_bridge_state.get('connected'))
+            current_status = self.get_cache_value('db125_connected', False)
+            if robot_connected == current_status:
+                return
+
+            connected_tag = self.robot_db_tags.get('connected')
+            if not connected_tag:
+                return
+
+            byte_data = bytearray(1)
+            try:
+                current_byte = self.client.db_read(self.robot_db_number, connected_tag['byte'], 1)
+                byte_data = bytearray(current_byte)
+            except Exception:
+                pass
+
+            set_bool(byte_data, 0, connected_tag['bit'], robot_connected)
+            self.queue_write(
+                self.robot_db_number,
+                connected_tag['byte'],
+                byte_data,
+                f"Robot connected={robot_connected}"
+            )
+
+        except Exception as e:
+            logger.debug(f"Error updating robot connected status: {e}")
 
     def _process_vision_handshake(self):
         """

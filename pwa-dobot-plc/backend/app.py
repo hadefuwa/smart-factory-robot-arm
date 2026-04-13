@@ -1490,6 +1490,13 @@ def robot_arm_status():
             except Exception as fe:
                 logger.warning(f"Fault aggregation error: {fe}")
 
+            # Refresh connected bit on every successful poll so a PLC reset
+            # doesn't leave it stuck at 0 (PLC DB125 resets to zeros on reboot)
+            try:
+                queue_robot_status(connected=True)
+            except Exception:
+                pass
+
             return jsonify({
                 'success': True,
                 'connected': True,
