@@ -828,6 +828,10 @@
       var loadHi   = avail && j.load > t.load_max_pct;
       var hasFault = tempHi || voltLow || loadHi;
 
+      function fmt(val, decimals) {
+        return (typeof val === 'number' && Number.isFinite(val)) ? val.toFixed(decimals) : '—';
+      }
+
       function fval(val, isBad, unit) {
         if (!avail) return '<span class="fval na">—</span>';
         var cls = isBad ? 'fval hi' : 'fval ok';
@@ -838,10 +842,10 @@
         '<td><b>J' + j.joint + '</b></td>' +
         '<td>' + (avail ? '<span style="color:var(--status-success);font-size:0.75rem;font-weight:700">OK</span>' : '<span style="color:var(--status-danger);font-size:0.75rem;font-weight:700">N/A</span>') + '</td>' +
         '<td>' + (avail ? (j.isMoving ? '<span class="fval warn">YES</span>' : '<span class="fval ok">No</span>') : '<span class="fval na">—</span>') + '</td>' +
-        '<td><span class="fval' + (avail ? '' : ' na') + '">' + (avail ? j.angleDegrees.toFixed(1) : '—') + '</span></td>' +
-        '<td>' + fval(j.temperature + ' °C', tempHi) + '</td>' +
-        '<td>' + fval(j.voltage.toFixed(1) + ' V', voltLow) + '</td>' +
-        '<td>' + fval(j.load.toFixed(1) + '%', loadHi) + '</td>' +
+        '<td><span class="fval' + (avail ? '' : ' na') + '">' + (avail ? fmt(j.angleDegrees, 1) : '—') + '</span></td>' +
+        '<td>' + fval(fmt(j.temperature, 1) + ' °C', tempHi) + '</td>' +
+        '<td>' + fval(fmt(j.voltage, 1) + ' V', voltLow) + '</td>' +
+        '<td>' + fval(fmt(j.load, 1) + '%', loadHi) + '</td>' +
         '<td>' + (avail ? (j.torqueEnabled ? '<span class="fval ok">ON</span>' : '<span class="fval na">OFF</span>') : '<span class="fval na">—</span>') + '</td>' +
         '</tr>';
     });
