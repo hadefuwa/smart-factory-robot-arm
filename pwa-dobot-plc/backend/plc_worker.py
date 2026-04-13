@@ -721,7 +721,17 @@ class PLCWorker:
         with self.cache_lock:
             self.cache['hmi_start'] = self._main_bit(data, 'hmi_start')
             self.cache['hmi_stop'] = self._main_bit(data, 'hmi_stop')
-            self.cache['hmi_reset'] = self._main_bit(data, 'hmi_reset')
+            hmi_reset = self._main_bit(data, 'hmi_reset')
+            self.cache['hmi_reset'] = hmi_reset
+
+        # Notify fault manager of hmi_reset state (rising-edge detection inside)
+        try:
+            from plc_integration import on_hmi_reset
+            on_hmi_reset(hmi_reset)
+        except Exception:
+            pass
+
+        with self.cache_lock:
 
             self.cache['material_type'] = self._main_int(data, 'material_type')
             self.cache['quarantined_count'] = self._main_int(data, 'quarantined_count')

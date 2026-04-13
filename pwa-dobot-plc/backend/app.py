@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status
 from dobot_client import DobotClient
 from camera_service import CameraService
 # DISABLED: Digital twin import commented out to reduce CPU usage
@@ -1304,6 +1304,10 @@ def close_robot_arm_bridge():
             pass
     robot_arm_bridge_state['ws'] = None
     robot_arm_bridge_state['connected'] = False
+    try:
+        queue_robot_status(connected=False, busy=False)
+    except Exception:
+        pass
 
 
 def open_robot_arm_bridge(host: str, port: int):
@@ -1323,6 +1327,10 @@ def open_robot_arm_bridge(host: str, port: int):
     robot_arm_bridge_state['host'] = host
     robot_arm_bridge_state['port'] = port
     robot_arm_bridge_state['last_error'] = None
+    try:
+        queue_robot_status(connected=True)
+    except Exception:
+        pass
     return ws
 
 

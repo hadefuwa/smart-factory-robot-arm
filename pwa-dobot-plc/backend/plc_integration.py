@@ -1,6 +1,7 @@
 """Worker-backed PLC integration helpers used by app.py."""
 
 import logging
+import threading
 import time
 import snap7
 from snap7.util import set_bool, set_int
@@ -10,6 +11,11 @@ logger = logging.getLogger(__name__)
 
 # Global worker instance (initialized by init_plc_worker)
 plc_worker: PLCWorker = None
+
+# --- Invalid-target fault management ---
+_invalid_target_timer: threading.Timer = None
+_invalid_target_lock = threading.Lock()
+_hmi_reset_prev: bool = False          # rising-edge detection for DB123.DBX0.2
 
 
 def init_plc_worker(
@@ -141,6 +147,9 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         return
 
     # Read-modify-write the DB125 status bytes
+    # All status bits live in byte 0 (and cycle_complete in byte 1).
+    # We must seed each byte buffer from the current cache so we only change
+    # the bits we're explicitly updating — not zero-out the rest.
     try:
         cache = get_plc_cache()
         if connected is None:
@@ -148,19 +157,31 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         if busy is None:
             busy = cache.get('db125_busy', False)
 
+        # Build a map of byte_offset → buffer, pre-seeded from all known status bits
+        STATUS_FIELDS = [
+            ('connected',              'db125_connected'),
+            ('busy',                   'db125_busy'),
+            ('move_complete',          'db125_move_complete'),
+            ('at_home',                'db125_at_home'),
+            ('at_pickup_position',     'db125_at_pickup_position'),
+            ('at_pallet_position',     'db125_at_pallet_position'),
+            ('at_quarantine_position', 'db125_at_quarantine_position'),
+            ('gripper_active',         'db125_gripper_active'),
+            ('cycle_complete',         'db125_cycle_complete'),
+        ]
         byte_writes = {}
-        for field_name, value in (
-            ('connected', connected),
-            ('busy', busy),
-        ):
-            tag = plc_worker.robot_db_tags[field_name]
+        for field_name, cache_key in STATUS_FIELDS:
+            tag = plc_worker.robot_db_tags.get(field_name)
+            if not tag:
+                continue
             entry = byte_writes.setdefault(tag['byte'], bytearray(1))
-            set_bool(entry, 0, tag['bit'], value)
+            set_bool(entry, 0, tag['bit'], bool(cache.get(cache_key, False)))
 
-        cycle_tag = plc_worker.robot_db_tags.get('cycle_complete')
-        if cycle_tag:
-            entry = byte_writes.setdefault(cycle_tag['byte'], bytearray(1))
-            set_bool(entry, 0, cycle_tag['bit'], cache.get('db125_cycle_complete', False))
+        # Now overlay the explicit overrides
+        for field_name, value in (('connected', connected), ('busy', busy)):
+            tag = plc_worker.robot_db_tags.get(field_name)
+            if tag and value is not None:
+                set_bool(byte_writes.setdefault(tag['byte'], bytearray(1)), 0, tag['bit'], bool(value))
 
         for byte_offset, byte_data in byte_writes.items():
             plc_worker.queue_write(plc_worker.robot_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
@@ -169,13 +190,14 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         logger.error(f"Error queueing robot status: {e}")
 
 
-def queue_invalid_target(is_invalid: bool):
-    """
-    Write the Invalid_Target bit (DB125 byte 6 bit 0) to the PLC.
+def _clear_invalid_target():
+    """Timer callback — clear the Invalid_Target bit after auto-reset delay."""
+    logger.info("Invalid_Target auto-reset (30 s elapsed)")
+    _write_invalid_target_bit(False)
 
-    Args:
-        is_invalid: True when IK failed (target unreachable), False on success.
-    """
+
+def _write_invalid_target_bit(is_invalid: bool):
+    """Write the Invalid_Target bit to the PLC (no timer management)."""
     if plc_worker is None:
         return
     try:
@@ -184,7 +206,49 @@ def queue_invalid_target(is_invalid: bool):
         set_bool(buf, 0, tag['bit'], is_invalid)
         plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], buf, f"invalid_target={is_invalid}")
     except Exception as e:
-        logger.error(f"Error queueing invalid_target: {e}")
+        logger.error(f"Error writing invalid_target: {e}")
+
+
+def queue_invalid_target(is_invalid: bool):
+    """
+    Write the Invalid_Target bit (DB125 byte 6 bit 0) to the PLC.
+
+    When setting True, starts a 30-second auto-reset timer. Calling with
+    False cancels any pending timer immediately.
+
+    Args:
+        is_invalid: True when IK failed (target unreachable), False on success.
+    """
+    global _invalid_target_timer
+    with _invalid_target_lock:
+        # Cancel any existing timer
+        if _invalid_target_timer is not None:
+            _invalid_target_timer.cancel()
+            _invalid_target_timer = None
+
+        _write_invalid_target_bit(is_invalid)
+
+        if is_invalid:
+            _invalid_target_timer = threading.Timer(30.0, _clear_invalid_target)
+            _invalid_target_timer.daemon = True
+            _invalid_target_timer.start()
+
+
+def on_hmi_reset(reset_active: bool):
+    """
+    Call this whenever the hmi_reset bit (DB123 byte 0 bit 2) changes.
+    On a rising edge (False → True) it immediately clears the Invalid_Target fault.
+    """
+    global _hmi_reset_prev, _invalid_target_timer
+    rising_edge = reset_active and not _hmi_reset_prev
+    _hmi_reset_prev = reset_active
+    if rising_edge:
+        logger.info("HMI fault reset received — clearing Invalid_Target")
+        with _invalid_target_lock:
+            if _invalid_target_timer is not None:
+                _invalid_target_timer.cancel()
+                _invalid_target_timer = None
+        _write_invalid_target_bit(False)
 
 
 
