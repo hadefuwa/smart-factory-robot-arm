@@ -63,8 +63,8 @@ def init_plc_worker(
     # On PLC reconnect, re-flush robot arm status so DB125 is not left at zeros
     def _on_plc_reconnect():
         try:
-            from app import robot_arm_bridge_state
-            arm_connected = bool(robot_arm_bridge_state.get('connected'))
+            provider = getattr(plc_worker, 'robot_connected_provider', None)
+            arm_connected = bool(provider()) if callable(provider) else False
             queue_robot_status(connected=arm_connected)
             logger.info(f"PLC reconnected — re-wrote DB125 connected={arm_connected}")
         except Exception as _e:

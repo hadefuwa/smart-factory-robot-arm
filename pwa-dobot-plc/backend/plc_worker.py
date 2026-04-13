@@ -236,6 +236,7 @@ class PLCWorker:
 
         # Called with no args whenever the PLC reconnects after a dropout
         self.on_plc_reconnect = None
+        self.robot_connected_provider = None
 
         # Statistics
         self.stats = {
@@ -895,9 +896,11 @@ class PLCWorker:
     def _update_robot_connected(self):
         """Update robot bridge connected status in PLC."""
         try:
-            from app import robot_arm_bridge_state
+            provider = self.robot_connected_provider
+            if not callable(provider):
+                return
 
-            robot_connected = bool(robot_arm_bridge_state.get('connected'))
+            robot_connected = bool(provider())
             current_status = self.get_cache_value('db125_connected', False)
             if robot_connected == current_status:
                 return

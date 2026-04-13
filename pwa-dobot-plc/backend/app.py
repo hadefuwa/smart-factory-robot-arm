@@ -988,6 +988,7 @@ def init_clients():
             db124_config=get_camera_db_config(config),
             db125_config=get_robot_db_config(config)
         )
+        plc_worker.robot_connected_provider = lambda: bool(robot_arm_bridge_state.get('connected'))
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
         logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
