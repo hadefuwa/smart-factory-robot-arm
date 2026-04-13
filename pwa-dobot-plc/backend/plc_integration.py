@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 import snap7
-from snap7.util import set_bool, set_int
+from snap7.util import set_bool, set_int, set_real
 from plc_worker import PLCWorker
 
 logger = logging.getLogger(__name__)
@@ -265,14 +265,14 @@ def on_hmi_reset(reset_active: bool):
 
 
 def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: bool, any_overtemp: bool,
-                       max_temperature: bool, min_voltage: bool, max_load_pct: bool):
+                       max_temperature: float, min_voltage: float, max_load_pct: float):
     """
-    Write all 7 servo fault bits to DB125 byte 8 in a single write.
+    Write servo fault flags plus numeric max/min values to DB125.
 
-    All bits share byte 8 (Servos struct):
-      bit 0 — any_moving        bit 4 — max_temperature
-      bit 1 — any_overload      bit 5 — min_voltage
-      bit 2 — any_undervoltage  bit 6 — max_load_pct
+    Fault flags share DB125 byte 2:
+      bit 0 — any_moving
+      bit 1 — any_overload
+      bit 2 — any_undervoltage
       bit 3 — any_overtemp
     """
     if plc_worker is None:
@@ -284,17 +284,26 @@ def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: b
             ('any_overload',     any_overload),
             ('any_undervoltage', any_undervoltage),
             ('any_overtemp',     any_overtemp),
-            ('max_temperature',  max_temperature),
-            ('min_voltage',      min_voltage),
-            ('max_load_pct',     max_load_pct),
         ):
             tag = plc_worker.robot_db_tags.get(field_name)
             if tag:
                 set_bool(fault_byte, 0, tag['bit'], bool(value))
-        # All 7 bits are in the same byte — one write covers them all
+        # All 4 fault bits are in the same byte — one write covers them all
         tag = plc_worker.robot_db_tags.get('any_moving')
         if tag:
             plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], fault_byte, 'servo fault flags')
+
+        for field_name, value in (
+            ('max_temperature', max_temperature),
+            ('min_voltage', min_voltage),
+            ('max_load_pct', max_load_pct),
+        ):
+            tag = plc_worker.robot_db_tags.get(field_name)
+            if not tag:
+                continue
+            real_data = bytearray(4)
+            set_real(real_data, 0, float(value))
+            plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], real_data, f'{field_name}={value}')
     except Exception as e:
         logger.error(f"Error queueing robot faults: {e}")
 

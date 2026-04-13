@@ -101,18 +101,18 @@ ROBOT_DB_DEFAULTS = {
     'any_overload':           {'byte': 2,  'bit': 1, 'kind': 'bool'},
     'any_undervoltage':       {'byte': 2,  'bit': 2, 'kind': 'bool'},
     'any_overtemp':           {'byte': 2,  'bit': 3, 'kind': 'bool'},
-    'max_temperature':        {'byte': 2,  'bit': 4, 'kind': 'bool'},
-    'min_voltage':            {'byte': 2,  'bit': 5, 'kind': 'bool'},
-    'max_load_pct':           {'byte': 2,  'bit': 6, 'kind': 'bool'},
-    'x_position':             {'byte': 4,  'kind': 'int'},
-    'y_position':             {'byte': 6,  'kind': 'int'},
-    'z_position':             {'byte': 8,  'kind': 'int'},
-    'home_command':           {'byte': 10, 'bit': 0, 'kind': 'bool'},
-    'pickup_command':         {'byte': 10, 'bit': 1, 'kind': 'bool'},
-    'speed':                  {'byte': 12, 'kind': 'int'},
-    'target_x':               {'byte': 14, 'kind': 'int'},
-    'target_y':               {'byte': 16, 'kind': 'int'},
-    'target_z':               {'byte': 18, 'kind': 'int'},
+    'max_temperature':        {'byte': 4,  'kind': 'real'},
+    'min_voltage':            {'byte': 8,  'kind': 'real'},
+    'max_load_pct':           {'byte': 12, 'kind': 'real'},
+    'x_position':             {'byte': 16, 'kind': 'int'},
+    'y_position':             {'byte': 18, 'kind': 'int'},
+    'z_position':             {'byte': 20, 'kind': 'int'},
+    'home_command':           {'byte': 22, 'bit': 0, 'kind': 'bool'},
+    'pickup_command':         {'byte': 22, 'bit': 1, 'kind': 'bool'},
+    'speed':                  {'byte': 24, 'kind': 'int'},
+    'target_x':               {'byte': 26, 'kind': 'int'},
+    'target_y':               {'byte': 28, 'kind': 'int'},
+    'target_z':               {'byte': 30, 'kind': 'int'},
 }
 
 
@@ -203,7 +203,7 @@ class PLCWorker:
         self.camera_db_total_size = 2
         self.camera_db_tags = {}
         self.robot_db_number = 125
-        self.robot_db_total_size = 20
+        self.robot_db_total_size = 32
         self.robot_db_tags = {}
 
         self.camera_service = camera_service
@@ -257,7 +257,7 @@ class PLCWorker:
         self.camera_db_total_size = max(1, int(camera_db_config.get('total_size', 2)))
         self.camera_db_tags = self._build_tag_config(camera_db_config.get('tags', {}), CAMERA_DB_DEFAULTS)
         self.robot_db_number = int(robot_db_config.get('db_number', 125))
-        self.robot_db_total_size = max(20, int(robot_db_config.get('total_size', 20)))
+        self.robot_db_total_size = max(32, int(robot_db_config.get('total_size', 32)))
         self.robot_db_tags = self._build_tag_config(robot_db_config.get('tags', {}), ROBOT_DB_DEFAULTS)
         logger.info(
             "Updated PLC mappings: main DB%s size=%s, camera DB%s size=%s, robot DB%s size=%s",
@@ -374,6 +374,12 @@ class PLCWorker:
             return fallback
         return get_int(data, tag['byte'])
 
+    def _robot_real(self, data: bytearray, tag_name: str, fallback: float = 0.0) -> float:
+        tag = self.robot_db_tags.get(tag_name)
+        if not tag:
+            return fallback
+        return get_real(data, tag['byte'])
+
     def _create_empty_cache(self) -> Dict[str, Any]:
         """Create empty cache structure matching the combined main/camera PLC layout."""
         return {
@@ -422,9 +428,9 @@ class PLCWorker:
             'db125_any_overload': False,
             'db125_any_undervoltage': False,
             'db125_any_overtemp': False,
-            'db125_max_temperature': False,
-            'db125_min_voltage': False,
-            'db125_max_load_pct': False,
+            'db125_max_temperature': 0.0,
+            'db125_min_voltage': 0.0,
+            'db125_max_load_pct': 0.0,
 
             # Objects & Counters (byte 34-47)
             'material_type': 0,
@@ -870,9 +876,9 @@ class PLCWorker:
             self.cache['db125_any_overload'] = self._robot_bit(data, 'any_overload')
             self.cache['db125_any_undervoltage'] = self._robot_bit(data, 'any_undervoltage')
             self.cache['db125_any_overtemp'] = self._robot_bit(data, 'any_overtemp')
-            self.cache['db125_max_temperature'] = self._robot_bit(data, 'max_temperature')
-            self.cache['db125_min_voltage'] = self._robot_bit(data, 'min_voltage')
-            self.cache['db125_max_load_pct'] = self._robot_bit(data, 'max_load_pct')
+            self.cache['db125_max_temperature'] = self._robot_real(data, 'max_temperature')
+            self.cache['db125_min_voltage'] = self._robot_real(data, 'min_voltage')
+            self.cache['db125_max_load_pct'] = self._robot_real(data, 'max_load_pct')
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""

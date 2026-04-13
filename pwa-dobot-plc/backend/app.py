@@ -434,7 +434,7 @@ def load_config():
         if not isinstance(tags, dict):
             tags = {}
             db125_cfg['tags'] = tags
-        db125_cfg['total_size'] = max(int(db125_cfg.get('total_size', 20) or 20), 20)
+        db125_cfg['total_size'] = max(int(db125_cfg.get('total_size', 32) or 32), 32)
         return config
 
     base_config = {}
@@ -1456,14 +1456,18 @@ def robot_arm_status():
                 any_undervolt = any(j.get('voltage', 99) < volt_min for j in available)
                 any_overload  = any(j.get('load', 0) > load_max for j in available)
 
+                max_temperature_value = max((float(j.get('temperature', 0.0) or 0.0) for j in available), default=0.0)
+                min_voltage_value = min((float(j.get('voltage', 0.0) or 0.0) for j in available), default=0.0)
+                max_load_pct_value = max((float(j.get('load', 0.0) or 0.0) for j in available), default=0.0)
+
                 queue_robot_faults(
                     any_moving=any_moving,
                     any_overload=any_overload,
                     any_undervoltage=any_undervolt,
                     any_overtemp=any_overtemp,
-                    max_temperature=any_overtemp,
-                    min_voltage=any_undervolt,
-                    max_load_pct=any_overload,
+                    max_temperature=max_temperature_value,
+                    min_voltage=min_voltage_value,
+                    max_load_pct=max_load_pct_value,
                 )
             except Exception as fe:
                 logger.warning(f"Fault aggregation error: {fe}")
@@ -3541,9 +3545,9 @@ def read_robot_db_tags():
         'any_overload': False,
         'any_undervoltage': False,
         'any_overtemp': False,
-        'max_temperature': False,
-        'min_voltage': False,
-        'max_load_pct': False,
+        'max_temperature': 0.0,
+        'min_voltage': 0.0,
+        'max_load_pct': 0.0,
     }
 
     try:
@@ -3576,9 +3580,9 @@ def read_robot_db_tags():
             'any_overload': bool(cache.get('db125_any_overload', False)),
             'any_undervoltage': bool(cache.get('db125_any_undervoltage', False)),
             'any_overtemp': bool(cache.get('db125_any_overtemp', False)),
-            'max_temperature': bool(cache.get('db125_max_temperature', False)),
-            'min_voltage': bool(cache.get('db125_min_voltage', False)),
-            'max_load_pct': bool(cache.get('db125_max_load_pct', False)),
+            'max_temperature': float(cache.get('db125_max_temperature', 0.0)),
+            'min_voltage': float(cache.get('db125_min_voltage', 0.0)),
+            'max_load_pct': float(cache.get('db125_max_load_pct', 0.0)),
         }
 
         return jsonify({

@@ -114,8 +114,8 @@
     "db125": {
       "enabled": true,
       "db_number": 125,
-      "total_size": 20,
-      "comment": "Robot arm DB: status (bytes 0-9 read-only for PLC), commands (bytes 10-19 written by PLC)",
+      "total_size": 32,
+      "comment": "Robot arm DB: status (bytes 0-21 read-only for PLC), commands (bytes 22-31 written by PLC)",
       "tags": {
         "connected":              { "byte": 0,  "bit": 0 },
         "busy":                   { "byte": 0,  "bit": 1 },
@@ -131,18 +131,18 @@
         "any_overload":           { "byte": 2,  "bit": 1 },
         "any_undervoltage":       { "byte": 2,  "bit": 2 },
         "any_overtemp":           { "byte": 2,  "bit": 3 },
-        "max_temperature":        { "byte": 2,  "bit": 4 },
-        "min_voltage":            { "byte": 2,  "bit": 5 },
-        "max_load_pct":           { "byte": 2,  "bit": 6 },
-        "x_position":             { "byte": 4 },
-        "y_position":             { "byte": 6 },
-        "z_position":             { "byte": 8 },
-        "home_command":           { "byte": 10, "bit": 0 },
-        "pickup_command":         { "byte": 10, "bit": 1 },
-        "speed":                  { "byte": 12 },
-        "target_x":               { "byte": 14 },
-        "target_y":               { "byte": 16 },
-        "target_z":               { "byte": 18 }
+        "max_temperature":        { "byte": 4 },
+        "min_voltage":            { "byte": 8 },
+        "max_load_pct":           { "byte": 12 },
+        "x_position":             { "byte": 16 },
+        "y_position":             { "byte": 18 },
+        "z_position":             { "byte": 20 },
+        "home_command":           { "byte": 22, "bit": 0 },
+        "pickup_command":         { "byte": 22, "bit": 1 },
+        "speed":                  { "byte": 24 },
+        "target_x":               { "byte": 26 },
+        "target_y":               { "byte": 28 },
+        "target_z":               { "byte": 30 }
       }
     }
   },
