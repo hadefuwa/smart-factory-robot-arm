@@ -22,27 +22,34 @@
   // Groups: 'Robot State' = robot→PLC status flags, 'Position' = live XYZ readback,
   //         'PLC Commands' = PLC→robot command bits and target coordinates
   var PLC_DB125_FIELDS = [
-    { key: 'connected',             label: 'Connected',      type: 'bool', group: 'Robot State' },
-    { key: 'busy',                  label: 'Busy',           type: 'bool', group: 'Robot State' },
-    { key: 'move_complete',         label: 'Move Complete',  type: 'bool', group: 'Robot State' },
-    { key: 'at_home',               label: 'At Home',        type: 'bool', group: 'Robot State' },
-    { key: 'at_pickup_position',    label: 'At Pickup',      type: 'bool', group: 'Robot State' },
-    { key: 'at_pallet_position',    label: 'At Pallet',      type: 'bool', group: 'Robot State' },
-    { key: 'at_quarantine_position',label: 'At Quarantine',  type: 'bool', group: 'Robot State' },
-    { key: 'gripper_active',        label: 'Gripper Active', type: 'bool', group: 'Robot State' },
-    { key: 'cycle_complete',        label: 'Cycle Complete', type: 'bool', group: 'Robot State' },
-    { key: 'robot_status_code',     label: 'Status Code',    type: 'int',  group: 'Robot State' },
-    { key: 'error_code',            label: 'Error Code',     type: 'int',  group: 'Robot State' },
-    { key: 'invalid_target',        label: 'Invalid Target', type: 'bool', group: 'Robot State' },
-    { key: 'x_position',            label: 'X Position',     type: 'int',  unit: 'mm', group: 'Position' },
-    { key: 'y_position',            label: 'Y Position',     type: 'int',  unit: 'mm', group: 'Position' },
-    { key: 'z_position',            label: 'Z Position',     type: 'int',  unit: 'mm', group: 'Position' },
-    { key: 'home_command',          label: 'Home Cmd',       type: 'bool', group: 'PLC Commands' },
-    { key: 'pickup_command',        label: 'Pickup Cmd',     type: 'bool', group: 'PLC Commands' },
-    { key: 'speed',                 label: 'Speed',          type: 'int',  group: 'PLC Commands' },
-    { key: 'target_x',              label: 'Target X',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
-    { key: 'target_y',              label: 'Target Y',       type: 'int',  unit: 'mm', group: 'PLC Commands' },
-    { key: 'target_z',              label: 'Target Z',       type: 'int',  unit: 'mm', group: 'PLC Commands' }
+    { key: 'connected',             label: 'Connected',       type: 'bool', group: 'Robot State' },
+    { key: 'busy',                  label: 'Busy',            type: 'bool', group: 'Robot State' },
+    { key: 'move_complete',         label: 'Move Complete',   type: 'bool', group: 'Robot State' },
+    { key: 'at_home',               label: 'At Home',         type: 'bool', group: 'Robot State' },
+    { key: 'at_pickup_position',    label: 'At Pickup',       type: 'bool', group: 'Robot State' },
+    { key: 'at_pallet_position',    label: 'At Pallet',       type: 'bool', group: 'Robot State' },
+    { key: 'at_quarantine_position',label: 'At Quarantine',   type: 'bool', group: 'Robot State' },
+    { key: 'gripper_active',        label: 'Gripper Active',  type: 'bool', group: 'Robot State' },
+    { key: 'cycle_complete',        label: 'Cycle Complete',  type: 'bool', group: 'Robot State' },
+    { key: 'robot_status_code',     label: 'Status Code',     type: 'int',  group: 'Robot State' },
+    { key: 'error_code',            label: 'Error Code',      type: 'int',  group: 'Robot State' },
+    { key: 'invalid_target',        label: 'Invalid Target',  type: 'bool', group: 'Robot State' },
+    { key: 'any_moving',            label: 'Any Moving',      type: 'bool', group: 'Servo Faults' },
+    { key: 'any_overload',          label: 'Any Overload',    type: 'bool', group: 'Servo Faults' },
+    { key: 'any_undervoltage',      label: 'Any Undervoltage',type: 'bool', group: 'Servo Faults' },
+    { key: 'any_overtemp',          label: 'Any Overtemp',    type: 'bool', group: 'Servo Faults' },
+    { key: 'max_temperature',       label: 'Max Temp Alarm',  type: 'bool', group: 'Servo Faults' },
+    { key: 'min_voltage',           label: 'Min Volt Alarm',  type: 'bool', group: 'Servo Faults' },
+    { key: 'max_load_pct',          label: 'Max Load Alarm',  type: 'bool', group: 'Servo Faults' },
+    { key: 'x_position',            label: 'X Position',      type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'y_position',            label: 'Y Position',      type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'z_position',            label: 'Z Position',      type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'home_command',          label: 'Home Cmd',        type: 'bool', group: 'PLC Commands' },
+    { key: 'pickup_command',        label: 'Pickup Cmd',      type: 'bool', group: 'PLC Commands' },
+    { key: 'speed',                 label: 'Speed',           type: 'int',  group: 'PLC Commands' },
+    { key: 'target_x',              label: 'Target X',        type: 'int',  unit: 'mm', group: 'PLC Commands' },
+    { key: 'target_y',              label: 'Target Y',        type: 'int',  unit: 'mm', group: 'PLC Commands' },
+    { key: 'target_z',              label: 'Target Z',        type: 'int',  unit: 'mm', group: 'PLC Commands' }
   ];
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -570,15 +577,18 @@
         var joints = (armData.status && armData.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
         renderCurrentXYZ((armData.status && armData.status.currentXYZ) || null);
+        renderFaults(joints);
       } else {
         state.bridgeConnected = false;
         setConnected(false, 'Offline');
         renderCurrentXYZ(null);
+        renderFaults([]);
       }
     } else {
       state.bridgeConnected = false;
       setConnected(false, 'Error');
       renderCurrentXYZ(null);
+      renderFaults(null);
     }
 
     updatePlcAutoBadge();
@@ -749,6 +759,97 @@
     }
   }
 
+  // ── fault thresholds (loaded once, updated on save) ──────────────────────
+  var faultThresholds = { temp_max_c: 60, voltage_min_v: 7.0, load_max_pct: 80 };
+
+  async function loadFaultConfig() {
+    try {
+      var d = await apiRequest('/api/robot-arm/fault-config');
+      if (d.success) {
+        faultThresholds = { temp_max_c: d.temp_max_c, voltage_min_v: d.voltage_min_v, load_max_pct: d.load_max_pct };
+        var ti = el('faultCfgTemp'); if (ti) ti.value = d.temp_max_c;
+        var vi = el('faultCfgVolt'); if (vi) vi.value = d.voltage_min_v;
+        var li = el('faultCfgLoad'); if (li) li.value = d.load_max_pct;
+      }
+    } catch (_) {}
+  }
+
+  async function saveFaultConfig() {
+    var tempVal = parseFloat((el('faultCfgTemp') && el('faultCfgTemp').value) || faultThresholds.temp_max_c);
+    var voltVal = parseFloat((el('faultCfgVolt') && el('faultCfgVolt').value) || faultThresholds.voltage_min_v);
+    var loadVal = parseFloat((el('faultCfgLoad') && el('faultCfgLoad').value) || faultThresholds.load_max_pct);
+    var msgEl = el('faultCfgMsg');
+    try {
+      var d = await apiRequest('/api/robot-arm/fault-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_max_c: tempVal, voltage_min_v: voltVal, load_max_pct: loadVal })
+      });
+      if (d.success) {
+        faultThresholds = { temp_max_c: tempVal, voltage_min_v: voltVal, load_max_pct: loadVal };
+        if (msgEl) { msgEl.textContent = 'Saved'; msgEl.style.color = 'var(--status-success)'; setTimeout(function () { msgEl.textContent = ''; }, 2500); }
+      } else {
+        if (msgEl) { msgEl.textContent = 'Error: ' + (d.error || 'failed'); msgEl.style.color = 'var(--status-danger)'; }
+      }
+    } catch (e) {
+      if (msgEl) { msgEl.textContent = 'Error: ' + e.message; msgEl.style.color = 'var(--status-danger)'; }
+    }
+  }
+
+  function renderFaults(joints) {
+    var t = faultThresholds;
+    var available = (joints || []).filter(function (j) { return j.available; });
+    var anyMoving    = available.some(function (j) { return j.isMoving; });
+    var anyOvertemp  = available.some(function (j) { return j.temperature > t.temp_max_c; });
+    var anyUnderVolt = available.some(function (j) { return j.voltage < t.voltage_min_v; });
+    var anyOverload  = available.some(function (j) { return j.load > t.load_max_pct; });
+    var offline      = available.length === 0;
+
+    function setBadge(id, active, offlineState) {
+      var el2 = el(id);
+      if (!el2) return;
+      el2.className = 'fault-badge ' + (offlineState ? 'offline' : active ? 'fault' : 'ok');
+    }
+    setBadge('faultBadgeMoving',    anyMoving,    offline);
+    setBadge('faultBadgeOverload',  anyOverload,  offline);
+    setBadge('faultBadgeUnderVolt', anyUnderVolt, offline);
+    setBadge('faultBadgeOvertemp',  anyOvertemp,  offline);
+
+    // Per-servo table
+    var tbody = el('faultServoBody');
+    if (!tbody) return;
+    if (!joints || joints.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:1.5rem">No data — arm not connected</td></tr>';
+      return;
+    }
+
+    var rows = joints.map(function (j) {
+      var avail = j.available;
+      var tempHi   = avail && j.temperature > t.temp_max_c;
+      var voltLow  = avail && j.voltage < t.voltage_min_v;
+      var loadHi   = avail && j.load > t.load_max_pct;
+      var hasFault = tempHi || voltLow || loadHi;
+
+      function fval(val, isBad, unit) {
+        if (!avail) return '<span class="fval na">—</span>';
+        var cls = isBad ? 'fval hi' : 'fval ok';
+        return '<span class="' + cls + '">' + val + (unit || '') + '</span>';
+      }
+
+      return '<tr class="' + (hasFault ? 'fault-row' : '') + '">' +
+        '<td><b>J' + j.joint + '</b></td>' +
+        '<td>' + (avail ? '<span style="color:var(--status-success);font-size:0.75rem;font-weight:700">OK</span>' : '<span style="color:var(--status-danger);font-size:0.75rem;font-weight:700">N/A</span>') + '</td>' +
+        '<td>' + (avail ? (j.isMoving ? '<span class="fval warn">YES</span>' : '<span class="fval ok">No</span>') : '<span class="fval na">—</span>') + '</td>' +
+        '<td><span class="fval' + (avail ? '' : ' na') + '">' + (avail ? j.angleDegrees.toFixed(1) : '—') + '</span></td>' +
+        '<td>' + fval(j.temperature + ' °C', tempHi) + '</td>' +
+        '<td>' + fval(j.voltage.toFixed(1) + ' V', voltLow) + '</td>' +
+        '<td>' + fval(j.load.toFixed(1) + '%', loadHi) + '</td>' +
+        '<td>' + (avail ? (j.torqueEnabled ? '<span class="fval ok">ON</span>' : '<span class="fval na">OFF</span>') : '<span class="fval na">—</span>') + '</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = rows.join('');
+  }
+
   // ── tab system ────────────────────────────────────────────────────────────
 
   function initTabs() {
@@ -818,6 +919,9 @@
     if ((b = el('dbgRegBtn')))       b.addEventListener('click', function () { withBtn(b, dbgReadRegister); });
     if ((b = el('dbgClearBtn')))     b.addEventListener('click', dbgClearAll);
 
+    // Faults tab
+    if ((b = el('faultCfgSaveBtn'))) b.addEventListener('click', function () { withBtn(b, saveFaultConfig); });
+
     // Positions tab
     if ((b = el('posRefreshBtn')))   b.addEventListener('click', function () { withBtn(b, loadPositions); });
     POSITIONS.forEach(function (pos) {
@@ -859,6 +963,7 @@
     startPolling();
     startPlcAutoMove();
     loadPositions();
+    loadFaultConfig();
   }
 
   window.addEventListener('beforeunload', function () {

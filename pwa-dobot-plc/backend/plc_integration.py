@@ -60,6 +60,18 @@ def init_plc_worker(
 
     plc_worker.start()
 
+    # On PLC reconnect, re-flush robot arm status so DB125 is not left at zeros
+    def _on_plc_reconnect():
+        try:
+            from app import robot_arm_bridge_state
+            arm_connected = bool(robot_arm_bridge_state.get('connected'))
+            queue_robot_status(connected=arm_connected)
+            logger.info(f"PLC reconnected — re-wrote DB125 connected={arm_connected}")
+        except Exception as _e:
+            logger.warning(f"PLC reconnect status flush failed: {_e}")
+
+    plc_worker.on_plc_reconnect = _on_plc_reconnect
+
     logger.info("PLC worker started")
 
     return plc_worker
@@ -250,6 +262,41 @@ def on_hmi_reset(reset_active: bool):
                 _invalid_target_timer = None
         _write_invalid_target_bit(False)
 
+
+
+def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: bool, any_overtemp: bool,
+                       max_temperature: bool, min_voltage: bool, max_load_pct: bool):
+    """
+    Write all 7 servo fault bits to DB125 byte 8 in a single write.
+
+    All bits share byte 8 (Servos struct):
+      bit 0 — any_moving        bit 4 — max_temperature
+      bit 1 — any_overload      bit 5 — min_voltage
+      bit 2 — any_undervoltage  bit 6 — max_load_pct
+      bit 3 — any_overtemp
+    """
+    if plc_worker is None:
+        return
+    try:
+        fault_byte = bytearray(1)
+        for field_name, value in (
+            ('any_moving',       any_moving),
+            ('any_overload',     any_overload),
+            ('any_undervoltage', any_undervoltage),
+            ('any_overtemp',     any_overtemp),
+            ('max_temperature',  max_temperature),
+            ('min_voltage',      min_voltage),
+            ('max_load_pct',     max_load_pct),
+        ):
+            tag = plc_worker.robot_db_tags.get(field_name)
+            if tag:
+                set_bool(fault_byte, 0, tag['bit'], bool(value))
+        # All 7 bits are in the same byte — one write covers them all
+        tag = plc_worker.robot_db_tags.get('any_moving')
+        if tag:
+            plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], fault_byte, 'servo fault flags')
+    except Exception as e:
+        logger.error(f"Error queueing robot faults: {e}")
 
 
 def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool = False, aluminum: bool = False):

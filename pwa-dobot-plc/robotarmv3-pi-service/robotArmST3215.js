@@ -979,41 +979,68 @@ setTimeout(resolve, 1);
     }
 
     /**
-     * Read a minimal status set (fast path for frequent polling).
-     * Uses ONE bulk read starting at STS_TORQUE_ENABLE so we only hit the bus once.
-     * Extracts:
-     *  - torqueEnabled (STS_TORQUE_ENABLE)
-     *  - position -> angleDegrees (STS_PRESENT_POSITION_L/H)
-     *  - isMoving (STS_MOVING)
+     * Read a full status set in a single bus transaction.
+     * Uses ONE bulk read from STS_TORQUE_ENABLE to STS_MOVING (27 bytes) so we
+     * only hit the half-duplex UART bus once per servo.
      *
-     * @returns {Object} { angleDegrees, position, isMoving, torqueEnabled }
+     * Extracts:
+     *  - torqueEnabled  (STS_TORQUE_ENABLE  addr 40)
+     *  - position/angleDegrees (STS_PRESENT_POSITION_L/H  addr 56-57)
+     *  - speed          (STS_PRESENT_SPEED_L/H  addr 58-59)
+     *  - load           (STS_PRESENT_LOAD_L  addr 60, × 0.1 → %)
+     *  - voltage        (STS_PRESENT_VOLTAGE  addr 62, × 0.1 → V)
+     *  - temperature    (STS_PRESENT_TEMPERATURE  addr 63, °C)
+     *  - isMoving       (STS_MOVING  addr 66)
+     *
+     * @returns {Object} { angleDegrees, position, speed, load, voltage, temperature, isMoving, torqueEnabled }
      */
     async readQuickStatus() {
         try {
-            // Read from STS_TORQUE_ENABLE up to (and including) STS_MOVING in one block.
+            // Single bulk read from STS_TORQUE_ENABLE up to (and including) STS_MOVING.
             const startAddr = STS_TORQUE_ENABLE;
-            const length = (STS_MOVING - STS_TORQUE_ENABLE) + 1; // inclusive range
+            const length = (STS_MOVING - STS_TORQUE_ENABLE) + 1; // 27 bytes
             const data = await this.readData(startAddr, length);
             if (!data || data.length < length) {
                 throw new Error(`Invalid quick status data received (len=${data ? data.length : 0}, expected>=${length})`);
             }
 
-            // Torque enabled at STS_TORQUE_ENABLE
+            // Torque enabled at STS_TORQUE_ENABLE (offset 0)
             const torqueEnabled = data[0] !== 0;
 
-            // Position bytes at STS_PRESENT_POSITION_L/H
-            const posLowIndex = STS_PRESENT_POSITION_L - startAddr;
+            // Position (STS_PRESENT_POSITION_L/H, offsets 16-17)
+            const posLowIndex  = STS_PRESENT_POSITION_L - startAddr;
             const posHighIndex = STS_PRESENT_POSITION_H - startAddr;
             const position = this.makeWord(data[posLowIndex], data[posHighIndex]);
             const angleDegrees = this.stepsToAngle(position);
 
-            // Moving flag at STS_MOVING
+            // Speed (STS_PRESENT_SPEED_L/H, offsets 18-19)
+            const speedLowIndex  = STS_PRESENT_SPEED_L - startAddr;
+            const speedHighIndex = STS_PRESENT_SPEED_H - startAddr;
+            const speed = this.makeWord(data[speedLowIndex], data[speedHighIndex]);
+
+            // Load (STS_PRESENT_LOAD_L, offset 20) — 0-100 raw → %
+            const loadIndex = STS_PRESENT_LOAD_L - startAddr;
+            const load = Math.round(data[loadIndex] * 0.1 * 10) / 10; // one decimal place %
+
+            // Voltage (STS_PRESENT_VOLTAGE, offset 22) — raw × 0.1 = Volts
+            const voltageIndex = STS_PRESENT_VOLTAGE - startAddr;
+            const voltage = Math.round(data[voltageIndex] * 0.1 * 10) / 10;
+
+            // Temperature (STS_PRESENT_TEMPERATURE, offset 23) — °C
+            const tempIndex = STS_PRESENT_TEMPERATURE - startAddr;
+            const temperature = data[tempIndex];
+
+            // Moving flag (STS_MOVING, offset 26)
             const movingIndex = STS_MOVING - startAddr;
             const isMoving = data[movingIndex] !== 0;
 
             return {
                 angleDegrees,
                 position,
+                speed,
+                load,
+                voltage,
+                temperature,
                 isMoving,
                 torqueEnabled
             };

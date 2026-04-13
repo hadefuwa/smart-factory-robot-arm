@@ -184,6 +184,31 @@
     .plc-var-value.bool-true { color: var(--status-success); }
     .plc-var-value.bool-false { color: var(--text-secondary); }
     .plc-var-value.offline { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── Faults tab ── */
+    .fault-summary-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.25rem; }
+    .fault-badge { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 2rem; font-size: 0.8rem; font-weight: 700; border: 1.5px solid transparent; }
+    .fault-badge.ok      { background: var(--status-success-bg); color: var(--status-success); border-color: var(--status-success); }
+    .fault-badge.fault   { background: var(--status-danger-bg);  color: var(--status-danger);  border-color: var(--status-danger); animation: fault-pulse 1s ease-in-out infinite; }
+    .fault-badge.warn    { background: var(--status-warning-bg, #3d2e00); color: var(--status-warning); border-color: var(--status-warning); }
+    .fault-badge.offline { background: var(--bg-card); color: var(--text-muted); border-color: var(--border); }
+    @keyframes fault-pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+    .fault-servo-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .fault-servo-table th { text-align: left; padding: 0.4rem 0.6rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    .fault-servo-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-primary); vertical-align: middle; }
+    .fault-servo-table tr:last-child td { border-bottom: none; }
+    .fault-servo-table tr.fault-row td { background: color-mix(in srgb, var(--status-danger) 8%, transparent); }
+    .fval { font-family: var(--font-mono); font-size: 0.82rem; }
+    .fval.hi  { color: var(--status-danger); font-weight: 700; }
+    .fval.warn { color: var(--status-warning); font-weight: 700; }
+    .fval.ok  { color: var(--status-success); }
+    .fval.na  { color: var(--text-muted); }
+    .fault-config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem; margin-top: 0.5rem; }
+    .fault-config-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.9rem 1rem; }
+    .fault-config-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.4rem; }
+    .fault-config-row { display: flex; align-items: center; gap: 0.5rem; }
+    .fault-config-row input { width: 80px; background: var(--bg-input); border: 1px solid var(--border-input); border-radius: 6px; color: var(--text-primary); padding: 0.3rem 0.5rem; font-size: 0.85rem; text-align: right; }
+    .fault-config-unit { font-size: 0.78rem; color: var(--text-muted); }
   </style>
 </head>
 <body class="dashboard-v2 sf-page-robot-arm">
@@ -260,6 +285,9 @@
           </button>
           <button class="ra-tab" data-tab="positions">
             <i class="material-icons" style="font-size:16px">place</i> Positions
+          </button>
+          <button class="ra-tab" data-tab="faults">
+            <i class="material-icons" style="font-size:16px">warning</i> Faults
           </button>
           <button class="ra-tab" data-tab="debug">
             <i class="material-icons" style="font-size:16px">bug_report</i> Debug
@@ -659,7 +687,89 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- TAB 5 — Debug                                           -->
+        <!-- TAB 5 — Faults                                          -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-faults">
+
+          <!-- Summary badges -->
+          <div class="ra-section">
+            <div class="ra-section-title">Fault Summary</div>
+            <div class="fault-summary-row">
+              <div class="fault-badge offline" id="faultBadgeMoving">
+                <i class="material-icons" style="font-size:15px">swap_horiz</i> Any Moving
+              </div>
+              <div class="fault-badge offline" id="faultBadgeOverload">
+                <i class="material-icons" style="font-size:15px">fitness_center</i> Overload
+              </div>
+              <div class="fault-badge offline" id="faultBadgeUnderVolt">
+                <i class="material-icons" style="font-size:15px">bolt</i> Under-voltage
+              </div>
+              <div class="fault-badge offline" id="faultBadgeOvertemp">
+                <i class="material-icons" style="font-size:15px">thermostat</i> Over-temp
+              </div>
+            </div>
+          </div>
+
+          <!-- Per-servo table -->
+          <div class="ra-section">
+            <div class="ra-section-title">Per-Servo Health</div>
+            <div style="overflow-x:auto">
+              <table class="fault-servo-table" id="faultServoTable">
+                <thead>
+                  <tr>
+                    <th>Joint</th>
+                    <th>Status</th>
+                    <th>Moving</th>
+                    <th>Angle (°)</th>
+                    <th>Temp (°C)</th>
+                    <th>Voltage (V)</th>
+                    <th>Load (%)</th>
+                    <th>Torque</th>
+                  </tr>
+                </thead>
+                <tbody id="faultServoBody">
+                  <tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:1.5rem">Waiting for data…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Fault threshold config -->
+          <div class="ra-section">
+            <div class="ra-section-title">Fault Thresholds</div>
+            <div class="fault-config-grid">
+              <div class="fault-config-card">
+                <div class="fault-config-label"><i class="material-icons" style="font-size:13px;vertical-align:-2px">thermostat</i> Max Temperature</div>
+                <div class="fault-config-row">
+                  <input type="number" id="faultCfgTemp" min="30" max="120" step="1" value="60">
+                  <span class="fault-config-unit">°C</span>
+                </div>
+              </div>
+              <div class="fault-config-card">
+                <div class="fault-config-label"><i class="material-icons" style="font-size:13px;vertical-align:-2px">bolt</i> Min Voltage</div>
+                <div class="fault-config-row">
+                  <input type="number" id="faultCfgVolt" min="4" max="15" step="0.1" value="7.0">
+                  <span class="fault-config-unit">V</span>
+                </div>
+              </div>
+              <div class="fault-config-card">
+                <div class="fault-config-label"><i class="material-icons" style="font-size:13px;vertical-align:-2px">fitness_center</i> Max Load</div>
+                <div class="fault-config-row">
+                  <input type="number" id="faultCfgLoad" min="10" max="100" step="1" value="80">
+                  <span class="fault-config-unit">%</span>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:0.9rem;display:flex;align-items:center;gap:0.8rem">
+              <button class="ra-btn ra-btn-primary ra-btn-sm" id="faultCfgSaveBtn">Save Thresholds</button>
+              <span id="faultCfgMsg" style="font-size:0.8rem;min-height:1em"></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 6 — Debug                                           -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-debug">
           <div class="ctrl-row" style="margin-bottom:1rem">

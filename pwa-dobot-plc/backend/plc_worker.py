@@ -87,26 +87,34 @@ CAMERA_DB_DEFAULTS = {
 }
 
 ROBOT_DB_DEFAULTS = {
-    'connected': {'byte': 0, 'bit': 0, 'kind': 'bool'},
-    'busy': {'byte': 0, 'bit': 1, 'kind': 'bool'},
-    'move_complete': {'byte': 0, 'bit': 2, 'kind': 'bool'},
-    'at_home': {'byte': 0, 'bit': 3, 'kind': 'bool'},
-    'at_pickup_position': {'byte': 0, 'bit': 4, 'kind': 'bool'},
-    'at_pallet_position': {'byte': 0, 'bit': 5, 'kind': 'bool'},
-    'at_quarantine_position': {'byte': 0, 'bit': 6, 'kind': 'bool'},
-    'gripper_active': {'byte': 0, 'bit': 7, 'kind': 'bool'},
-    'cycle_complete': {'byte': 1, 'bit': 0, 'kind': 'bool'},
-    'robot_status_code': {'byte': 2, 'kind': 'int'},
-    'error_code': {'byte': 4, 'kind': 'int'},
-    'x_position': {'byte': 6, 'kind': 'int'},
-    'y_position': {'byte': 8, 'kind': 'int'},
-    'z_position': {'byte': 10, 'kind': 'int'},
-    'home_command': {'byte': 12, 'bit': 0, 'kind': 'bool'},
-    'pickup_command': {'byte': 12, 'bit': 1, 'kind': 'bool'},
-    'speed': {'byte': 14, 'kind': 'int'},
-    'target_x': {'byte': 16, 'kind': 'int'},
-    'target_y': {'byte': 18, 'kind': 'int'},
-    'target_z': {'byte': 20, 'kind': 'int'},
+    'connected':              {'byte': 0,  'bit': 0, 'kind': 'bool'},
+    'busy':                   {'byte': 0,  'bit': 1, 'kind': 'bool'},
+    'move_complete':          {'byte': 0,  'bit': 2, 'kind': 'bool'},
+    'at_home':                {'byte': 0,  'bit': 3, 'kind': 'bool'},
+    'at_pickup_position':     {'byte': 0,  'bit': 4, 'kind': 'bool'},
+    'at_pallet_position':     {'byte': 0,  'bit': 5, 'kind': 'bool'},
+    'at_quarantine_position': {'byte': 0,  'bit': 6, 'kind': 'bool'},
+    'gripper_active':         {'byte': 0,  'bit': 7, 'kind': 'bool'},
+    'cycle_complete':         {'byte': 1,  'bit': 0, 'kind': 'bool'},
+    'robot_status_code':      {'byte': 2,  'kind': 'int'},
+    'error_code':             {'byte': 4,  'kind': 'int'},
+    'invalid_target':         {'byte': 6,  'bit': 0, 'kind': 'bool'},
+    'any_moving':             {'byte': 8,  'bit': 0, 'kind': 'bool'},
+    'any_overload':           {'byte': 8,  'bit': 1, 'kind': 'bool'},
+    'any_undervoltage':       {'byte': 8,  'bit': 2, 'kind': 'bool'},
+    'any_overtemp':           {'byte': 8,  'bit': 3, 'kind': 'bool'},
+    'max_temperature':        {'byte': 8,  'bit': 4, 'kind': 'bool'},
+    'min_voltage':            {'byte': 8,  'bit': 5, 'kind': 'bool'},
+    'max_load_pct':           {'byte': 8,  'bit': 6, 'kind': 'bool'},
+    'x_position':             {'byte': 10, 'kind': 'int'},
+    'y_position':             {'byte': 12, 'kind': 'int'},
+    'z_position':             {'byte': 14, 'kind': 'int'},
+    'home_command':           {'byte': 16, 'bit': 0, 'kind': 'bool'},
+    'pickup_command':         {'byte': 16, 'bit': 1, 'kind': 'bool'},
+    'speed':                  {'byte': 18, 'kind': 'int'},
+    'target_x':               {'byte': 20, 'kind': 'int'},
+    'target_y':               {'byte': 22, 'kind': 'int'},
+    'target_z':               {'byte': 24, 'kind': 'int'},
 }
 
 
@@ -225,6 +233,9 @@ class PLCWorker:
         self.worker_thread: Optional[threading.Thread] = None
         self.running = False
         self.stop_event = threading.Event()
+
+        # Called with no args whenever the PLC reconnects after a dropout
+        self.on_plc_reconnect = None
 
         # Statistics
         self.stats = {
@@ -410,6 +421,13 @@ class PLCWorker:
             'db125_target_x': 0,
             'db125_target_y': 0,
             'db125_target_z': 0,
+            'db125_any_moving': False,
+            'db125_any_overload': False,
+            'db125_any_undervoltage': False,
+            'db125_any_overtemp': False,
+            'db125_max_temperature': False,
+            'db125_min_voltage': False,
+            'db125_max_load_pct': False,
 
             # Objects & Counters (byte 34-47)
             'material_type': 0,
@@ -645,6 +663,7 @@ class PLCWorker:
     def _worker_loop(self):
         """Main worker loop - runs in dedicated thread"""
         logger.info(f"PLC worker loop started (target cycle: {self.cycle_time_ms}ms)")
+        _prev_plc_connected = False
 
         while self.running and not self.stop_event.is_set():
             cycle_start = time.perf_counter()
@@ -652,6 +671,7 @@ class PLCWorker:
             try:
                 # 1. Check/establish connection
                 if not self._connect():
+                    _prev_plc_connected = False
                     with self.cache_lock:
                         self.cache['connected'] = False
                     time.sleep(1.0)  # Wait before retry
@@ -659,6 +679,15 @@ class PLCWorker:
 
                 with self.cache_lock:
                     self.cache['connected'] = True
+
+                # Fire reconnect callback on False→True transition
+                if not _prev_plc_connected:
+                    if callable(self.on_plc_reconnect):
+                        try:
+                            self.on_plc_reconnect()
+                        except Exception as _cb_err:
+                            logger.warning(f"on_plc_reconnect callback error: {_cb_err}")
+                _prev_plc_connected = True
 
                 # 2. BATCH READS - main DB, camera DB, and robot DB
                 try:
@@ -820,6 +849,13 @@ class PLCWorker:
             self.cache['db125_target_x'] = self._robot_int(data, 'target_x')
             self.cache['db125_target_y'] = self._robot_int(data, 'target_y')
             self.cache['db125_target_z'] = self._robot_int(data, 'target_z')
+            self.cache['db125_any_moving'] = self._robot_bit(data, 'any_moving')
+            self.cache['db125_any_overload'] = self._robot_bit(data, 'any_overload')
+            self.cache['db125_any_undervoltage'] = self._robot_bit(data, 'any_undervoltage')
+            self.cache['db125_any_overtemp'] = self._robot_bit(data, 'any_overtemp')
+            self.cache['db125_max_temperature'] = self._robot_bit(data, 'max_temperature')
+            self.cache['db125_min_voltage'] = self._robot_bit(data, 'min_voltage')
+            self.cache['db125_max_load_pct'] = self._robot_bit(data, 'max_load_pct')
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""

@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults
 from dobot_client import DobotClient
 from camera_service import CameraService
 # DISABLED: Digital twin import commented out to reduce CPU usage
@@ -1462,6 +1462,34 @@ def robot_arm_status():
         try:
             response = send_robot_arm_command({'command': 'getStatus'})
             robot_arm_bridge_state['last_status'] = response
+
+            # Compute servo fault aggregates and push to PLC
+            try:
+                cfg = load_config().get('robot_arm_faults', {})
+                temp_max   = float(cfg.get('temp_max_c',    60))
+                volt_min   = float(cfg.get('voltage_min_v', 7.0))
+                load_max   = float(cfg.get('load_max_pct',  80))
+
+                joints = response.get('joints', [])
+                available = [j for j in joints if j.get('available', False)]
+
+                any_moving    = any(j.get('isMoving', False) for j in available)
+                any_overtemp  = any(j.get('temperature', 0) > temp_max for j in available)
+                any_undervolt = any(j.get('voltage', 99) < volt_min for j in available)
+                any_overload  = any(j.get('load', 0) > load_max for j in available)
+
+                queue_robot_faults(
+                    any_moving=any_moving,
+                    any_overload=any_overload,
+                    any_undervoltage=any_undervolt,
+                    any_overtemp=any_overtemp,
+                    max_temperature=any_overtemp,
+                    min_voltage=any_undervolt,
+                    max_load_pct=any_overload,
+                )
+            except Exception as fe:
+                logger.warning(f"Fault aggregation error: {fe}")
+
             return jsonify({
                 'success': True,
                 'connected': True,
@@ -3525,7 +3553,14 @@ def read_robot_db_tags():
         'speed': 0,
         'target_x': 0,
         'target_y': 0,
-        'target_z': 0
+        'target_z': 0,
+        'any_moving': False,
+        'any_overload': False,
+        'any_undervoltage': False,
+        'any_overtemp': False,
+        'max_temperature': False,
+        'min_voltage': False,
+        'max_load_pct': False,
     }
 
     try:
@@ -3556,6 +3591,13 @@ def read_robot_db_tags():
             'target_x': int(cache.get('db125_target_x', 0)),
             'target_y': int(cache.get('db125_target_y', 0)),
             'target_z': int(cache.get('db125_target_z', 0)),
+            'any_moving': bool(cache.get('db125_any_moving', False)),
+            'any_overload': bool(cache.get('db125_any_overload', False)),
+            'any_undervoltage': bool(cache.get('db125_any_undervoltage', False)),
+            'any_overtemp': bool(cache.get('db125_any_overtemp', False)),
+            'max_temperature': bool(cache.get('db125_max_temperature', False)),
+            'min_voltage': bool(cache.get('db125_min_voltage', False)),
+            'max_load_pct': bool(cache.get('db125_max_load_pct', False)),
         }
 
         return jsonify({
@@ -3576,6 +3618,34 @@ def read_robot_db_tags():
             'plc_connected': False,
             'mapping': {}
         }), 500
+
+@app.route('/api/robot-arm/fault-config', methods=['GET'])
+def get_fault_config():
+    """Return current servo fault thresholds."""
+    cfg = load_config().get('robot_arm_faults', {})
+    return jsonify({
+        'success': True,
+        'temp_max_c':    float(cfg.get('temp_max_c',    60)),
+        'voltage_min_v': float(cfg.get('voltage_min_v', 7.0)),
+        'load_max_pct':  float(cfg.get('load_max_pct',  80)),
+    })
+
+
+@app.route('/api/robot-arm/fault-config', methods=['POST'])
+def set_fault_config():
+    """Update servo fault thresholds and persist to config.json."""
+    data = request.get_json(silent=True) or {}
+    try:
+        config = load_config()
+        faults = config.setdefault('robot_arm_faults', {})
+        if 'temp_max_c'    in data: faults['temp_max_c']    = float(data['temp_max_c'])
+        if 'voltage_min_v' in data: faults['voltage_min_v'] = float(data['voltage_min_v'])
+        if 'load_max_pct'  in data: faults['load_max_pct']  = float(data['load_max_pct'])
+        save_config(config)
+        return jsonify({'success': True, 'config': faults})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/plc/positions/read', methods=['GET'])
 def read_robot_positions():
