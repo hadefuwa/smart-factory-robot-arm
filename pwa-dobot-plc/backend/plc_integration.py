@@ -417,8 +417,6 @@ class PLCClientCompatWrapper:
             'connected': cache.get('db125_connected', False),
             'busy': cache.get('db125_busy', False),
             'cycle_complete': cache.get('db125_cycle_complete', False),
-            'status_code': cache.get('db125_robot_status_code', 0),
-            'error_code': cache.get('db125_error_code', 0),
         }
 
     def write_vision_tags(self, tags, *args, **kwargs):
@@ -461,10 +459,7 @@ class PLCClientCompatWrapper:
                 or cache.get('gantry_busy', False)
                 or cache.get('camera_busy', False)
             ),
-            'error': (
-                cache.get('system_active_fault', False)
-                or bool(cache.get('db125_error_code', 0))
-            )
+            'error': cache.get('system_active_fault', False)
         }
 
     def write_control_bit(self, bit_name: str, value: bool) -> bool:

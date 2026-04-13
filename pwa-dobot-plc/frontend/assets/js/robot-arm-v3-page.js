@@ -31,8 +31,6 @@
     { key: 'at_quarantine_position',label: 'At Quarantine',   type: 'bool', group: 'Robot State' },
     { key: 'gripper_active',        label: 'Gripper Active',  type: 'bool', group: 'Robot State' },
     { key: 'cycle_complete',        label: 'Cycle Complete',  type: 'bool', group: 'Robot State' },
-    { key: 'robot_status_code',     label: 'Status Code',     type: 'int',  group: 'Robot State' },
-    { key: 'error_code',            label: 'Error Code',      type: 'int',  group: 'Robot State' },
     { key: 'invalid_target',        label: 'Invalid Target',  type: 'bool', group: 'Robot State' },
     { key: 'any_moving',            label: 'Any Moving',      type: 'bool', group: 'Servo Faults' },
     { key: 'any_overload',          label: 'Any Overload',    type: 'bool', group: 'Servo Faults' },

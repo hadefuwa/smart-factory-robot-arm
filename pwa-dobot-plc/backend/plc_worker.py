@@ -96,25 +96,23 @@ ROBOT_DB_DEFAULTS = {
     'at_quarantine_position': {'byte': 0,  'bit': 6, 'kind': 'bool'},
     'gripper_active':         {'byte': 0,  'bit': 7, 'kind': 'bool'},
     'cycle_complete':         {'byte': 1,  'bit': 0, 'kind': 'bool'},
-    'robot_status_code':      {'byte': 2,  'kind': 'int'},
-    'error_code':             {'byte': 4,  'kind': 'int'},
-    'invalid_target':         {'byte': 6,  'bit': 0, 'kind': 'bool'},
-    'any_moving':             {'byte': 8,  'bit': 0, 'kind': 'bool'},
-    'any_overload':           {'byte': 8,  'bit': 1, 'kind': 'bool'},
-    'any_undervoltage':       {'byte': 8,  'bit': 2, 'kind': 'bool'},
-    'any_overtemp':           {'byte': 8,  'bit': 3, 'kind': 'bool'},
-    'max_temperature':        {'byte': 8,  'bit': 4, 'kind': 'bool'},
-    'min_voltage':            {'byte': 8,  'bit': 5, 'kind': 'bool'},
-    'max_load_pct':           {'byte': 8,  'bit': 6, 'kind': 'bool'},
-    'x_position':             {'byte': 10, 'kind': 'int'},
-    'y_position':             {'byte': 12, 'kind': 'int'},
-    'z_position':             {'byte': 14, 'kind': 'int'},
-    'home_command':           {'byte': 16, 'bit': 0, 'kind': 'bool'},
-    'pickup_command':         {'byte': 16, 'bit': 1, 'kind': 'bool'},
-    'speed':                  {'byte': 18, 'kind': 'int'},
-    'target_x':               {'byte': 20, 'kind': 'int'},
-    'target_y':               {'byte': 22, 'kind': 'int'},
-    'target_z':               {'byte': 24, 'kind': 'int'},
+    'invalid_target':         {'byte': 1,  'bit': 1, 'kind': 'bool'},
+    'any_moving':             {'byte': 2,  'bit': 0, 'kind': 'bool'},
+    'any_overload':           {'byte': 2,  'bit': 1, 'kind': 'bool'},
+    'any_undervoltage':       {'byte': 2,  'bit': 2, 'kind': 'bool'},
+    'any_overtemp':           {'byte': 2,  'bit': 3, 'kind': 'bool'},
+    'max_temperature':        {'byte': 2,  'bit': 4, 'kind': 'bool'},
+    'min_voltage':            {'byte': 2,  'bit': 5, 'kind': 'bool'},
+    'max_load_pct':           {'byte': 2,  'bit': 6, 'kind': 'bool'},
+    'x_position':             {'byte': 4,  'kind': 'int'},
+    'y_position':             {'byte': 6,  'kind': 'int'},
+    'z_position':             {'byte': 8,  'kind': 'int'},
+    'home_command':           {'byte': 10, 'bit': 0, 'kind': 'bool'},
+    'pickup_command':         {'byte': 10, 'bit': 1, 'kind': 'bool'},
+    'speed':                  {'byte': 12, 'kind': 'int'},
+    'target_x':               {'byte': 14, 'kind': 'int'},
+    'target_y':               {'byte': 16, 'kind': 'int'},
+    'target_z':               {'byte': 18, 'kind': 'int'},
 }
 
 
@@ -410,8 +408,6 @@ class PLCWorker:
             'db125_at_quarantine_position': False,
             'db125_gripper_active': False,
             'db125_cycle_complete': False,
-            'db125_robot_status_code': 0,
-            'db125_error_code': 0,
             'db125_invalid_target': False,
             'db125_x_position': 0,
             'db125_y_position': 0,
@@ -661,6 +657,17 @@ class PLCWorker:
             self.connected = False
             return False
 
+    def _drop_client(self):
+        """Force the snap7 client into a clean disconnected state."""
+        self.connected = False
+        try:
+            if self.client is not None:
+                self.client.disconnect()
+        except Exception:
+            pass
+        finally:
+            self.client = None
+
     def _worker_loop(self):
         """Main worker loop - runs in dedicated thread"""
         logger.info(f"PLC worker loop started (target cycle: {self.cycle_time_ms}ms)")
@@ -706,7 +713,10 @@ class PLCWorker:
                     self.stats['read_errors'] += 1
                     # Mark as disconnected so the reconnect callback fires when reads recover
                     _prev_plc_connected = False
-                    self.connected = False
+                    self._drop_client()
+                    with self.cache_lock:
+                        self.cache['connected'] = False
+                    time.sleep(0.5)
                     continue
 
                 # 3. UPDATE CAMERA/ROBOT CONNECTED STATUS
@@ -746,6 +756,10 @@ class PLCWorker:
 
             except Exception as e:
                 logger.error(f"PLC worker loop error: {e}", exc_info=True)
+                _prev_plc_connected = False
+                self._drop_client()
+                with self.cache_lock:
+                    self.cache['connected'] = False
                 time.sleep(0.5)  # Brief delay before retry
 
         logger.info("PLC worker loop exited")
@@ -842,8 +856,6 @@ class PLCWorker:
             self.cache['db125_at_quarantine_position'] = self._robot_bit(data, 'at_quarantine_position')
             self.cache['db125_gripper_active'] = self._robot_bit(data, 'gripper_active')
             self.cache['db125_cycle_complete'] = self._robot_bit(data, 'cycle_complete')
-            self.cache['db125_robot_status_code'] = self._robot_int(data, 'robot_status_code')
-            self.cache['db125_error_code'] = self._robot_int(data, 'error_code')
             self.cache['db125_invalid_target'] = self._robot_bit(data, 'invalid_target')
             self.cache['db125_x_position'] = self._robot_int(data, 'x_position')
             self.cache['db125_y_position'] = self._robot_int(data, 'y_position')
@@ -1018,6 +1030,8 @@ class PLCWorker:
             except Exception as e:
                 logger.error(f"PLC write error DB{write.db}.{write.offset}: {e}")
                 self.stats['write_errors'] += 1
+                self._drop_client()
+                break
 
     def get_stats(self) -> Dict[str, Any]:
         """Get worker statistics"""
