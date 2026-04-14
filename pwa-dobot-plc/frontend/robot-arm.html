@@ -146,6 +146,33 @@
       font-weight: 600;
       margin-left: 2px;
     }
+    .xyz-graph-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+    }
+    .xyz-graph-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 0.75rem;
+    }
+    .xyz-graph-note {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+    #xyzGraphCanvas {
+      width: 100%;
+      height: 280px;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: rgba(10, 20, 40, 0.35);
+      display: block;
+    }
     @media (max-width: 560px) {
       .xyz-readout { grid-template-columns: 1fr; }
     }
@@ -285,6 +312,9 @@
           </button>
           <button class="ra-tab" data-tab="positions">
             <i class="material-icons" style="font-size:16px">place</i> Positions
+          </button>
+          <button class="ra-tab" data-tab="graphs">
+            <i class="material-icons" style="font-size:16px">show_chart</i> Graphs
           </button>
           <button class="ra-tab" data-tab="faults">
             <i class="material-icons" style="font-size:16px">warning</i> Faults
@@ -714,7 +744,25 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- TAB 5 — Faults                                          -->
+        <!-- TAB 5 — Graphs                                          -->
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <div class="ra-panel" id="tab-graphs">
+          <div class="ra-section">
+            <div class="ra-section-title">Live XYZ Graph</div>
+            <div class="xyz-graph-wrap">
+              <div class="xyz-graph-toolbar">
+                <p class="xyz-graph-note">Current X, Y, Z position values over time (mm).</p>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="clearGraphBtn">
+                  <i class="material-icons" style="font-size:14px">delete_sweep</i> Clear Graph
+                </button>
+              </div>
+              <canvas id="xyzGraphCanvas" width="980" height="280"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════ -->
+        <!-- TAB 6 — Faults                                          -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-faults">
 
@@ -796,7 +844,7 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- TAB 6 — Debug                                           -->
+        <!-- TAB 7 — Debug                                           -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-debug">
           <div class="ctrl-row" style="margin-bottom:1rem">

@@ -9,6 +9,15 @@
     bridgeConnected: false
   };
 
+  var xyzGraph = {
+    maxPoints: 60,
+    labels: [],
+    xSeries: [],
+    ySeries: [],
+    zSeries: [],
+    canvas: null
+  };
+
   // PLC auto-move: continuously sends PLC target XYZ to the arm every intervalMs
   var plcAuto = {
     intervalMs: 300,
@@ -350,6 +359,153 @@
     setVal('posCurZ', xyz ? xyz.z : null);
   }
 
+  function initXyzGraphCanvas() {
+    xyzGraph.canvas = el('xyzGraphCanvas');
+    renderXyzGraphCanvas();
+  }
+
+  function addXyzPointToGraph(xyz) {
+    if (!xyz) return;
+    var xVal = Number(xyz.x);
+    var yVal = Number(xyz.y);
+    var zVal = Number(xyz.z);
+    if (!Number.isFinite(xVal) || !Number.isFinite(yVal) || !Number.isFinite(zVal)) return;
+
+    var now = new Date();
+    var label = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+
+    xyzGraph.labels.push(label);
+    xyzGraph.xSeries.push(xVal);
+    xyzGraph.ySeries.push(yVal);
+    xyzGraph.zSeries.push(zVal);
+
+    while (xyzGraph.labels.length > xyzGraph.maxPoints) xyzGraph.labels.shift();
+    while (xyzGraph.xSeries.length > xyzGraph.maxPoints) xyzGraph.xSeries.shift();
+    while (xyzGraph.ySeries.length > xyzGraph.maxPoints) xyzGraph.ySeries.shift();
+    while (xyzGraph.zSeries.length > xyzGraph.maxPoints) xyzGraph.zSeries.shift();
+  }
+
+  function clearXyzGraphData() {
+    xyzGraph.labels = [];
+    xyzGraph.xSeries = [];
+    xyzGraph.ySeries = [];
+    xyzGraph.zSeries = [];
+    renderXyzGraphCanvas();
+  }
+
+  function renderXyzGraphCanvas() {
+    var canvas = xyzGraph.canvas || el('xyzGraphCanvas');
+    if (!canvas) return;
+    xyzGraph.canvas = canvas;
+
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    var width = canvas.width;
+    var height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    // Chart area with margins for labels.
+    var left = 56;
+    var right = width - 16;
+    var top = 16;
+    var bottom = height - 30;
+    var chartWidth = right - left;
+    var chartHeight = bottom - top;
+
+    ctx.fillStyle = 'rgba(5, 12, 28, 0.65)';
+    ctx.fillRect(left, top, chartWidth, chartHeight);
+    ctx.strokeStyle = 'rgba(140, 170, 210, 0.35)';
+    ctx.strokeRect(left, top, chartWidth, chartHeight);
+
+    var allValues = xyzGraph.xSeries.concat(xyzGraph.ySeries, xyzGraph.zSeries);
+    if (!allValues.length) {
+      ctx.fillStyle = '#a8b7d1';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('Waiting for XYZ samples...', left + 14, top + 24);
+      return;
+    }
+
+    var minVal = Math.min.apply(null, allValues);
+    var maxVal = Math.max.apply(null, allValues);
+    if (minVal === maxVal) {
+      minVal = minVal - 1;
+      maxVal = maxVal + 1;
+    }
+
+    function valueToY(v) {
+      var ratio = (v - minVal) / (maxVal - minVal);
+      return bottom - (ratio * chartHeight);
+    }
+
+    function indexToX(index, total) {
+      if (total <= 1) return left;
+      return left + (index * chartWidth / (total - 1));
+    }
+
+    // Y axis labels.
+    ctx.fillStyle = '#c8d5ea';
+    ctx.font = '12px monospace';
+    var yTopLabel = maxVal.toFixed(1) + ' mm';
+    var yMidLabel = ((maxVal + minVal) / 2).toFixed(1) + ' mm';
+    var yBotLabel = minVal.toFixed(1) + ' mm';
+    ctx.fillText(yTopLabel, 6, top + 4);
+    ctx.fillText(yMidLabel, 6, top + chartHeight / 2 + 4);
+    ctx.fillText(yBotLabel, 6, bottom + 4);
+
+    // Guide lines.
+    ctx.strokeStyle = 'rgba(180, 200, 230, 0.2)';
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.moveTo(left, top + chartHeight / 2);
+    ctx.lineTo(right, top + chartHeight / 2);
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+
+    function drawSeries(values, color) {
+      if (!values.length) return;
+      ctx.beginPath();
+      for (var i = 0; i < values.length; i++) {
+        var x = indexToX(i, values.length);
+        var y = valueToY(values[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    drawSeries(xyzGraph.xSeries, '#42a5f5');
+    drawSeries(xyzGraph.ySeries, '#66bb6a');
+    drawSeries(xyzGraph.zSeries, '#ef5350');
+
+    // Simple legend.
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#42a5f5';
+    ctx.fillText('X', right - 86, top + 14);
+    ctx.fillStyle = '#66bb6a';
+    ctx.fillText('Y', right - 64, top + 14);
+    ctx.fillStyle = '#ef5350';
+    ctx.fillText('Z', right - 42, top + 14);
+
+    // Time labels for first and latest point.
+    var firstLabel = xyzGraph.labels[0] || '';
+    var lastLabel = xyzGraph.labels[xyzGraph.labels.length - 1] || '';
+    ctx.fillStyle = '#a8b7d1';
+    ctx.font = '11px monospace';
+    ctx.fillText(firstLabel, left, height - 8);
+    var lastWidth = ctx.measureText(lastLabel).width;
+    ctx.fillText(lastLabel, right - lastWidth, height - 8);
+  }
+
+  function updateXyzGraph(xyz) {
+    addXyzPointToGraph(xyz);
+    renderXyzGraphCanvas();
+  }
+
   // ── PLC auto-move ─────────────────────────────────────────────────────────
 
   function renderPlcTargetXYZ(tags, plcConnected) {
@@ -609,7 +765,9 @@
         setConnected(true, 'Online');
         var joints = (armData.status && armData.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
-        renderCurrentXYZ((armData.status && armData.status.currentXYZ) || null);
+        var currentXYZ = (armData.status && armData.status.currentXYZ) || null;
+        renderCurrentXYZ(currentXYZ);
+        updateXyzGraph(currentXYZ);
         renderFaults(joints);
       } else {
         state.bridgeConnected = false;
@@ -945,6 +1103,7 @@
     // Live status tab
     if ((b = el('copyStatusBtn')))    b.addEventListener('click', copyStatusToClipboard);
     if ((b = el('refreshStatusBtn'))) b.addEventListener('click', pollStatus);
+    if ((b = el('clearGraphBtn'))) b.addEventListener('click', clearXyzGraphData);
 
     // Debug tab
     if ((b = el('dbgEchoBtn')))      b.addEventListener('click', function () { withBtn(b, dbgEcho); });
@@ -999,6 +1158,7 @@
   function init() {
     initTabs();
     bindEvents();
+    initXyzGraphCanvas();
     startPolling();
     startPlcAutoMove();
     loadPositions();
