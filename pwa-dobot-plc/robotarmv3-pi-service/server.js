@@ -590,10 +590,11 @@ async function handleCommand(ws, data) {
             let currentXYZ = null;
             if (robotKinematics.isConfigured()) {
                 try {
-                    // Use all servo angles (unavailable servos default to 0°) so the
-                    // array length always matches getJointCount() regardless of read errors.
-                    const allAngles = statuses.map(s => s.angleDegrees);
-                    if (allAngles.length === robotKinematics.getJointCount()) {
+                    // Slice to URDF joint count — extra servos (e.g. gripper) are not
+                    // modelled as revolute joints. Unavailable servos default to 0°.
+                    const jc = robotKinematics.getJointCount();
+                    const allAngles = statuses.map(s => s.angleDegrees).slice(0, jc);
+                    if (allAngles.length === jc) {
                         const fk = robotKinematics.forwardKinematics(allAngles);
                         if (fk && fk.position) {
                             currentXYZ = {
@@ -1178,10 +1179,11 @@ async function handleCommand(ws, data) {
             let xyzInitialAngles = null;
             try {
                 const xyzStatuses = await getAllServoStatus();
-                // Use all servo angles (unavailable ones default to 0°) so the seed
-                // is always populated and the nearest-solution logic works correctly.
-                const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees);
-                if (xyzCurrentAngles.length === robotKinematics.getJointCount()) {
+                // Slice to URDF joint count — extra servos (e.g. gripper) are not
+                // modelled as revolute joints. Unavailable servos default to 0°.
+                const xyzJc = robotKinematics.getJointCount();
+                const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees).slice(0, xyzJc);
+                if (xyzCurrentAngles.length === xyzJc) {
                     xyzInitialAngles = xyzCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
@@ -1289,10 +1291,11 @@ async function handleCommand(ws, data) {
             let ikInitialAngles = null;
             try {
                 const ikStatuses = await getAllServoStatus();
-                // Use all servo angles (unavailable ones default to 0°) so the seed
-                // is always populated and the nearest-solution logic works correctly.
-                const ikCurrentAngles = ikStatuses.map(s => s.angleDegrees);
-                if (ikCurrentAngles.length === robotKinematics.getJointCount()) {
+                // Slice to URDF joint count — extra servos (e.g. gripper) are not
+                // modelled as revolute joints. Unavailable servos default to 0°.
+                const ikJc = robotKinematics.getJointCount();
+                const ikCurrentAngles = ikStatuses.map(s => s.angleDegrees).slice(0, ikJc);
+                if (ikCurrentAngles.length === ikJc) {
                     ikInitialAngles = ikCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
