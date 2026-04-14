@@ -73,12 +73,13 @@ function positionFromMatrix(T) {
  * @param {Array} T - 4x4 matrix (row-major, upper-left 3x3 = rotation)
  * @returns {{ x: number, y: number, z: number }}
  */
-function toolZAxisFromMatrix(T) {
-    return {
-        x: T[0][0],
-        y: T[1][0],
-        z: T[2][0]
-    };
+function tcpToolAxisFromMatrix(T, localAxis) {
+    const axis = normalizeVector(localAxis || { x: 1, y: 0, z: 0 });
+    return normalizeVector({
+        x: T[0][0] * axis.x + T[0][1] * axis.y + T[0][2] * axis.z,
+        y: T[1][0] * axis.x + T[1][1] * axis.y + T[1][2] * axis.z,
+        z: T[2][0] * axis.x + T[2][1] * axis.y + T[2][2] * axis.z
+    });
 }
 
 /**
@@ -98,6 +99,17 @@ function normalizeVector(v) {
     return { x: x / len, y: y / len, z: z / len };
 }
 
+function dotVectors(a, b) {
+    return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+}
+
+function angleBetweenVectorsDeg(a, b) {
+    const na = normalizeVector(a);
+    const nb = normalizeVector(b);
+    const clampedDot = Math.max(-1, Math.min(1, dotVectors(na, nb)));
+    return (Math.acos(clampedDot) * 180) / Math.PI;
+}
+
 /**
  * Robot Arm Kinematics Class
  * Handles forward and inverse kinematics for a multi-joint robot arm using URDF
@@ -112,6 +124,13 @@ class RobotKinematics {
         this.enableDebugLogging = true;
         // Approximate maximum reach of the robot in mm (computed from URDF)
         this.maxReachMm = null;
+        // TCP configuration: the default TCP comes from the URDF tool joint(s),
+        // and an optional config override can be layered on later.
+        this.tcpConfig = {
+            defaultOffsetMm: { x: 0, y: 0, z: 0 },
+            overrideOffsetMm: null,
+            toolAxisLocal: { x: 1, y: 0, z: 0 }
+        };
     }
 
     /**
@@ -133,6 +152,15 @@ class RobotKinematics {
         this.fixedToolJoints = (this.urdfData.joints || []).filter(
             (j) => j.type === 'fixed' && j.parent === lastRevoluteChild
         );
+        let tcpOffsetMm = { x: 0, y: 0, z: 0 };
+        if (this.fixedToolJoints && this.fixedToolJoints.length > 0) {
+            this.fixedToolJoints.forEach((joint) => {
+                tcpOffsetMm.x += ((joint.origin && joint.origin.x) || 0) * 1000;
+                tcpOffsetMm.y += ((joint.origin && joint.origin.y) || 0) * 1000;
+                tcpOffsetMm.z += ((joint.origin && joint.origin.z) || 0) * 1000;
+            });
+        }
+        this.tcpConfig.defaultOffsetMm = tcpOffsetMm;
         
         console.log(`Kinematics: Loaded URDF with ${this.joints.length} revolute joints`);
         this.joints.forEach(function (j, idx) {
@@ -166,6 +194,43 @@ class RobotKinematics {
         // Add a small safety margin
         this.maxReachMm = totalLengthMm * 1.05;
         console.log('Kinematics: approximate max reach =', this.maxReachMm.toFixed(1), 'mm');
+        console.log('Kinematics: TCP default offset mm =', this.tcpConfig.defaultOffsetMm, 'toolAxisLocal =', this.tcpConfig.toolAxisLocal);
+    }
+
+    setTCPConfiguration(config) {
+        const nextConfig = config || {};
+        if (nextConfig.offsetMm) {
+            this.tcpConfig.overrideOffsetMm = {
+                x: typeof nextConfig.offsetMm.x === 'number' ? nextConfig.offsetMm.x : 0,
+                y: typeof nextConfig.offsetMm.y === 'number' ? nextConfig.offsetMm.y : 0,
+                z: typeof nextConfig.offsetMm.z === 'number' ? nextConfig.offsetMm.z : 0
+            };
+        } else {
+            this.tcpConfig.overrideOffsetMm = null;
+        }
+
+        if (nextConfig.toolAxisLocal) {
+            this.tcpConfig.toolAxisLocal = normalizeVector(nextConfig.toolAxisLocal);
+        }
+    }
+
+    getTCPConfiguration() {
+        return {
+            defaultOffsetMm: this.tcpConfig.defaultOffsetMm,
+            overrideOffsetMm: this.tcpConfig.overrideOffsetMm,
+            toolAxisLocal: this.tcpConfig.toolAxisLocal
+        };
+    }
+
+    getEffectiveJointCount(availableJointCount) {
+        if (typeof availableJointCount !== 'number' || !isFinite(availableJointCount) || availableJointCount <= 0) {
+            return this.joints.length;
+        }
+        return Math.max(1, Math.min(this.joints.length, Math.floor(availableJointCount)));
+    }
+
+    getSolverMode(availableJointCount) {
+        return this.getEffectiveJointCount(availableJointCount) >= 6 ? '6_joint_mode' : '5_joint_mode';
     }
 
     /**
@@ -274,6 +339,21 @@ class RobotKinematics {
             }
         }
 
+        if (this.tcpConfig.overrideOffsetMm) {
+            const overrideMeters = {
+                x: this.tcpConfig.overrideOffsetMm.x / 1000,
+                y: this.tcpConfig.overrideOffsetMm.y / 1000,
+                z: this.tcpConfig.overrideOffsetMm.z / 1000,
+                roll: 0,
+                pitch: 0,
+                yaw: 0
+            };
+            if (this.enableDebugLogging) {
+                console.log('  TCP override offset (mm)=', this.tcpConfig.overrideOffsetMm);
+            }
+            T = multiplyMatrices(T, originToMatrix(overrideMeters));
+        }
+
         // Standard: position in meters is column 3 (rows 0,1,2). Convert to mm.
         const pMeters = positionFromMatrix(T);
         const position = {
@@ -284,7 +364,9 @@ class RobotKinematics {
 
         return {
             position: position,
-            rotation: T
+            rotation: T,
+            tcpDirection: tcpToolAxisFromMatrix(T, this.tcpConfig.toolAxisLocal),
+            tcpConfig: this.getTCPConfiguration()
         };
     }
 
@@ -368,12 +450,25 @@ class RobotKinematics {
      * @param {Array|null} initialAngles - Optional starting guess for joint angles (degrees)
      * @returns {Array|null} Array of joint angles in degrees, or null if it fails to find a solution
      */
-    inverseKinematics(targetPose, initialAngles) {
+    inverseKinematics(targetPose, initialAngles, options) {
         if (!this.isConfigured()) {
             throw new Error('URDF not loaded. Call loadURDF() first.');
         }
 
         const numJoints = this.joints.length;
+        const availableJointCount = options && typeof options.availableJointCount === 'number'
+            ? options.availableJointCount
+            : numJoints;
+        const effectiveJointCount = this.getEffectiveJointCount(availableJointCount);
+        const solverMode = this.getSolverMode(availableJointCount);
+        const tcpConfig = this.getTCPConfiguration();
+        const hasTcpSpinTarget = targetPose && typeof targetPose.tcpSpinAngle === 'number' && isFinite(targetPose.tcpSpinAngle);
+        this.lastInverseKinematicsResult = {
+            success: false,
+            solverMode: solverMode,
+            appliedOrientation: { x: 0, y: 0, z: -1 },
+            tcpConfig: tcpConfig
+        };
 
         // Decide if we also have a desired tool orientation (direction vector)
         let hasOrientationTarget = false;
@@ -381,6 +476,13 @@ class RobotKinematics {
         if (targetPose && targetPose.orientation) {
             desiredToolZ = normalizeVector(targetPose.orientation);
             hasOrientationTarget = true;
+        }
+        this.lastInverseKinematicsResult.appliedOrientation = desiredToolZ;
+
+        if (hasTcpSpinTarget && solverMode !== '6_joint_mode') {
+            this.lastInverseKinematicsResult.failureReason = 'tcp_spin_requires_joint6';
+            this.lastInverseKinematicsResult.message = 'TCP spin angle requested but joint 6 is unavailable';
+            return null;
         }
 
         // Quick reachability check using approximate maximum reach
@@ -390,7 +492,9 @@ class RobotKinematics {
             const tz = targetPose.z || 0;
             const distance = Math.sqrt(tx * tx + ty * ty + tz * tz);
             if (distance > this.maxReachMm + 10) {
-                console.warn('Inverse kinematics: target outside approximate reach. Distance =', distance.toFixed(1), 'mm, maxReach ≈', this.maxReachMm.toFixed(1), 'mm');
+                console.warn('Inverse kinematics: target outside approximate reach. Distance =', distance.toFixed(1), 'mm, maxReach approx', this.maxReachMm.toFixed(1), 'mm');
+                this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
+                this.lastInverseKinematicsResult.message = 'Target outside approximate reach';
                 return null;
             }
         }
@@ -482,7 +586,7 @@ class RobotKinematics {
                 // Where are we now?
                 const fkResult = this.forwardKinematics(angles);
                 const currentPos = fkResult.position; // in mm
-                const currentToolZ = toolZAxisFromMatrix(fkResult.rotation);
+                const currentToolZ = tcpToolAxisFromMatrix(fkResult.rotation, this.tcpConfig.toolAxisLocal);
 
                 // Calculate XYZ error (target - current)
                 const errX = targetPose.x - currentPos.x;
@@ -526,13 +630,13 @@ class RobotKinematics {
                     new Array(numJoints).fill(0)
                 ] : null;
 
-                for (let j = 0; j < numJoints; j++) {
+                for (let j = 0; j < effectiveJointCount; j++) {
                     const originalAngle = angles[j];
                     // Slightly change this one joint
                     angles[j] = originalAngle + finiteDifferenceDeg;
                     const fkPlus = this.forwardKinematics(angles);
                     const posPlus = fkPlus.position;
-                    const toolZPlus = toolZAxisFromMatrix(fkPlus.rotation);
+                    const toolZPlus = tcpToolAxisFromMatrix(fkPlus.rotation, this.tcpConfig.toolAxisLocal);
                     // Restore
                     angles[j] = originalAngle;
 
@@ -555,7 +659,7 @@ class RobotKinematics {
                 // - when we get close, the step can be a bit stronger
                 const stepSize = baseStepSize / (1 + positionErrorLength / 50);
                 // deltaTheta_j = stepSize * (Jpos^T * positionError + orientation term)
-                for (let j = 0; j < numJoints; j++) {
+                for (let j = 0; j < effectiveJointCount; j++) {
                     // Skip the analytically-pinned base yaw — the solver must not
                     // drift it away from atan2(target_y, target_x).
                     if (j === analyticalBaseYawIndex) continue;
@@ -597,6 +701,8 @@ class RobotKinematics {
         for (let i = 0; i < numJoints; i++) {
             if (!isFinite(angles[i])) {
                 console.warn('Inverse kinematics failed: non-finite angle found');
+                this.lastInverseKinematicsResult.failureReason = 'non_finite_solution';
+                this.lastInverseKinematicsResult.message = 'Inverse kinematics produced a non-finite angle';
                 return null;
             }
         }
@@ -609,44 +715,56 @@ class RobotKinematics {
             const dy = p.y - targetPose.y;
             const dz = p.z - targetPose.z;
             const finalError = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const finalToolZ = tcpToolAxisFromMatrix(finalFk.rotation, this.tcpConfig.toolAxisLocal);
+            const orientationErrorDeg = hasOrientationTarget ? angleBetweenVectorsDeg(desiredToolZ, finalToolZ) : 0;
+            const orientationToleranceDeg = solverMode === '6_joint_mode' ? 8.0 : 12.0;
+            this.lastInverseKinematicsResult = {
+                success: true,
+                solverMode: solverMode,
+                angles: angles.slice(),
+                appliedOrientation: desiredToolZ,
+                tcpDirection: finalToolZ,
+                positionErrorMm: finalError,
+                orientationErrorDeg: orientationErrorDeg,
+                tcpConfig: tcpConfig
+            };
             if (finalError > 10.0) {
                 console.warn('Inverse kinematics could not reach target within 10mm. Final error =', finalError.toFixed(2), 'mm');
+                this.lastInverseKinematicsResult.success = false;
+                this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
+                this.lastInverseKinematicsResult.message = 'Inverse kinematics could not reach target within tolerance';
                 return null;
             }
 
-            // If we also had an orientation target, log how close we got.
             if (hasOrientationTarget) {
-                const finalToolZ = toolZAxisFromMatrix(finalFk.rotation);
-                const dZx = desiredToolZ.x - finalToolZ.x;
-                const dZy = desiredToolZ.y - finalToolZ.y;
-                const dZz = desiredToolZ.z - finalToolZ.z;
-                const oriErrorLength = Math.sqrt(dZx * dZx + dZy * dZy + dZz * dZz);
-
-                // Cosine of angle between desired and achieved Z axes
-                const dot =
-                    desiredToolZ.x * finalToolZ.x +
-                    desiredToolZ.y * finalToolZ.y +
-                    desiredToolZ.z * finalToolZ.z;
-                const clampedDot = Math.max(-1, Math.min(1, dot));
-                const angleDeg = (Math.acos(clampedDot) * 180) / Math.PI;
-
                 console.log(
-                    'IK orientation summary: desiredZ=',
+                    'IK orientation summary: desiredTCP=',
                     desiredToolZ,
-                    ' finalZ=',
+                    ' finalTCP=',
                     finalToolZ,
-                    ' |ΔZ|=',
-                    oriErrorLength.toFixed(3),
-                    ' angle error≈',
-                    angleDeg.toFixed(1),
+                    ' angle error~',
+                    orientationErrorDeg.toFixed(1),
                     'deg'
                 );
+                if (orientationErrorDeg > orientationToleranceDeg) {
+                    this.lastInverseKinematicsResult.success = false;
+                    this.lastInverseKinematicsResult.failureReason = 'orientation_constrained_unreachable';
+                    this.lastInverseKinematicsResult.message = 'Target position is reachable, but not while keeping the TCP tool axis pointed down';
+                    return null;
+                }
             }
         } catch (e) {
             console.warn('Inverse kinematics final error check failed:', e);
+            this.lastInverseKinematicsResult.success = false;
+            this.lastInverseKinematicsResult.failureReason = 'final_accuracy_check_failed';
+            this.lastInverseKinematicsResult.message = 'Inverse kinematics final accuracy check failed';
         }
 
         return angles;
+    }
+
+    getLastInverseKinematicsResult() {
+        return this.lastInverseKinematicsResult || null;
     }
 
     /**
@@ -711,7 +829,7 @@ class RobotKinematics {
             try {
                 const fk = this.forwardKinematics(angles);
                 const pos = fk.position;
-                const toolZ = toolZAxisFromMatrix(fk.rotation);
+                const toolZ = tcpToolAxisFromMatrix(fk.rotation, this.tcpConfig.toolAxisLocal);
 
                 const dx = pos.x - targetPose.x;
                 const dy = pos.y - targetPose.y;
@@ -845,7 +963,7 @@ class RobotKinematics {
             try {
                 const fk = this.forwardKinematics(angles);
                 const pos = fk.position;
-                const toolZ = toolZAxisFromMatrix(fk.rotation);
+                const toolZ = tcpToolAxisFromMatrix(fk.rotation, this.tcpConfig.toolAxisLocal);
                 const dx = pos.x - targetPose.x;
                 const dy = pos.y - targetPose.y;
                 const dz = pos.z - targetPose.z;
@@ -964,3 +1082,5 @@ class RobotKinematics {
 const robotKinematics = new RobotKinematics();
 
 if (typeof module !== 'undefined') module.exports = { RobotKinematics };
+
+

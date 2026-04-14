@@ -43,6 +43,9 @@ let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
 let STALL_POLL_MS    = 200;  // how often to sample positions during a move
 let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
 let STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+const DEFAULT_TCP_DOWN_ORIENTATION = { x: 0, y: 0, z: -1 };
+const FIVE_JOINT_ORIENTATION_TOLERANCE_DEG = 12.0;
+const SIX_JOINT_ORIENTATION_TOLERANCE_DEG = 8.0;
 
 // Inverse kinematics — loaded once at startup from the URDF alongside this file
 const robotKinematics = new RobotKinematics();
@@ -50,11 +53,68 @@ try {
     const urdfPath = path.join(__dirname, 'demo-kinematics.urdf');
     const urdfXml = fs.readFileSync(urdfPath, 'utf8');
     robotKinematics.loadURDF(urdfXml);
+    if (process.env.ROBOT_TCP_CONFIG_JSON && typeof robotKinematics.setTCPConfiguration === 'function') {
+        try {
+            robotKinematics.setTCPConfiguration(JSON.parse(process.env.ROBOT_TCP_CONFIG_JSON));
+            console.log('Kinematics: applied TCP override from ROBOT_TCP_CONFIG_JSON');
+        } catch (tcpErr) {
+            console.warn('Kinematics: failed to parse ROBOT_TCP_CONFIG_JSON:', tcpErr.message);
+        }
+    }
     console.log('Kinematics: URDF loaded successfully');
 } catch (err) {
     console.error('Kinematics: Failed to load URDF —', err.message);
 }
 
+
+function normalizeDirection(v) {
+    const x = v && typeof v.x === 'number' ? v.x : 0;
+    const y = v && typeof v.y === 'number' ? v.y : 0;
+    const z = v && typeof v.z === 'number' ? v.z : -1;
+    const len = Math.sqrt(x * x + y * y + z * z);
+    if (len < 1e-6) {
+        return { x: 0, y: 0, z: -1 };
+    }
+    return { x: x / len, y: y / len, z: z / len };
+}
+
+function angleBetweenDeg(a, b) {
+    const na = normalizeDirection(a);
+    const nb = normalizeDirection(b);
+    const dot = Math.max(-1, Math.min(1, (na.x * nb.x) + (na.y * nb.y) + (na.z * nb.z)));
+    return (Math.acos(dot) * 180) / Math.PI;
+}
+
+function getAvailableKinematicJointCount(statuses) {
+    if (!Array.isArray(statuses)) return robotKinematics.getJointCount();
+    return statuses.slice(0, robotKinematics.getJointCount()).filter((s) => s && s.available).length;
+}
+
+function buildIkDiagnostics(targetPose, angles, availableJointCount) {
+    const fk = robotKinematics.forwardKinematics(angles);
+    const appliedOrientation = normalizeDirection(targetPose && targetPose.orientation ? targetPose.orientation : DEFAULT_TCP_DOWN_ORIENTATION);
+    const tcpDirection = fk.tcpDirection || normalizeDirection(DEFAULT_TCP_DOWN_ORIENTATION);
+    const dx = fk.position.x - (targetPose.x || 0);
+    const dy = fk.position.y - (targetPose.y || 0);
+    const dz = fk.position.z - (targetPose.z || 0);
+    const positionErrorMm = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const orientationErrorDeg = angleBetweenDeg(appliedOrientation, tcpDirection);
+    const solverMode = typeof robotKinematics.getSolverMode === 'function'
+        ? robotKinematics.getSolverMode(availableJointCount)
+        : ((availableJointCount >= 6) ? '6_joint_mode' : '5_joint_mode');
+    const orientationToleranceDeg = solverMode === '6_joint_mode'
+        ? SIX_JOINT_ORIENTATION_TOLERANCE_DEG
+        : FIVE_JOINT_ORIENTATION_TOLERANCE_DEG;
+    return {
+        appliedOrientation,
+        tcpDirection,
+        positionErrorMm,
+        orientationErrorDeg,
+        solverMode,
+        orientationToleranceDeg,
+        tcpConfig: fk.tcpConfig || (typeof robotKinematics.getTCPConfiguration === 'function' ? robotKinematics.getTCPConfiguration() : null)
+    };
+}
 
 // In-memory log ring buffer for debug endpoint
 const LOG_RING = [];
@@ -1177,21 +1237,47 @@ async function handleCommand(ws, data) {
             // Seed the IK solver with the robot's current joint angles so it converges
             // to the nearest solution rather than jumping to an opposite configuration.
             let xyzInitialAngles = null;
+            let xyzAvailableJointCount = robotKinematics.getJointCount();
             try {
                 const xyzStatuses = await getAllServoStatus();
-                // Slice to URDF joint count — extra servos (e.g. gripper) are not
-                // modelled as revolute joints. Unavailable servos default to 0°.
                 const xyzJc = robotKinematics.getJointCount();
                 const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees).slice(0, xyzJc);
+                xyzAvailableJointCount = getAvailableKinematicJointCount(xyzStatuses);
                 if (xyzCurrentAngles.length === xyzJc) {
                     xyzInitialAngles = xyzCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
-            const xyzPose = { x: Number(mX), y: Number(mY), z: Number(mZ) };
-            if (mOri) xyzPose.orientation = mOri;
-            const xyzAngles = robotKinematics.inverseKinematics(xyzPose, xyzInitialAngles);
+            const xyzPose = {
+                x: Number(mX),
+                y: Number(mY),
+                z: Number(mZ),
+                orientation: normalizeDirection(mOri || DEFAULT_TCP_DOWN_ORIENTATION)
+            };
+            const xyzAngles = robotKinematics.inverseKinematics(xyzPose, xyzInitialAngles, { availableJointCount: xyzAvailableJointCount });
+            const xyzIkDetails = typeof robotKinematics.getLastInverseKinematicsResult === 'function'
+                ? robotKinematics.getLastInverseKinematicsResult()
+                : (robotKinematics.lastInverseKinematicsResult || null);
             if (!xyzAngles) {
-                ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: position unreachable' }));
+                const failureReason = xyzIkDetails && xyzIkDetails.failureReason;
+                const failureMessage = xyzIkDetails && xyzIkDetails.message
+                    ? xyzIkDetails.message
+                    : 'moveToXYZ: position unreachable';
+                ws.send(JSON.stringify({ type: 'error', message: failureMessage, failureReason: failureReason, solverMode: xyzIkDetails && xyzIkDetails.solverMode, appliedOrientation: xyzPose.orientation }));
+                break;
+            }
+            const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
+            if (xyzDiagnostics.orientationErrorDeg > xyzDiagnostics.orientationToleranceDeg) {
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: 'moveToXYZ: reachable position but not while keeping the TCP pointed down',
+                    failureReason: 'orientation_constrained_unreachable',
+                    solverMode: xyzDiagnostics.solverMode,
+                    appliedOrientation: xyzDiagnostics.appliedOrientation,
+                    tcpDirection: xyzDiagnostics.tcpDirection,
+                    positionErrorMm: xyzDiagnostics.positionErrorMm,
+                    orientationErrorDeg: xyzDiagnostics.orientationErrorDeg,
+                    tcpConfig: xyzDiagnostics.tcpConfig
+                }));
                 break;
             }
             // Send moveToAngle for each available joint (already inside queueCommand context)
@@ -1297,7 +1383,19 @@ async function handleCommand(ws, data) {
                         cause: causeStr
                     }));
                 } else {
-                    ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
+                    ws.send(JSON.stringify({
+                        type: 'moving',
+                        angles: xyzAngles,
+                        x: Number(mX),
+                        y: Number(mY),
+                        z: Number(mZ),
+                        appliedOrientation: xyzDiagnostics.appliedOrientation,
+                        tcpDirection: xyzDiagnostics.tcpDirection,
+                        positionErrorMm: xyzDiagnostics.positionErrorMm,
+                        orientationErrorDeg: xyzDiagnostics.orientationErrorDeg,
+                        solverMode: xyzDiagnostics.solverMode,
+                        tcpConfig: xyzDiagnostics.tcpConfig
+                    }));
                 }
             }
             break;
@@ -1319,23 +1417,60 @@ async function handleCommand(ws, data) {
             // Seed the IK solver with the robot's current joint angles so it finds
             // the nearest solution rather than jumping to an opposite configuration.
             let ikInitialAngles = null;
+            let ikAvailableJointCount = robotKinematics.getJointCount();
             try {
                 const ikStatuses = await getAllServoStatus();
-                // Slice to URDF joint count — extra servos (e.g. gripper) are not
-                // modelled as revolute joints. Unavailable servos default to 0°.
                 const ikJc = robotKinematics.getJointCount();
                 const ikCurrentAngles = ikStatuses.map(s => s.angleDegrees).slice(0, ikJc);
+                ikAvailableJointCount = getAvailableKinematicJointCount(ikStatuses);
                 if (ikCurrentAngles.length === ikJc) {
                     ikInitialAngles = ikCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
-            const targetPose = { x: Number(ikX), y: Number(ikY), z: Number(ikZ) };
-            if (ikOri) targetPose.orientation = ikOri;
-            const angles = robotKinematics.inverseKinematics(targetPose, ikInitialAngles);
+            const targetPose = {
+                x: Number(ikX),
+                y: Number(ikY),
+                z: Number(ikZ),
+                orientation: normalizeDirection(ikOri || DEFAULT_TCP_DOWN_ORIENTATION)
+            };
+            const angles = robotKinematics.inverseKinematics(targetPose, ikInitialAngles, { availableJointCount: ikAvailableJointCount });
+            const ikDetails = typeof robotKinematics.getLastInverseKinematicsResult === 'function'
+                ? robotKinematics.getLastInverseKinematicsResult()
+                : (robotKinematics.lastInverseKinematicsResult || null);
             if (!angles) {
-                ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: position unreachable' }));
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: (ikDetails && ikDetails.message) || 'inverseKinematics: position unreachable',
+                    failureReason: ikDetails && ikDetails.failureReason,
+                    solverMode: ikDetails && ikDetails.solverMode,
+                    appliedOrientation: targetPose.orientation
+                }));
             } else {
-                ws.send(JSON.stringify({ type: 'ikResult', angles }));
+                const ikDiagnostics = buildIkDiagnostics(targetPose, angles, ikAvailableJointCount);
+                if (ikDiagnostics.orientationErrorDeg > ikDiagnostics.orientationToleranceDeg) {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        message: 'inverseKinematics: reachable position but not while keeping the TCP pointed down',
+                        failureReason: 'orientation_constrained_unreachable',
+                        solverMode: ikDiagnostics.solverMode,
+                        appliedOrientation: ikDiagnostics.appliedOrientation,
+                        tcpDirection: ikDiagnostics.tcpDirection,
+                        positionErrorMm: ikDiagnostics.positionErrorMm,
+                        orientationErrorDeg: ikDiagnostics.orientationErrorDeg,
+                        tcpConfig: ikDiagnostics.tcpConfig
+                    }));
+                } else {
+                    ws.send(JSON.stringify({
+                        type: 'ikResult',
+                        angles,
+                        appliedOrientation: ikDiagnostics.appliedOrientation,
+                        tcpDirection: ikDiagnostics.tcpDirection,
+                        positionErrorMm: ikDiagnostics.positionErrorMm,
+                        orientationErrorDeg: ikDiagnostics.orientationErrorDeg,
+                        solverMode: ikDiagnostics.solverMode,
+                        tcpConfig: ikDiagnostics.tcpConfig
+                    }));
+                }
             }
             break;
         }
@@ -1439,4 +1574,9 @@ async function main() {
 
 // Run the main function
 main();
+
+
+
+
+
 

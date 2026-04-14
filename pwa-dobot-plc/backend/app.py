@@ -201,6 +201,7 @@ robot_arm_bridge_state = {
 }
 ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
 ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
+DEFAULT_TCP_DOWN_ORIENTATION = {'x': 0.0, 'y': 0.0, 'z': -1.0}
 
 # ── PLC Auto-Move Background Thread ──────────────────────────────────────────
 # This mirrors the plcAutoTick() JavaScript function in robot-arm-v3-page.js.
@@ -277,6 +278,7 @@ def plc_auto_backend_tick():
             'y': float(y),
             'z': float(z),
             'speed': int(speed),
+            'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
         }
         with robot_arm_bridge_lock:
             ws = robot_arm_bridge_state.get('ws')
@@ -289,6 +291,7 @@ def plc_auto_backend_tick():
                     ik_failed = (
                         response.get('type') == 'ikFailed'
                         or 'unreachable' in str(response).lower()
+                        or str(response.get('failureReason', '') or '') == 'orientation_constrained_unreachable'
                     )
                     try:
                         queue_invalid_target(ik_failed)
@@ -1685,7 +1688,13 @@ def robot_arm_move_xyz():
     if x is None or y is None or z is None:
         return jsonify({'success': False, 'error': 'Missing required fields: x, y, z'}), 400
 
-    payload = {'command': 'moveToXYZ', 'x': float(x), 'y': float(y), 'z': float(z)}
+    payload = {
+        'command': 'moveToXYZ',
+        'x': float(x),
+        'y': float(y),
+        'z': float(z),
+        'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
+    }
     if 'speed' in data:
         payload['speed'] = int(data['speed'])
     if 'orientation' in data:
@@ -1707,7 +1716,12 @@ def robot_arm_move_xyz():
             success = resp_type in ('success', 'ikResult', 'moving')
             # 'stall' is a handled safety event — not an IK failure
             is_stall = resp_type == 'stall'
-            ik_failed = not success and not is_stall and (resp_type == 'ikFailed' or 'unreachable' in str(response).lower())
+            failure_reason = str(response.get('failureReason', '') or '')
+            ik_failed = not success and not is_stall and (
+                resp_type == 'ikFailed'
+                or 'unreachable' in str(response).lower()
+                or failure_reason == 'orientation_constrained_unreachable'
+            )
             try:
                 queue_invalid_target(ik_failed)
             except Exception:
