@@ -1148,6 +1148,71 @@ async function handleCommand(ws, data) {
                 }
             }
             ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
+
+            // Stall monitor — poll until all joints reach target, a stall is detected, or timeout.
+            // Keeps the command queue locked during the move so no new moves overlap.
+            {
+                const STALL_TIMEOUT_MS = 8000; // max time to wait for movement to complete
+                const POLL_MS          = 200;  // how often to sample servo positions
+                const POS_TOLERANCE    = 20;   // steps (~1.75°) — close enough counts as "at target"
+                const STUCK_DELTA      = 5;    // steps — movement below this per poll = "not progressing"
+                const STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+
+                // Pre-compute target positions in steps (same formula as angleToSteps)
+                const targetSteps = xyzAngles.map(a =>
+                    Math.round(2048 + Math.max(-180, Math.min(180, a)) * (2048 / 180))
+                );
+
+                let stalledConsec = 0;
+                let prevPositions = null;
+                const deadline = Date.now() + STALL_TIMEOUT_MS;
+
+                await new Promise(r => setTimeout(r, 250)); // let servos start moving before first poll
+
+                while (Date.now() < deadline) {
+                    let statuses;
+                    try { statuses = await getAllServoStatus(); } catch (e) { break; }
+
+                    const positions = statuses.map(s => s.position);
+
+                    // Check if all active servos have reached their target positions
+                    const allDone = xyzAngles.every((_, ji) => {
+                        if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return true;
+                        return Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE;
+                    });
+                    if (allDone) break;
+
+                    // Stall check: any servo not yet at target but barely moving?
+                    if (prevPositions) {
+                        const anyStuck = xyzAngles.some((_, ji) => {
+                            if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return false;
+                            if (Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE) return false;
+                            return Math.abs(positions[ji] - prevPositions[ji]) < STUCK_DELTA;
+                        });
+
+                        if (anyStuck) {
+                            stalledConsec++;
+                            if (stalledConsec >= STALL_POLLS) {
+                                // Stall confirmed — disable torque on all servos immediately
+                                for (const sv of servos) {
+                                    if (sv) try { await sv.stopServo(); } catch (_) {}
+                                }
+                                console.warn('Stall detected — torque disabled on all servos');
+                                ws.send(JSON.stringify({
+                                    type: 'stall',
+                                    message: 'Stall detected — servos stopped to prevent damage'
+                                }));
+                                break;
+                            }
+                        } else {
+                            stalledConsec = 0;
+                        }
+                    }
+
+                    prevPositions = positions;
+                    await new Promise(r => setTimeout(r, POLL_MS));
+                }
+            }
             break;
         }
 
