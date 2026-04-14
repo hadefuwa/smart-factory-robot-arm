@@ -240,7 +240,9 @@ def plc_auto_backend_tick():
         return
 
     # Only act when the PLC is reachable.
-    if not cache.get('plc_connected', False):
+    # The raw cache uses the key 'connected', not 'plc_connected' (that name
+    # only appears in the HTTP response built by /api/plc/db125/read).
+    if not cache.get('connected', False):
         return
 
     # Only act when the robot arm bridge is connected.
