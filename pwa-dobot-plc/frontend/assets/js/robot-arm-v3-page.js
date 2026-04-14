@@ -404,6 +404,7 @@
     xyzGraph.xSeries = [];
     xyzGraph.ySeries = [];
     xyzGraph.zSeries = [];
+    setGraphXyzReadout(null);
     renderXyzGraphCanvas();
   }
 
@@ -415,6 +416,7 @@
     jointGraph.joint4 = [];
     jointGraph.joint5 = [];
     jointGraph.joint6 = [];
+    setGraphJointReadout(null);
     renderJointGraphCanvas();
   }
 
@@ -564,7 +566,27 @@
 
   function updateXyzGraph(xyz) {
     addXyzPointToGraph(xyz);
+    setGraphXyzReadout(xyz);
     renderXyzGraphCanvas();
+  }
+
+  function setGraphXyzReadout(xyz) {
+    function setValue(id, value, unit) {
+      var node = el(id);
+      if (!node) return;
+      if (!Number.isFinite(value)) {
+        node.textContent = '— ' + unit;
+        return;
+      }
+      node.textContent = value.toFixed(1) + ' ' + unit;
+    }
+
+    var xVal = xyz ? Number(xyz.x) : NaN;
+    var yVal = xyz ? Number(xyz.y) : NaN;
+    var zVal = xyz ? Number(xyz.z) : NaN;
+    setValue('graphXValue', xVal, 'mm');
+    setValue('graphYValue', yVal, 'mm');
+    setValue('graphZValue', zVal, 'mm');
   }
 
   function addJointPointToGraph(joints) {
@@ -736,7 +758,34 @@
 
   function updateJointGraph(joints) {
     addJointPointToGraph(joints);
+    setGraphJointReadout(joints);
     renderJointGraphCanvas();
+  }
+
+  function setGraphJointReadout(joints) {
+    var byJoint = {};
+    (joints || []).forEach(function (joint) {
+      byJoint[joint.joint] = joint;
+    });
+
+    function setJointValue(id, jointNumber) {
+      var node = el(id);
+      if (!node) return;
+      var jointData = byJoint[jointNumber];
+      var angle = jointData ? Number(jointData.angleDegrees) : NaN;
+      if (!Number.isFinite(angle)) {
+        node.textContent = '— deg';
+        return;
+      }
+      node.textContent = angle.toFixed(1) + ' deg';
+    }
+
+    setJointValue('graphJ1Value', 1);
+    setJointValue('graphJ2Value', 2);
+    setJointValue('graphJ3Value', 3);
+    setJointValue('graphJ4Value', 4);
+    setJointValue('graphJ5Value', 5);
+    setJointValue('graphJ6Value', 6);
   }
 
   // ── PLC auto-move ─────────────────────────────────────────────────────────
@@ -1007,12 +1056,16 @@
         state.bridgeConnected = false;
         setConnected(false, 'Offline');
         renderCurrentXYZ(null);
+        setGraphXyzReadout(null);
+        setGraphJointReadout(null);
         renderFaults([]);
       }
     } else {
       state.bridgeConnected = false;
       setConnected(false, 'Error');
       renderCurrentXYZ(null);
+      setGraphXyzReadout(null);
+      setGraphJointReadout(null);
       renderFaults(null);
     }
 

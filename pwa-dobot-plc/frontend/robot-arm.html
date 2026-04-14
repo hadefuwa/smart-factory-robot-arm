@@ -165,7 +165,35 @@
       color: var(--text-secondary);
       margin: 0;
     }
-    #xyzGraphCanvas {
+    .graph-readout-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.55rem;
+      margin-bottom: 0.75rem;
+    }
+    .graph-readout-item {
+      background: rgba(10, 20, 40, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 0.55rem;
+      padding: 0.45rem 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .graph-readout-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+    .graph-readout-value {
+      font-size: 0.9rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-white);
+    }
+    #xyzGraphCanvas,
+    #jointGraphCanvas {
       width: 100%;
       height: 280px;
       border: 1px solid var(--border);
@@ -761,6 +789,11 @@
                   </button>
                 </div>
               </div>
+              <div class="graph-readout-grid">
+                <div class="graph-readout-item"><span class="graph-readout-label">X</span><span class="graph-readout-value" id="graphXValue">— mm</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">Y</span><span class="graph-readout-value" id="graphYValue">— mm</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">Z</span><span class="graph-readout-value" id="graphZValue">— mm</span></div>
+              </div>
               <canvas id="xyzGraphCanvas" width="980" height="280"></canvas>
             </div>
           </div>
@@ -768,6 +801,14 @@
             <div class="ra-section-title">Live Joint Angles Graph</div>
             <div class="xyz-graph-wrap">
               <p class="xyz-graph-note" style="margin-bottom:0.75rem">Joint angles J1 to J6 over time (degrees).</p>
+              <div class="graph-readout-grid">
+                <div class="graph-readout-item"><span class="graph-readout-label">J1</span><span class="graph-readout-value" id="graphJ1Value">— deg</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">J2</span><span class="graph-readout-value" id="graphJ2Value">— deg</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">J3</span><span class="graph-readout-value" id="graphJ3Value">— deg</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">J4</span><span class="graph-readout-value" id="graphJ4Value">— deg</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">J5</span><span class="graph-readout-value" id="graphJ5Value">— deg</span></div>
+                <div class="graph-readout-item"><span class="graph-readout-label">J6</span><span class="graph-readout-value" id="graphJ6Value">— deg</span></div>
+              </div>
               <canvas id="jointGraphCanvas" width="980" height="300"></canvas>
             </div>
           </div>
