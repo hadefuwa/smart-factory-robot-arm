@@ -752,11 +752,23 @@
             <div class="xyz-graph-wrap">
               <div class="xyz-graph-toolbar">
                 <p class="xyz-graph-note">Current X, Y, Z position values over time (mm).</p>
-                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="clearGraphBtn">
-                  <i class="material-icons" style="font-size:14px">delete_sweep</i> Clear Graph
-                </button>
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                  <button class="ra-btn ra-btn-ghost ra-btn-sm" id="exportGraphCsvBtn">
+                    <i class="material-icons" style="font-size:14px">download</i> Export CSV
+                  </button>
+                  <button class="ra-btn ra-btn-ghost ra-btn-sm" id="clearGraphBtn">
+                    <i class="material-icons" style="font-size:14px">delete_sweep</i> Clear Graph
+                  </button>
+                </div>
               </div>
               <canvas id="xyzGraphCanvas" width="980" height="280"></canvas>
+            </div>
+          </div>
+          <div class="ra-section">
+            <div class="ra-section-title">Live Joint Angles Graph</div>
+            <div class="xyz-graph-wrap">
+              <p class="xyz-graph-note" style="margin-bottom:0.75rem">Joint angles J1 to J6 over time (degrees).</p>
+              <canvas id="jointGraphCanvas" width="980" height="300"></canvas>
             </div>
           </div>
         </div>

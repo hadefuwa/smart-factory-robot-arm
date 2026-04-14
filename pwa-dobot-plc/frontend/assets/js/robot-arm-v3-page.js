@@ -18,6 +18,18 @@
     canvas: null
   };
 
+  var jointGraph = {
+    maxPoints: 60,
+    labels: [],
+    joint1: [],
+    joint2: [],
+    joint3: [],
+    joint4: [],
+    joint5: [],
+    joint6: [],
+    canvas: null
+  };
+
   // PLC auto-move: continuously sends PLC target XYZ to the arm every intervalMs
   var plcAuto = {
     intervalMs: 300,
@@ -362,6 +374,8 @@
   function initXyzGraphCanvas() {
     xyzGraph.canvas = el('xyzGraphCanvas');
     renderXyzGraphCanvas();
+    jointGraph.canvas = el('jointGraphCanvas');
+    renderJointGraphCanvas();
   }
 
   function addXyzPointToGraph(xyz) {
@@ -391,6 +405,53 @@
     xyzGraph.ySeries = [];
     xyzGraph.zSeries = [];
     renderXyzGraphCanvas();
+  }
+
+  function clearJointGraphData() {
+    jointGraph.labels = [];
+    jointGraph.joint1 = [];
+    jointGraph.joint2 = [];
+    jointGraph.joint3 = [];
+    jointGraph.joint4 = [];
+    jointGraph.joint5 = [];
+    jointGraph.joint6 = [];
+    renderJointGraphCanvas();
+  }
+
+  function clearAllGraphData() {
+    clearXyzGraphData();
+    clearJointGraphData();
+  }
+
+  function exportXyzGraphCsv() {
+    if (!xyzGraph.labels.length) {
+      showMsg('No graph data to export', true);
+      return;
+    }
+
+    var rows = ['time,x_mm,y_mm,z_mm'];
+    for (var i = 0; i < xyzGraph.labels.length; i++) {
+      var row = [
+        xyzGraph.labels[i],
+        xyzGraph.xSeries[i],
+        xyzGraph.ySeries[i],
+        xyzGraph.zSeries[i]
+      ];
+      rows.push(row.join(','));
+    }
+
+    var csvText = rows.join('\n');
+    var csvBlob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    var csvUrl = URL.createObjectURL(csvBlob);
+    var link = document.createElement('a');
+    link.href = csvUrl;
+    link.download = 'robot-arm-xyz-graph.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(csvUrl);
+
+    showMsg('CSV exported (' + xyzGraph.labels.length + ' points)');
   }
 
   function renderXyzGraphCanvas() {
@@ -504,6 +565,178 @@
   function updateXyzGraph(xyz) {
     addXyzPointToGraph(xyz);
     renderXyzGraphCanvas();
+  }
+
+  function addJointPointToGraph(joints) {
+    if (!joints || !joints.length) return;
+
+    var byJoint = {};
+    joints.forEach(function (j) {
+      byJoint[j.joint] = j;
+    });
+
+    var now = new Date();
+    var label = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+    jointGraph.labels.push(label);
+
+    function pushJointValue(jointNumber, seriesKey) {
+      var jointData = byJoint[jointNumber];
+      var angle = jointData ? Number(jointData.angleDegrees) : NaN;
+      jointGraph[seriesKey].push(Number.isFinite(angle) ? angle : NaN);
+    }
+
+    pushJointValue(1, 'joint1');
+    pushJointValue(2, 'joint2');
+    pushJointValue(3, 'joint3');
+    pushJointValue(4, 'joint4');
+    pushJointValue(5, 'joint5');
+    pushJointValue(6, 'joint6');
+
+    while (jointGraph.labels.length > jointGraph.maxPoints) jointGraph.labels.shift();
+    while (jointGraph.joint1.length > jointGraph.maxPoints) jointGraph.joint1.shift();
+    while (jointGraph.joint2.length > jointGraph.maxPoints) jointGraph.joint2.shift();
+    while (jointGraph.joint3.length > jointGraph.maxPoints) jointGraph.joint3.shift();
+    while (jointGraph.joint4.length > jointGraph.maxPoints) jointGraph.joint4.shift();
+    while (jointGraph.joint5.length > jointGraph.maxPoints) jointGraph.joint5.shift();
+    while (jointGraph.joint6.length > jointGraph.maxPoints) jointGraph.joint6.shift();
+  }
+
+  function renderJointGraphCanvas() {
+    var canvas = jointGraph.canvas || el('jointGraphCanvas');
+    if (!canvas) return;
+    jointGraph.canvas = canvas;
+
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    var width = canvas.width;
+    var height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    var left = 56;
+    var right = width - 16;
+    var top = 16;
+    var bottom = height - 30;
+    var chartWidth = right - left;
+    var chartHeight = bottom - top;
+
+    ctx.fillStyle = 'rgba(5, 12, 28, 0.65)';
+    ctx.fillRect(left, top, chartWidth, chartHeight);
+    ctx.strokeStyle = 'rgba(140, 170, 210, 0.35)';
+    ctx.strokeRect(left, top, chartWidth, chartHeight);
+
+    var allSeries = [
+      jointGraph.joint1, jointGraph.joint2, jointGraph.joint3,
+      jointGraph.joint4, jointGraph.joint5, jointGraph.joint6
+    ];
+    var allValues = [];
+    allSeries.forEach(function (series) {
+      series.forEach(function (val) {
+        if (Number.isFinite(val)) allValues.push(val);
+      });
+    });
+
+    if (!allValues.length) {
+      ctx.fillStyle = '#a8b7d1';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('Waiting for joint samples...', left + 14, top + 24);
+      return;
+    }
+
+    var minVal = Math.min.apply(null, allValues);
+    var maxVal = Math.max.apply(null, allValues);
+    if (minVal === maxVal) {
+      minVal = minVal - 1;
+      maxVal = maxVal + 1;
+    }
+
+    function valueToY(v) {
+      var ratio = (v - minVal) / (maxVal - minVal);
+      return bottom - (ratio * chartHeight);
+    }
+
+    function indexToX(index, total) {
+      if (total <= 1) return left;
+      return left + (index * chartWidth / (total - 1));
+    }
+
+    ctx.fillStyle = '#c8d5ea';
+    ctx.font = '12px monospace';
+    ctx.fillText(maxVal.toFixed(1) + ' deg', 6, top + 4);
+    ctx.fillText(((maxVal + minVal) / 2).toFixed(1) + ' deg', 6, top + chartHeight / 2 + 4);
+    ctx.fillText(minVal.toFixed(1) + ' deg', 6, bottom + 4);
+
+    ctx.strokeStyle = 'rgba(180, 200, 230, 0.2)';
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.moveTo(left, top + chartHeight / 2);
+    ctx.lineTo(right, top + chartHeight / 2);
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+
+    function drawSeries(values, color) {
+      if (!values.length) return;
+      ctx.beginPath();
+      var started = false;
+      for (var i = 0; i < values.length; i++) {
+        var value = values[i];
+        if (!Number.isFinite(value)) {
+          started = false;
+          continue;
+        }
+        var x = indexToX(i, values.length);
+        var y = valueToY(value);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+
+    drawSeries(jointGraph.joint1, '#42a5f5');
+    drawSeries(jointGraph.joint2, '#66bb6a');
+    drawSeries(jointGraph.joint3, '#ef5350');
+    drawSeries(jointGraph.joint4, '#ffca28');
+    drawSeries(jointGraph.joint5, '#ab47bc');
+    drawSeries(jointGraph.joint6, '#26c6da');
+
+    ctx.font = '11px sans-serif';
+    var legend = [
+      { label: 'J1', color: '#42a5f5' },
+      { label: 'J2', color: '#66bb6a' },
+      { label: 'J3', color: '#ef5350' },
+      { label: 'J4', color: '#ffca28' },
+      { label: 'J5', color: '#ab47bc' },
+      { label: 'J6', color: '#26c6da' }
+    ];
+    var legendX = right - 168;
+    var legendY = top + 12;
+    legend.forEach(function (item, index) {
+      var col = index % 3;
+      var row = Math.floor(index / 3);
+      ctx.fillStyle = item.color;
+      ctx.fillText(item.label, legendX + (col * 56), legendY + (row * 14));
+    });
+
+    var firstLabel = jointGraph.labels[0] || '';
+    var lastLabel = jointGraph.labels[jointGraph.labels.length - 1] || '';
+    ctx.fillStyle = '#a8b7d1';
+    ctx.font = '11px monospace';
+    ctx.fillText(firstLabel, left, height - 8);
+    var lastWidth = ctx.measureText(lastLabel).width;
+    ctx.fillText(lastLabel, right - lastWidth, height - 8);
+  }
+
+  function updateJointGraph(joints) {
+    addJointPointToGraph(joints);
+    renderJointGraphCanvas();
   }
 
   // ── PLC auto-move ─────────────────────────────────────────────────────────
@@ -765,6 +998,7 @@
         setConnected(true, 'Online');
         var joints = (armData.status && armData.status.joints) || [];
         if (joints.length) renderJointGrid(joints);
+        updateJointGraph(joints);
         var currentXYZ = (armData.status && armData.status.currentXYZ) || null;
         renderCurrentXYZ(currentXYZ);
         updateXyzGraph(currentXYZ);
@@ -1103,7 +1337,8 @@
     // Live status tab
     if ((b = el('copyStatusBtn')))    b.addEventListener('click', copyStatusToClipboard);
     if ((b = el('refreshStatusBtn'))) b.addEventListener('click', pollStatus);
-    if ((b = el('clearGraphBtn'))) b.addEventListener('click', clearXyzGraphData);
+    if ((b = el('clearGraphBtn'))) b.addEventListener('click', clearAllGraphData);
+    if ((b = el('exportGraphCsvBtn'))) b.addEventListener('click', exportXyzGraphCsv);
 
     // Debug tab
     if ((b = el('dbgEchoBtn')))      b.addEventListener('click', function () { withBtn(b, dbgEcho); });
