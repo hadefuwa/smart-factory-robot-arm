@@ -1123,9 +1123,19 @@ async function handleCommand(ws, data) {
                 ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: URDF not loaded' }));
                 break;
             }
+            // Seed the IK solver with the robot's current joint angles so it converges
+            // to the nearest solution rather than jumping to an opposite configuration.
+            let xyzInitialAngles = null;
+            try {
+                const xyzStatuses = await getAllServoStatus();
+                const xyzCurrentAngles = xyzStatuses.filter(s => s.available).map(s => s.angleDegrees);
+                if (xyzCurrentAngles.length === robotKinematics.getJointCount()) {
+                    xyzInitialAngles = xyzCurrentAngles;
+                }
+            } catch (e) { /* fall back to null seed */ }
             const xyzPose = { x: Number(mX), y: Number(mY), z: Number(mZ) };
             if (mOri) xyzPose.orientation = mOri;
-            const xyzAngles = robotKinematics.inverseKinematics(xyzPose, null);
+            const xyzAngles = robotKinematics.inverseKinematics(xyzPose, xyzInitialAngles);
             if (!xyzAngles) {
                 ws.send(JSON.stringify({ type: 'error', message: 'moveToXYZ: position unreachable' }));
                 break;
@@ -1154,9 +1164,19 @@ async function handleCommand(ws, data) {
                 ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: URDF not loaded' }));
                 break;
             }
+            // Seed the IK solver with the robot's current joint angles so it finds
+            // the nearest solution rather than jumping to an opposite configuration.
+            let ikInitialAngles = null;
+            try {
+                const ikStatuses = await getAllServoStatus();
+                const ikCurrentAngles = ikStatuses.filter(s => s.available).map(s => s.angleDegrees);
+                if (ikCurrentAngles.length === robotKinematics.getJointCount()) {
+                    ikInitialAngles = ikCurrentAngles;
+                }
+            } catch (e) { /* fall back to null seed */ }
             const targetPose = { x: Number(ikX), y: Number(ikY), z: Number(ikZ) };
             if (ikOri) targetPose.orientation = ikOri;
-            const angles = robotKinematics.inverseKinematics(targetPose, null);
+            const angles = robotKinematics.inverseKinematics(targetPose, ikInitialAngles);
             if (!angles) {
                 ws.send(JSON.stringify({ type: 'error', message: 'inverseKinematics: position unreachable' }));
             } else {

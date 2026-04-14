@@ -967,6 +967,12 @@ def init_clients():
             db125_config=get_robot_db_config(config)
         )
         plc_worker.robot_connected_provider = lambda: bool(robot_arm_bridge_state.get('connected'))
+        # Try to establish robot-arm bridge at startup so DB125.DBX0.0
+        # can reflect real bridge connectivity even before UI polling starts.
+        try:
+            ensure_robot_arm_bridge_connected()
+        except Exception as bridge_err:
+            logger.warning(f"Robot arm bridge startup connect failed: {bridge_err}")
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
         logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
