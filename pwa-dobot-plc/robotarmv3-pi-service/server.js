@@ -33,6 +33,11 @@ let DEBUG = false;
 // Simple performance logging flag (set to true to see timing info)
 const PERF_DEBUG = false;
 
+// Hardware torque limit applied to every servo at startup.
+// Caps the maximum motor force so a blocked joint cannot draw full current.
+// Range 0-100 (%). 50 = half power. Can be changed at runtime via setTorqueLimit command.
+let TORQUE_LIMIT_PERCENT = 50;
+
 // Inverse kinematics — loaded once at startup from the URDF alongside this file
 const robotKinematics = new RobotKinematics();
 try {
@@ -297,7 +302,11 @@ async function initializeServos() {
             
             // Small delay after ping
             await new Promise(resolve => setTimeout(resolve, 50));
-            
+
+            // Apply hardware torque limit — caps max current draw even when blocked
+            await servo.setTorqueLimit(TORQUE_LIMIT_PERCENT);
+            console.log(`✓ Servo ${i + 1}: torque limit set to ${TORQUE_LIMIT_PERCENT}%`);
+
             // NOTE: torque is NOT enabled at init - avoids power-sag when multiple
             // servos hold position simultaneously.  Torque is enabled on first move.
             servos.push(servo);
@@ -837,7 +846,30 @@ async function handleCommand(ws, data) {
                 }));
             }
             break;
-            
+
+        case 'setTorqueLimit': {
+            // Set hardware torque limit on all servos (0-100%).
+            // Body: { command: "setTorqueLimit", percent: 50 }
+            const tlPercent = Number(data.percent);
+            if (isNaN(tlPercent) || tlPercent < 0 || tlPercent > 100) {
+                ws.send(JSON.stringify({ type: 'error', message: 'setTorqueLimit: percent must be 0-100' }));
+                break;
+            }
+            try {
+                for (let i = 0; i < servos.length; i++) {
+                    if (servos[i] !== null) {
+                        await servos[i].setTorqueLimit(tlPercent);
+                    }
+                }
+                TORQUE_LIMIT_PERCENT = tlPercent;
+                console.log(`Torque limit updated to ${tlPercent}% on all servos`);
+                ws.send(JSON.stringify({ type: 'success', message: `Torque limit set to ${tlPercent}%` }));
+            } catch (error) {
+                ws.send(JSON.stringify({ type: 'error', message: `setTorqueLimit failed: ${error.message}` }));
+            }
+            break;
+        }
+
         case 'setAcceleration':
             // Set servo acceleration
             const accJointNumber = data.joint - 1;

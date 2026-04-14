@@ -45,6 +45,8 @@ const STS_GOAL_POSITION_L = 42;
 const STS_GOAL_POSITION_H = 43;
 const STS_GOAL_SPEED_L = 46;
 const STS_GOAL_SPEED_H = 47;
+const STS_TORQUE_LIMIT_L = 48; // RAM torque limit low byte  (0-1000, 1000 = 100%)
+const STS_TORQUE_LIMIT_H = 49; // RAM torque limit high byte
 const STS_PRESENT_POSITION_L = 56;
 const STS_PRESENT_POSITION_H = 57;
 const STS_PRESENT_SPEED_L = 58;
@@ -681,6 +683,28 @@ setTimeout(resolve, 1);
             return true;
         } catch (error) {
             console.error(`Servo ${this.servoId}: Failed to disable torque:`, error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Set the RAM torque limit — caps maximum motor force in hardware.
+     * The servo cannot exceed this regardless of goal position or speed.
+     *
+     * @param {number} percent - Limit as a percentage of max torque (0–100)
+     * @returns {boolean} True if successful
+     */
+    async setTorqueLimit(percent) {
+        try {
+            const raw = Math.round(Math.max(0, Math.min(100, percent)) * 10); // 0-100% → 0-1000
+            await this.writeData(STS_TORQUE_LIMIT_L, [
+                this.stsLobyte(raw),
+                this.stsHibyte(raw)
+            ]);
+            if (DEBUG) console.log(`Servo ${this.servoId}: Torque limit set to ${percent}% (raw ${raw})`);
+            return true;
+        } catch (error) {
+            console.error(`Servo ${this.servoId}: Failed to set torque limit:`, error.message);
             return false;
         }
     }
