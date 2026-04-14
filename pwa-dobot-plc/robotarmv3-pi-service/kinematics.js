@@ -413,6 +413,43 @@ class RobotKinematics {
             }
         }
 
+        // --- Analytical base-yaw pre-computation ---
+        // If joint 0 rotates around the world Z axis (axis ≈ {0,0,1}) it is a pure base
+        // yaw: its correct angle is always atan2(target_y, target_x).  Computing this
+        // analytically and locking it prevents the Jacobian solver from ever jumping to
+        // the mirror-image solution (the classic "backflip" when X crosses zero).
+        let analyticalBaseYawIndex = -1;
+        if (numJoints > 0) {
+            const j0 = this.joints[0];
+            if (j0 && j0.axis) {
+                const ax = j0.axis.x || 0;
+                const ay = j0.axis.y || 0;
+                const az = j0.axis.z || 0;
+                // Check if axis is approximately (0, 0, ±1)
+                if (Math.abs(ax) < 0.1 && Math.abs(ay) < 0.1 && Math.abs(az) > 0.9) {
+                    analyticalBaseYawIndex = 0;
+                    const tx = targetPose.x || 0;
+                    const ty = targetPose.y || 0;
+                    // Only override if the target has a meaningful horizontal component
+                    if (Math.abs(tx) > 1e-3 || Math.abs(ty) > 1e-3) {
+                        let yawDeg = (Math.atan2(ty, tx) * 180) / Math.PI;
+                        // Account for the zero_offset so we store the IK angle, not the URDF angle
+                        if (typeof j0.zeroOffsetDegrees === 'number') {
+                            yawDeg -= j0.zeroOffsetDegrees;
+                        }
+                        // Clamp to joint limits
+                        if (j0.limits && typeof j0.limits.lowerDegrees === 'number' && yawDeg < j0.limits.lowerDegrees) {
+                            yawDeg = j0.limits.lowerDegrees;
+                        }
+                        if (j0.limits && typeof j0.limits.upperDegrees === 'number' && yawDeg > j0.limits.upperDegrees) {
+                            yawDeg = j0.limits.upperDegrees;
+                        }
+                        angles[0] = yawDeg;
+                    }
+                }
+            }
+        }
+
         // Settings for the solver
         const maxIterations = 400;
         const positionToleranceMm = 1.0; // stop main loop when we are within 1mm
@@ -503,6 +540,10 @@ class RobotKinematics {
                 const stepSize = baseStepSize / (1 + positionErrorLength / 50);
                 // deltaTheta_j = stepSize * (Jpos^T * positionError + orientation term)
                 for (let j = 0; j < numJoints; j++) {
+                    // Skip the analytically-pinned base yaw — the solver must not
+                    // drift it away from atan2(target_y, target_x).
+                    if (j === analyticalBaseYawIndex) continue;
+
                     let grad =
                         Jpos[0][j] * errX +
                         Jpos[1][j] * errY +
