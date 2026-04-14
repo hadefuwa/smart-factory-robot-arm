@@ -338,6 +338,28 @@
     alertEl.style.display = show ? 'flex' : 'none';
   }
 
+  // ── Event log (torque / stall debug) ─────────────────────────────────────
+  var eventLog = [];
+  var MAX_EVENT_LOG = 200;
+
+  function logEvent(level, msg) {
+    var ts = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var ms = String(new Date().getMilliseconds()).padStart(3, '0');
+    var entry = '[' + ts + '.' + ms + '] [' + level.toUpperCase() + '] ' + msg;
+    eventLog.push(entry);
+    if (eventLog.length > MAX_EVENT_LOG) eventLog.shift();
+    var box = el('eventLogOut');
+    if (box) {
+      box.textContent = eventLog.slice().reverse().join('\n');
+    }
+  }
+
+  function clearEventLog() {
+    eventLog = [];
+    var box = el('eventLogOut');
+    if (box) box.textContent = 'Log cleared.';
+  }
+
   async function moveXYZ() {
     var x = Number((el('targetX') && el('targetX').value) || 0);
     var y = Number((el('targetY') && el('targetY').value) || 0);
@@ -345,6 +367,7 @@
     var speed = Number((el('xyzSpeed') && el('xyzSpeed').value) || 1500);
     var msgEl = el('xyzMsg');
     showStallAlert(false);
+    logEvent('info', 'moveXYZ → X=' + x + ' Y=' + y + ' Z=' + z + ' spd=' + speed);
     try {
       var data = await apiRequest('/api/robot-arm/move-xyz', {
         method: 'POST',
@@ -353,15 +376,20 @@
       });
       var resp = data.bridge_response || {};
       if (data.stalled || resp.type === 'stall') {
+        var cause = resp.cause ? (' | ' + resp.cause) : '';
+        logEvent('error', 'STALL DETECTED' + cause);
         showStallAlert(true);
         if (msgEl) { msgEl.textContent = resp.message || 'Stall detected — motors stopped'; msgEl.style.color = 'var(--status-danger)'; }
       } else if (data.success) {
         var angles = (resp.angles || []).map(function (a) { return a.toFixed(1) + '\u00b0'; }).join(', ');
+        logEvent('info', 'Move done → [' + angles + ']');
         if (msgEl) { msgEl.textContent = 'Done \u2192 [' + angles + ']'; msgEl.style.color = 'var(--status-success)'; }
       } else {
+        logEvent('warn', 'Move failed: ' + (resp.message || JSON.stringify(resp)));
         if (msgEl) { msgEl.textContent = resp.message || 'Move failed'; msgEl.style.color = 'var(--status-danger)'; }
       }
     } catch (e) {
+      logEvent('error', 'moveXYZ exception: ' + e.message);
       if (msgEl) { msgEl.textContent = 'Error: ' + e.message; msgEl.style.color = 'var(--status-danger)'; }
     }
   }
@@ -928,14 +956,18 @@
   }
 
   async function eStop() {
+    logEvent('warn', 'E-STOP triggered — user action');
     try {
       await cmd({ command: 'stopAllJoints' });
+      logEvent('warn', 'E-STOP: stopAllJoints sent OK');
       showMsg('E-STOP sent');
     } catch (e) {
       try {
         await apiRequest('/api/robot-arm/stop', { method: 'POST' });
+        logEvent('warn', 'E-STOP: fallback REST stop sent OK');
         showMsg('E-STOP sent');
       } catch (e2) {
+        logEvent('error', 'E-STOP failed: ' + e2.message);
         showMsg('E-STOP error: ' + e2.message, true);
       }
     }
@@ -951,19 +983,23 @@
   }
 
   async function setTorqueAll(enabled) {
+    logEvent('info', 'setTorqueAll(' + (enabled ? 'ON' : 'OFF') + ') — user action');
     try {
       if (enabled) {
         // Hold at current physical position — reads present position and writes it
         // back as goal before enabling torque, so joints don't snap to a stale angle.
         await cmd({ command: 'holdAllJoints' });
+        logEvent('info', 'Torque ON — all joints held at current position');
         showMsg('Holding all joints at current position');
       } else {
         for (var i = 1; i <= 6; i++) {
           try { await cmd({ command: 'stopJoint', joint: i }); } catch (_) {}
         }
+        logEvent('warn', 'Torque OFF — all joints free');
         showMsg('Torque disabled — joints free to move');
       }
     } catch (e) {
+      logEvent('error', 'setTorqueAll error: ' + e.message);
       showMsg('Torque error: ' + e.message, true);
     }
   }
@@ -1397,8 +1433,10 @@
           var msgEl = el('torqueLimitMsg');
           try {
             await cmd({ command: 'setTorqueLimit', percent: pct });
+            logEvent('info', 'Torque limit set to ' + pct + '%');
             if (msgEl) { msgEl.style.color = 'var(--status-success)'; msgEl.textContent = 'Applied — all motors limited to ' + pct + '%'; }
           } catch (e) {
+            logEvent('error', 'setTorqueLimit error: ' + e.message);
             if (msgEl) { msgEl.style.color = 'var(--status-danger)'; msgEl.textContent = 'Error: ' + e.message; }
           }
         });
@@ -1433,6 +1471,7 @@
           var msgEl = el('stallConfigMsg');
           try {
             await cmd({ command: 'setStallConfig', config: cfg });
+            logEvent('info', 'Stall config: delta=' + cfg.delta + ' polls=' + cfg.polls + ' pollMs=' + cfg.pollMs + ' timeout=' + cfg.timeoutSec + 's');
             if (msgEl) { msgEl.style.color = 'var(--status-success)'; msgEl.textContent = 'Stall config applied'; }
             updateStallSummary();
           } catch (e) {
@@ -1477,6 +1516,7 @@
     if ((b = el('dbgPingBtn')))      b.addEventListener('click', function () { withBtn(b, dbgRawPing); });
     if ((b = el('dbgRegBtn')))       b.addEventListener('click', function () { withBtn(b, dbgReadRegister); });
     if ((b = el('dbgClearBtn')))     b.addEventListener('click', dbgClearAll);
+    if ((b = el('clearEventLogBtn'))) b.addEventListener('click', clearEventLog);
 
     // Faults tab
     if ((b = el('faultCfgSaveBtn'))) b.addEventListener('click', function () { withBtn(b, saveFaultConfig); });

@@ -1212,10 +1212,14 @@ async function handleCommand(ws, data) {
                     Math.round(2048 + Math.max(-180, Math.min(180, a)) * (2048 / 180))
                 );
 
+                console.log(`[STALL] Move started. Targets (steps): ${targetSteps.join(', ')}  delta=${STALL_STUCK_DELTA} polls=${STALL_POLLS} pollMs=${STALL_POLL_MS} timeout=${STALL_TIMEOUT_MS}ms`);
+
                 let stalledConsec = 0;
                 let prevPositions = null;
                 let stallDetected = false;
+                let stallCause = null;
                 const deadline = Date.now() + STALL_TIMEOUT_MS;
+                let pollCount = 0;
 
                 await new Promise(r => setTimeout(r, 250)); // let servos start moving before first poll
 
@@ -1224,34 +1228,56 @@ async function handleCommand(ws, data) {
                     try { statuses = await getAllServoStatus(); } catch (e) { break; }
 
                     const positions = statuses.map(s => s.position);
+                    pollCount++;
+
+                    // Per-joint debug: position, target, delta from target, delta from last poll
+                    const jointDebug = xyzAngles.map((_, ji) => {
+                        const pos = positions[ji];
+                        const tgt = targetSteps[ji];
+                        const tgtDelta = Math.abs(pos - tgt);
+                        const moveDelta = prevPositions ? Math.abs(pos - prevPositions[ji]) : '?';
+                        const avail = statuses[ji] && statuses[ji].available;
+                        return `J${ji+1}:${avail ? '' : '(NA)'}pos=${pos} tgt=${tgt} err=${tgtDelta} mv=${moveDelta}`;
+                    }).join('  ');
+                    console.log(`[STALL] poll#${pollCount} stuckConsec=${stalledConsec}  ${jointDebug}`);
 
                     // Check if all active servos have reached their target positions
                     const allDone = xyzAngles.every((_, ji) => {
                         if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return true;
                         return Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE;
                     });
-                    if (allDone) break;
+                    if (allDone) {
+                        console.log(`[STALL] All joints at target after ${pollCount} polls — move complete`);
+                        break;
+                    }
 
                     // Stall check: any servo not yet at target but barely moving?
                     if (prevPositions) {
-                        const anyStuck = xyzAngles.some((_, ji) => {
-                            if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return false;
-                            if (Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE) return false;
-                            return Math.abs(positions[ji] - prevPositions[ji]) < STALL_STUCK_DELTA;
+                        let stuckJoints = [];
+                        xyzAngles.forEach((_, ji) => {
+                            if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return;
+                            if (Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE) return;
+                            if (Math.abs(positions[ji] - prevPositions[ji]) < STALL_STUCK_DELTA) {
+                                stuckJoints.push({ ji, pos: positions[ji], tgt: targetSteps[ji], delta: Math.abs(positions[ji] - prevPositions[ji]) });
+                            }
                         });
+                        const anyStuck = stuckJoints.length > 0;
 
                         if (anyStuck) {
                             stalledConsec++;
+                            console.warn(`[STALL] Stuck joints (consec=${stalledConsec}/${STALL_POLLS}): ${stuckJoints.map(j => `J${j.ji+1} moved=${j.delta}steps errToTarget=${Math.abs(j.pos-j.tgt)}steps`).join(', ')}`);
                             if (stalledConsec >= STALL_POLLS) {
                                 // Stall confirmed — disable torque on all servos immediately
                                 for (const sv of servos) {
                                     if (sv) try { await sv.stopServo(); } catch (_) {}
                                 }
                                 stallDetected = true;
-                                console.warn('Stall detected — torque disabled on all servos');
+                                stallCause = stuckJoints;
+                                console.warn(`[STALL] CONFIRMED — torque disabled. Cause: ${stuckJoints.map(j => `J${j.ji+1} moved=${j.delta}steps errToTarget=${Math.abs(j.pos-j.tgt)}steps`).join(', ')}`);
                                 break;
                             }
                         } else {
+                            if (stalledConsec > 0) console.log(`[STALL] stuckConsec reset (was ${stalledConsec})`);
                             stalledConsec = 0;
                         }
                     }
@@ -1262,9 +1288,13 @@ async function handleCommand(ws, data) {
 
                 // Single response — bridge reads this, frontend handles type
                 if (stallDetected) {
+                    const causeStr = stallCause
+                        ? stallCause.map(j => `J${j.ji+1} moved ${j.delta}/${STALL_STUCK_DELTA} steps (${Math.abs(j.pos-j.tgt)} steps from target)`).join('; ')
+                        : 'unknown';
                     ws.send(JSON.stringify({
                         type: 'stall',
-                        message: 'Stall detected — servos stopped to prevent damage'
+                        message: 'Stall detected — servos stopped to prevent damage',
+                        cause: causeStr
                     }));
                 } else {
                     ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
