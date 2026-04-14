@@ -125,11 +125,12 @@ class RobotKinematics {
         // Approximate maximum reach of the robot in mm (computed from URDF)
         this.maxReachMm = null;
         // TCP configuration: the default TCP comes from the URDF tool joint(s),
-        // and an optional config override can be layered on later.
+        // and an optional config override can be layered on later. In the current
+        // URDF the physical approach vector is best represented by local -X.
         this.tcpConfig = {
             defaultOffsetMm: { x: 0, y: 0, z: 0 },
             overrideOffsetMm: null,
-            toolAxisLocal: { x: 1, y: 0, z: 0 }
+            toolAxisLocal: { x: -1, y: 0, z: 0 }
         };
     }
 
