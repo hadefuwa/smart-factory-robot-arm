@@ -415,9 +415,11 @@ class RobotKinematics {
 
         // --- Analytical base-yaw pre-computation ---
         // If joint 0 rotates around the world Z axis (axis ≈ {0,0,1}) it is a pure base
-        // yaw: its correct angle is always atan2(target_y, target_x).  Computing this
-        // analytically and locking it prevents the Jacobian solver from ever jumping to
-        // the mirror-image solution (the classic "backflip" when X crosses zero).
+        // yaw. For any target (X, Y) there are two valid base angles 180° apart:
+        //   "front":  atan2(Y, X)         — arm faces the target
+        //   "back":   atan2(Y, X) ± 180°  — arm faces away, shoulder wraps around
+        // We pick whichever is closest to the current joint-1 angle so the robot stays
+        // in whatever configuration it is already in instead of snapping to the other.
         let analyticalBaseYawIndex = -1;
         if (numJoints > 0) {
             const j0 = this.joints[0];
@@ -430,21 +432,35 @@ class RobotKinematics {
                     analyticalBaseYawIndex = 0;
                     const tx = targetPose.x || 0;
                     const ty = targetPose.y || 0;
-                    // Only override if the target has a meaningful horizontal component
+                    // Only pin the yaw when there is a meaningful horizontal component
                     if (Math.abs(tx) > 1e-3 || Math.abs(ty) > 1e-3) {
-                        let yawDeg = (Math.atan2(ty, tx) * 180) / Math.PI;
-                        // Account for the zero_offset so we store the IK angle, not the URDF angle
+                        let frontYaw = (Math.atan2(ty, tx) * 180) / Math.PI;
+                        // Account for the zero_offset so we store IK angles, not URDF angles
                         if (typeof j0.zeroOffsetDegrees === 'number') {
-                            yawDeg -= j0.zeroOffsetDegrees;
+                            frontYaw -= j0.zeroOffsetDegrees;
                         }
+                        // The back solution is 180° away — normalise both to [-180, 180]
+                        let backYaw = frontYaw + (frontYaw <= 0 ? 180 : -180);
+
+                        // Helper: smallest signed angular difference (handles wraparound)
+                        function angularDist(a, b) {
+                            let d = ((a - b) % 360 + 540) % 360 - 180;
+                            return Math.abs(d);
+                        }
+
+                        // Current seed for joint 0 (from warm-start or 0 if none provided)
+                        const currentYaw = angles[0];
+                        const useFront = angularDist(frontYaw, currentYaw) <= angularDist(backYaw, currentYaw);
+                        let chosenYaw = useFront ? frontYaw : backYaw;
+
                         // Clamp to joint limits
-                        if (j0.limits && typeof j0.limits.lowerDegrees === 'number' && yawDeg < j0.limits.lowerDegrees) {
-                            yawDeg = j0.limits.lowerDegrees;
+                        if (j0.limits && typeof j0.limits.lowerDegrees === 'number' && chosenYaw < j0.limits.lowerDegrees) {
+                            chosenYaw = j0.limits.lowerDegrees;
                         }
-                        if (j0.limits && typeof j0.limits.upperDegrees === 'number' && yawDeg > j0.limits.upperDegrees) {
-                            yawDeg = j0.limits.upperDegrees;
+                        if (j0.limits && typeof j0.limits.upperDegrees === 'number' && chosenYaw > j0.limits.upperDegrees) {
+                            chosenYaw = j0.limits.upperDegrees;
                         }
-                        angles[0] = yawDeg;
+                        angles[0] = chosenYaw;
                     }
                 }
             }
