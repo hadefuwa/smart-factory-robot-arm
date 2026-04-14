@@ -1,7 +1,7 @@
 cd C:\Users\HamedA\Documents\sf2
 git status
 git add .
-git commit -m "fix backflip"
+git commit -m "backflip"
 git push origin main
 ssh pi@rpi "cd ~/sf2 && git pull"
 ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service"

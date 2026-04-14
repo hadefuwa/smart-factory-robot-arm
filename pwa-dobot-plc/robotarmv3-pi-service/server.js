@@ -590,12 +590,11 @@ async function handleCommand(ws, data) {
             let currentXYZ = null;
             if (robotKinematics.isConfigured()) {
                 try {
-                    const availableAngles = statuses
-                        .filter(s => s.available)
-                        .map(s => s.angleDegrees);
-                    // Only compute FK if we have angles for all revolute joints
-                    if (availableAngles.length === robotKinematics.getJointCount()) {
-                        const fk = robotKinematics.forwardKinematics(availableAngles);
+                    // Use all servo angles (unavailable servos default to 0°) so the
+                    // array length always matches getJointCount() regardless of read errors.
+                    const allAngles = statuses.map(s => s.angleDegrees);
+                    if (allAngles.length === robotKinematics.getJointCount()) {
+                        const fk = robotKinematics.forwardKinematics(allAngles);
                         if (fk && fk.position) {
                             currentXYZ = {
                                 x: Math.round(fk.position.x * 10) / 10,
@@ -1179,7 +1178,9 @@ async function handleCommand(ws, data) {
             let xyzInitialAngles = null;
             try {
                 const xyzStatuses = await getAllServoStatus();
-                const xyzCurrentAngles = xyzStatuses.filter(s => s.available).map(s => s.angleDegrees);
+                // Use all servo angles (unavailable ones default to 0°) so the seed
+                // is always populated and the nearest-solution logic works correctly.
+                const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees);
                 if (xyzCurrentAngles.length === robotKinematics.getJointCount()) {
                     xyzInitialAngles = xyzCurrentAngles;
                 }
@@ -1288,7 +1289,9 @@ async function handleCommand(ws, data) {
             let ikInitialAngles = null;
             try {
                 const ikStatuses = await getAllServoStatus();
-                const ikCurrentAngles = ikStatuses.filter(s => s.available).map(s => s.angleDegrees);
+                // Use all servo angles (unavailable ones default to 0°) so the seed
+                // is always populated and the nearest-solution logic works correctly.
+                const ikCurrentAngles = ikStatuses.map(s => s.angleDegrees);
                 if (ikCurrentAngles.length === robotKinematics.getJointCount()) {
                     ikInitialAngles = ikCurrentAngles;
                 }
