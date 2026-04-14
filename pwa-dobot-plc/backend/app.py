@@ -201,6 +201,136 @@ robot_arm_bridge_state = {
 }
 ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
 ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
+
+# ── PLC Auto-Move Background Thread ──────────────────────────────────────────
+# This mirrors the plcAutoTick() JavaScript function in robot-arm-v3-page.js.
+# It runs all the time so the arm responds to PLC commands even when nobody
+# has robot-arm.html open.
+#
+# To avoid double-moves when the browser page IS open (the JS handles it too),
+# the thread checks robot_arm_ui_last_poll_time. If the browser called
+# /api/robot-arm/status recently (within 3 seconds), we stand aside and let
+# the JavaScript handle it. When the page is closed the JS stops polling so
+# after 3 seconds of silence this thread takes over automatically.
+robot_arm_ui_last_poll_time = 0.0   # updated by /api/robot-arm/status handler
+plc_auto_backend_state = {
+    'last_sent_target_key': None,   # "x|y|z|speed" of the last move we sent
+    'move_in_flight': False,        # True while we are waiting for a move reply
+}
+
+def plc_auto_backend_tick():
+    """
+    Reads PLC DB125 target coordinates from the cache and sends a moveToXYZ
+    command if the target has changed since the last send.
+    Called every 300 ms by the background loop below.
+    """
+    # If the browser page is open (polled status within the last 3 seconds),
+    # let the JavaScript handle the PLC auto-move — nothing to do here.
+    seconds_since_ui_poll = time.time() - robot_arm_ui_last_poll_time
+    if seconds_since_ui_poll < 3.0:
+        return
+
+    # Skip if we are already waiting for a previous move to finish.
+    if plc_auto_backend_state['move_in_flight']:
+        return
+
+    # Get the latest PLC data from the shared cache.
+    cache = get_plc_cache()
+    if not cache:
+        return
+
+    # Only act when the PLC is reachable.
+    if not cache.get('plc_connected', False):
+        return
+
+    # Only act when the robot arm bridge is connected.
+    if not robot_arm_bridge_state.get('connected'):
+        # Try to reconnect once, quietly.
+        try:
+            ensure_robot_arm_bridge_connected()
+        except Exception:
+            pass
+        return
+
+    # Read the target coordinates written by the PLC into DB125.
+    x = cache.get('db125_target_x')
+    y = cache.get('db125_target_y')
+    z = cache.get('db125_target_z')
+    speed = cache.get('db125_speed') or 1500
+
+    if x is None or y is None or z is None:
+        return
+
+    # Build a string key so we can tell when the target has changed.
+    target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
+    if plc_auto_backend_state['last_sent_target_key'] == target_key:
+        return  # Target unchanged — nothing to do.
+
+    # Send the move command.
+    plc_auto_backend_state['move_in_flight'] = True
+    try:
+        payload = {
+            'command': 'moveToXYZ',
+            'x': float(x),
+            'y': float(y),
+            'z': float(z),
+            'speed': int(speed),
+        }
+        with robot_arm_bridge_lock:
+            ws = robot_arm_bridge_state.get('ws')
+            if ws and robot_arm_bridge_state.get('connected'):
+                old_timeout = 3
+                ws.settimeout(15)
+                try:
+                    response = send_robot_arm_command(payload)
+                    plc_auto_backend_state['last_sent_target_key'] = target_key
+                    ik_failed = (
+                        response.get('type') == 'ikFailed'
+                        or 'unreachable' in str(response).lower()
+                    )
+                    try:
+                        queue_invalid_target(ik_failed)
+                    except Exception:
+                        pass
+                    logger.info(
+                        'PLC auto-move backend: moved to x=%s y=%s z=%s → %s',
+                        x, y, z, response.get('type', '?')
+                    )
+                except Exception as e:
+                    logger.warning('PLC auto-move backend: move failed: %s', e)
+                finally:
+                    try:
+                        ws.settimeout(old_timeout)
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning('PLC auto-move backend: unexpected error: %s', e)
+    finally:
+        plc_auto_backend_state['move_in_flight'] = False
+
+
+def plc_auto_backend_loop():
+    """
+    Infinite loop that runs plc_auto_backend_tick() every 300 ms.
+    Runs as a daemon thread so it stops automatically when the process exits.
+    """
+    while True:
+        try:
+            plc_auto_backend_tick()
+        except Exception as e:
+            logger.warning('PLC auto-move backend loop error: %s', e)
+        time.sleep(0.3)  # 300 ms — same interval as the JavaScript version
+
+
+def start_plc_auto_move_thread():
+    """Start the background PLC auto-move thread."""
+    t = threading.Thread(
+        target=plc_auto_backend_loop,
+        daemon=True,
+        name='plc-auto-move-backend',
+    )
+    t.start()
+    logger.info('PLC auto-move background thread started')
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
 latest_annotated_mime = 'image/jpeg'
@@ -973,6 +1103,9 @@ def init_clients():
             ensure_robot_arm_bridge_connected()
         except Exception as bridge_err:
             logger.warning(f"Robot arm bridge startup connect failed: {bridge_err}")
+        # Start the background thread that forwards PLC commands to the robot
+        # arm even when nobody has robot-arm.html open in a browser.
+        start_plc_auto_move_thread()
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
         logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
@@ -1430,6 +1563,11 @@ def robot_arm_stop():
 @app.route('/api/robot-arm/status', methods=['GET'])
 def robot_arm_status():
     """Get latest robot arm status from Pi service."""
+    # Record the time so the background PLC auto-move thread knows the page is
+    # open and can stand aside while the JavaScript handles PLC moves.
+    global robot_arm_ui_last_poll_time
+    robot_arm_ui_last_poll_time = time.time()
+
     with robot_arm_bridge_lock:
         if not robot_arm_bridge_state.get('connected'):
             try:
@@ -1572,6 +1710,12 @@ def robot_arm_move_xyz():
                 queue_invalid_target(ik_failed)
             except Exception:
                 pass
+            # Tell the background thread what target was just sent so it does
+            # not immediately re-send the same move when the page is closing.
+            speed_used = payload.get('speed', 1500)
+            plc_auto_backend_state['last_sent_target_key'] = '{}|{}|{}|{}'.format(
+                int(float(x)), int(float(y)), int(float(z)), int(speed_used)
+            )
             status_code = 200 if (success or is_stall) else 400
             return jsonify({'success': success, 'stalled': is_stall, 'bridge_response': response}), status_code
         except Exception as e:
