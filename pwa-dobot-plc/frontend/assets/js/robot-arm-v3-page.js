@@ -332,12 +332,19 @@
     }
   }
 
+  function showStallAlert(show) {
+    var alertEl = el('stallAlert');
+    if (!alertEl) return;
+    alertEl.style.display = show ? 'flex' : 'none';
+  }
+
   async function moveXYZ() {
     var x = Number((el('targetX') && el('targetX').value) || 0);
     var y = Number((el('targetY') && el('targetY').value) || 0);
     var z = Number((el('targetZ') && el('targetZ').value) || 0);
     var speed = Number((el('xyzSpeed') && el('xyzSpeed').value) || 1500);
     var msgEl = el('xyzMsg');
+    showStallAlert(false);
     try {
       var data = await apiRequest('/api/robot-arm/move-xyz', {
         method: 'POST',
@@ -345,9 +352,12 @@
         body: JSON.stringify({ x: x, y: y, z: z, speed: speed })
       });
       var resp = data.bridge_response || {};
-      if (data.success) {
-        var angles = (resp.angles || []).map(function (a) { return a.toFixed(1) + '°'; }).join(', ');
-        if (msgEl) { msgEl.textContent = 'Moving → [' + angles + ']'; msgEl.style.color = 'var(--status-success)'; }
+      if (data.stalled || resp.type === 'stall') {
+        showStallAlert(true);
+        if (msgEl) { msgEl.textContent = resp.message || 'Stall detected — motors stopped'; msgEl.style.color = 'var(--status-danger)'; }
+      } else if (data.success) {
+        var angles = (resp.angles || []).map(function (a) { return a.toFixed(1) + '\u00b0'; }).join(', ');
+        if (msgEl) { msgEl.textContent = 'Done \u2192 [' + angles + ']'; msgEl.style.color = 'var(--status-success)'; }
       } else {
         if (msgEl) { msgEl.textContent = resp.message || 'Move failed'; msgEl.style.color = 'var(--status-danger)'; }
       }
@@ -1370,6 +1380,70 @@
       });
     }
 
+    // Settings tab — torque limit slider live display
+    var sliderEl = el('torqueLimitSlider');
+    if (sliderEl) {
+      sliderEl.addEventListener('input', function () {
+        var disp = el('torqueLimitDisplay');
+        if (disp) disp.textContent = sliderEl.value + '%';
+      });
+    }
+
+    // Settings tab — apply torque limit
+    if ((b = el('applyTorqueLimitBtn'))) {
+      b.addEventListener('click', function () {
+        withBtn(b, async function () {
+          var pct = Number((el('torqueLimitSlider') && el('torqueLimitSlider').value) || 50);
+          var msgEl = el('torqueLimitMsg');
+          try {
+            await cmd({ command: 'setTorqueLimit', percent: pct });
+            if (msgEl) { msgEl.style.color = 'var(--status-success)'; msgEl.textContent = 'Applied — all motors limited to ' + pct + '%'; }
+          } catch (e) {
+            if (msgEl) { msgEl.style.color = 'var(--status-danger)'; msgEl.textContent = 'Error: ' + e.message; }
+          }
+        });
+      });
+    }
+
+    // Settings tab — stall detection config (client-side storage only; updates summary text)
+    function updateStallSummary() {
+      var polls   = Number((el('stallPolls')      && el('stallPolls').value)      || 4);
+      var pollMs  = Number((el('stallPollMs')      && el('stallPollMs').value)      || 200);
+      var timeout = Number((el('stallTimeoutSec') && el('stallTimeoutSec').value) || 8);
+      var sumEl   = el('stallTimeSummary');
+      var toEl    = el('stallTimeoutSummary');
+      if (sumEl) sumEl.textContent = polls + ' \u00d7 ' + pollMs + 'ms = ' + (polls * pollMs) + 'ms';
+      if (toEl)  toEl.textContent  = timeout + 's';
+    }
+    ['stallPolls', 'stallPollMs', 'stallTimeoutSec', 'stallDelta'].forEach(function (id) {
+      var inp = el(id);
+      if (inp) inp.addEventListener('input', updateStallSummary);
+    });
+    updateStallSummary();
+
+    if ((b = el('applyStallConfigBtn'))) {
+      b.addEventListener('click', function () {
+        withBtn(b, async function () {
+          var cfg = {
+            delta:      Number((el('stallDelta')      && el('stallDelta').value)      || 5),
+            polls:      Number((el('stallPolls')      && el('stallPolls').value)      || 4),
+            pollMs:     Number((el('stallPollMs')      && el('stallPollMs').value)      || 200),
+            timeoutSec: Number((el('stallTimeoutSec') && el('stallTimeoutSec').value) || 8)
+          };
+          var msgEl = el('stallConfigMsg');
+          try {
+            await cmd({ command: 'setStallConfig', config: cfg });
+            if (msgEl) { msgEl.style.color = 'var(--status-success)'; msgEl.textContent = 'Stall config applied'; }
+            updateStallSummary();
+          } catch (e) {
+            // Server may not support this command yet — show the values locally
+            if (msgEl) { msgEl.style.color = 'var(--status-warning)'; msgEl.textContent = 'Saved locally (server restart needed to persist)'; }
+            updateStallSummary();
+          }
+        });
+      });
+    }
+
     // Joint control tab — quick actions
     if ((b = el('homeAllBtn')))   b.addEventListener('click', function () { withBtn(b, homeAll); });
     if ((b = el('torqueOnBtn')))  b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(true); }); });
@@ -1377,7 +1451,8 @@
     if ((b = el('stopAllBtn')))   b.addEventListener('click', function () { withBtn(b, stopAll); });
 
     // Joint control tab — XYZ move
-    if ((b = el('moveXYZBtn')))   b.addEventListener('click', function () { withBtn(b, moveXYZ); });
+    if ((b = el('moveXYZBtn')))     b.addEventListener('click', function () { withBtn(b, moveXYZ); });
+    if ((b = el('dismissStallBtn'))) b.addEventListener('click', function () { showStallAlert(false); });
 
     // Joint control tab — manual move
     if ((b = el('moveBtn')))      b.addEventListener('click', function () { withBtn(b, moveJoint); });

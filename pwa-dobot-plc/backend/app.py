@@ -1555,16 +1555,25 @@ def robot_arm_move_xyz():
         if not robot_arm_bridge_state.get('connected'):
             return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
         try:
-            response = send_robot_arm_command(payload)
-            success = response.get('type') in ('success', 'ikResult', 'moving')
-            # Signal PLC whether IK succeeded or failed
-            ik_failed = not success or response.get('type') == 'ikFailed' or (not success and 'unreachable' in str(response).lower())
+            ws = robot_arm_bridge_state['ws']
+            # moveToXYZ blocks for up to STALL_TIMEOUT_MS + polling overhead on the Pi.
+            # Use a generous timeout so the stall monitor has time to finish before we recv.
+            ws.settimeout(15)
+            try:
+                response = send_robot_arm_command(payload)
+            finally:
+                ws.settimeout(3)
+            resp_type = response.get('type', '')
+            success = resp_type in ('success', 'ikResult', 'moving')
+            # 'stall' is a handled safety event — not an IK failure
+            is_stall = resp_type == 'stall'
+            ik_failed = not success and not is_stall and (resp_type == 'ikFailed' or 'unreachable' in str(response).lower())
             try:
                 queue_invalid_target(ik_failed)
             except Exception:
                 pass
-            status_code = 200 if success else 400
-            return jsonify({'success': success, 'bridge_response': response}), status_code
+            status_code = 200 if (success or is_stall) else 400
+            return jsonify({'success': success, 'stalled': is_stall, 'bridge_response': response}), status_code
         except Exception as e:
             robot_arm_bridge_state['last_error'] = str(e)
             try:

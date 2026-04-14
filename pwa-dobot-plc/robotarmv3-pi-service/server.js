@@ -38,6 +38,12 @@ const PERF_DEBUG = false;
 // Range 0-100 (%). 50 = half power. Can be changed at runtime via setTorqueLimit command.
 let TORQUE_LIMIT_PERCENT = 50;
 
+// Stall detection parameters — adjustable at runtime via setStallConfig command.
+let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
+let STALL_POLL_MS    = 200;  // how often to sample positions during a move
+let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
+let STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+
 // Inverse kinematics — loaded once at startup from the URDF alongside this file
 const robotKinematics = new RobotKinematics();
 try {
@@ -870,6 +876,19 @@ async function handleCommand(ws, data) {
             break;
         }
 
+        case 'setStallConfig': {
+            // Update stall detection parameters at runtime.
+            // Body: { command: "setStallConfig", config: { delta, polls, pollMs, timeoutSec } }
+            const sc = data.config || {};
+            if (sc.delta      !== undefined) STALL_STUCK_DELTA = Math.max(1,   Math.min(100,  Number(sc.delta)));
+            if (sc.polls      !== undefined) STALL_POLLS       = Math.max(1,   Math.min(50,   Number(sc.polls)));
+            if (sc.pollMs     !== undefined) STALL_POLL_MS     = Math.max(50,  Math.min(2000, Number(sc.pollMs)));
+            if (sc.timeoutSec !== undefined) STALL_TIMEOUT_MS  = Math.max(1,   Math.min(60,   Number(sc.timeoutSec))) * 1000;
+            console.log(`Stall config updated: delta=${STALL_STUCK_DELTA} polls=${STALL_POLLS} pollMs=${STALL_POLL_MS} timeout=${STALL_TIMEOUT_MS}ms`);
+            ws.send(JSON.stringify({ type: 'success', message: 'Stall config updated' }));
+            break;
+        }
+
         case 'setAcceleration':
             // Set servo acceleration
             const accJointNumber = data.joint - 1;
@@ -1179,16 +1198,11 @@ async function handleCommand(ws, data) {
                     await servos[ji].moveToAngle(xyzAngles[ji], moveSpeed);
                 }
             }
-            ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
 
-            // Stall monitor — poll until all joints reach target, a stall is detected, or timeout.
-            // Keeps the command queue locked during the move so no new moves overlap.
+            // Stall monitor — blocks until completion, stall, or timeout, then sends ONE response.
+            // This ensures the bridge's single ws.recv() always gets the final outcome.
             {
-                const STALL_TIMEOUT_MS = 8000; // max time to wait for movement to complete
-                const POLL_MS          = 200;  // how often to sample servo positions
-                const POS_TOLERANCE    = 20;   // steps (~1.75°) — close enough counts as "at target"
-                const STUCK_DELTA      = 5;    // steps — movement below this per poll = "not progressing"
-                const STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+                const POS_TOLERANCE = 20; // steps (~1.75°) — close enough counts as "at target"
 
                 // Pre-compute target positions in steps (same formula as angleToSteps)
                 const targetSteps = xyzAngles.map(a =>
@@ -1197,6 +1211,7 @@ async function handleCommand(ws, data) {
 
                 let stalledConsec = 0;
                 let prevPositions = null;
+                let stallDetected = false;
                 const deadline = Date.now() + STALL_TIMEOUT_MS;
 
                 await new Promise(r => setTimeout(r, 250)); // let servos start moving before first poll
@@ -1219,7 +1234,7 @@ async function handleCommand(ws, data) {
                         const anyStuck = xyzAngles.some((_, ji) => {
                             if (!servos[ji] || !statuses[ji] || !statuses[ji].available) return false;
                             if (Math.abs(positions[ji] - targetSteps[ji]) <= POS_TOLERANCE) return false;
-                            return Math.abs(positions[ji] - prevPositions[ji]) < STUCK_DELTA;
+                            return Math.abs(positions[ji] - prevPositions[ji]) < STALL_STUCK_DELTA;
                         });
 
                         if (anyStuck) {
@@ -1229,11 +1244,8 @@ async function handleCommand(ws, data) {
                                 for (const sv of servos) {
                                     if (sv) try { await sv.stopServo(); } catch (_) {}
                                 }
+                                stallDetected = true;
                                 console.warn('Stall detected — torque disabled on all servos');
-                                ws.send(JSON.stringify({
-                                    type: 'stall',
-                                    message: 'Stall detected — servos stopped to prevent damage'
-                                }));
                                 break;
                             }
                         } else {
@@ -1242,7 +1254,17 @@ async function handleCommand(ws, data) {
                     }
 
                     prevPositions = positions;
-                    await new Promise(r => setTimeout(r, POLL_MS));
+                    await new Promise(r => setTimeout(r, STALL_POLL_MS));
+                }
+
+                // Single response — bridge reads this, frontend handles type
+                if (stallDetected) {
+                    ws.send(JSON.stringify({
+                        type: 'stall',
+                        message: 'Stall detected — servos stopped to prevent damage'
+                    }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'moving', angles: xyzAngles, x: Number(mX), y: Number(mY), z: Number(mZ) }));
                 }
             }
             break;

@@ -471,6 +471,13 @@
                 <div id="xyzMsg" style="font-size:0.78rem;min-height:1.2em;margin-top:0.4rem;color:var(--status-success)"></div>
               </div>
 
+              <!-- Stall alert banner (hidden by default) -->
+              <div id="stallAlert" style="display:none;margin-top:0.75rem;padding:0.6rem 0.9rem;background:var(--status-danger-bg);border:1.5px solid var(--status-danger);border-radius:0.6rem;display:none;align-items:center;gap:0.5rem">
+                <i class="material-icons" style="font-size:18px;color:var(--status-danger)">warning</i>
+                <span style="font-size:0.82rem;font-weight:700;color:var(--status-danger)">Stall detected — motors stopped to prevent damage. Clear obstruction and re-home before moving.</span>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dismissStallBtn" style="margin-left:auto">Dismiss</button>
+              </div>
+
             </div>
           </div>
 
@@ -609,6 +616,68 @@
                 <input class="ra-input" id="pollInterval" type="number" min="200" max="5000" value="500" style="width:110px">
               </div>
               <button class="ra-btn ra-btn-ghost ra-btn-sm" id="setPollBtn" style="margin-top:0.6rem">Apply</button>
+            </div>
+
+            <div class="settings-card">
+              <h4><i class="material-icons" style="font-size:16px">electric_bolt</i> Motor Torque Limit</h4>
+              <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:0.9rem">
+                Caps the maximum force each servo can produce. Lower values prevent high current draw
+                when the robot is blocked by an obstacle.
+              </p>
+              <div class="ra-field" style="margin-bottom:0.75rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem">
+                  <label class="ra-label" style="margin:0">Limit (% of max torque)</label>
+                  <span id="torqueLimitDisplay" style="font-size:1.1rem;font-weight:700;font-family:var(--font-mono);color:var(--text-white)">50%</span>
+                </div>
+                <input type="range" id="torqueLimitSlider" min="10" max="100" step="5" value="50"
+                  style="width:100%;accent-color:var(--accent-start)">
+                <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-muted);margin-top:0.2rem">
+                  <span>10% (safer)</span>
+                  <span>100% (full power)</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                <button class="ra-btn ra-btn-primary ra-btn-sm" id="applyTorqueLimitBtn">
+                  <i class="material-icons" style="font-size:14px">check</i> Apply to All Motors
+                </button>
+                <span id="torqueLimitMsg" style="font-size:0.76rem;color:var(--status-success);min-height:1em"></span>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4><i class="material-icons" style="font-size:16px">crisis_alert</i> Stall Detection</h4>
+              <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:0.9rem">
+                After a move command, the robot monitors joint positions. If a joint stops progressing
+                toward its target it is considered stalled and all motors are stopped.
+              </p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.75rem">
+                <div class="ra-field">
+                  <label class="ra-label">Stuck threshold (steps)</label>
+                  <input class="ra-input" id="stallDelta" type="number" min="1" max="50" value="5" style="width:100%">
+                </div>
+                <div class="ra-field">
+                  <label class="ra-label">Confirm polls</label>
+                  <input class="ra-input" id="stallPolls" type="number" min="2" max="20" value="4" style="width:100%">
+                </div>
+                <div class="ra-field">
+                  <label class="ra-label">Poll interval (ms)</label>
+                  <input class="ra-input" id="stallPollMs" type="number" min="100" max="1000" value="200" style="width:100%">
+                </div>
+                <div class="ra-field">
+                  <label class="ra-label">Move timeout (s)</label>
+                  <input class="ra-input" id="stallTimeoutSec" type="number" min="1" max="30" value="8" style="width:100%">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                <button class="ra-btn ra-btn-primary ra-btn-sm" id="applyStallConfigBtn">
+                  <i class="material-icons" style="font-size:14px">check</i> Apply
+                </button>
+                <span id="stallConfigMsg" style="font-size:0.76rem;color:var(--status-success);min-height:1em"></span>
+              </div>
+              <p style="font-size:0.7rem;color:var(--text-muted);margin-top:0.6rem;line-height:1.5">
+                Stall declared after <span id="stallTimeSummary">4 × 200ms = 800ms</span> of no progress.
+                Timeout aborts the move after <span id="stallTimeoutSummary">8s</span>.
+              </p>
             </div>
 
           </div>
