@@ -25,6 +25,7 @@ const { RobotKinematics } = require('./kinematics');
 // Configuration
 const PORT = parseInt(process.env.ROBOT_ARM_PORT || "8080");
 const JOINT_COUNT = 6; // Number of robot arm joints (ST3215 servos)
+const SERVO_IDS = [1, 2, 3, 4, 5, 6];
 const SERIAL_PORT = '/dev/ttyACM0'; // ST3215 driver board (CDC-ACM device)
 const SERIAL_BAUDRATE = 1000000; // ST3215 bus baud rate for this Pi setup
 
@@ -132,6 +133,7 @@ console.error = (...a) => { const s = a.join(' '); logRing('error', s); _origErr
 
 // Array to store servo controllers
 const servos = [];
+const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
 
 /**
  * Shared serial port instance (all servos use the same port)
@@ -272,18 +274,112 @@ async function processCommandQueue() {
     }
 }
 
+function removeServoController(controller) {
+    const index = allServoControllers.indexOf(controller);
+    if (index >= 0) {
+        allServoControllers.splice(index, 1);
+    }
+}
+
+async function tryInitializeServo(slotIndex, quiet = false) {
+    const servoId = SERVO_IDS[slotIndex];
+    const servoLabel = `servo ${slotIndex + 1} (ST3215 ID: ${servoId})`;
+    const logInfo = (...args) => { if (!quiet) console.log(...args); };
+    const logWarn = (...args) => { if (!quiet) console.warn(...args); };
+    const logError = (...args) => { if (!quiet) console.error(...args); };
+
+    if (!sharedSerialPort || !sharedSerialPort.isOpen) {
+        logWarn(`Cannot initialize ${servoLabel}: shared serial port is not open`);
+        return null;
+    }
+
+    const servo = new RobotArm.ServoController(slotIndex + 1, sharedSerialPort, servoId, SERIAL_BAUDRATE);
+    let addedToRouter = false;
+    let ready = false;
+
+    try {
+        await servo.open();
+        allServoControllers.push(servo);
+        addedToRouter = true;
+
+        let pingResult = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                logInfo(`Pinging ${servoLabel} (attempt ${attempt}/3)...`);
+                pingResult = await servo.ping();
+            } catch (error) {
+                logWarn(`Ping failed for ${servoLabel} on attempt ${attempt}: ${error.message}`);
+            }
+
+            if (pingResult) {
+                break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 120));
+        }
+
+        if (!pingResult) {
+            logWarn(`Skipping ${servoLabel}: no ping response after retries`);
+            return null;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        let torqueSet = false;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                await servo.setTorqueLimit(TORQUE_LIMIT_PERCENT);
+                torqueSet = true;
+                break;
+            } catch (error) {
+                logWarn(`Torque-limit write failed for ${servoLabel} on attempt ${attempt}: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, 80));
+            }
+        }
+
+        if (!torqueSet) {
+            logWarn(`Skipping ${servoLabel}: could not set torque limit`);
+            return null;
+        }
+
+        logInfo(`${servoLabel} ready with torque limit ${TORQUE_LIMIT_PERCENT}%`);
+        ready = true;
+        return servo;
+    } catch (error) {
+        logError(`Failed to initialize ${servoLabel}: ${error.message}`);
+        return null;
+    } finally {
+        if (addedToRouter && !ready) {
+            removeServoController(servo);
+        }
+    }
+}
+
+async function tryReviveServoSlot(slotIndex) {
+    const now = Date.now();
+    if (now - servoReviveAttemptMs[slotIndex] < 5000) {
+        return null;
+    }
+
+    servoReviveAttemptMs[slotIndex] = now;
+    const servo = await tryInitializeServo(slotIndex, true);
+    if (servo) {
+        servos[slotIndex] = servo;
+        console.log(`Recovered servo ${slotIndex + 1} after startup miss`);
+        return servo;
+    }
+
+    return null;
+}
+
 /**
  * Initialize all servo controllers
  */
 async function initializeServos() {
     console.log('Initializing ST3215 servo controllers...');
     
-    // ST3215 servo IDs (1-6 for 6 servos)
-    // Each servo must have a unique ID configured
-    const servoIds = [1, 2, 3, 4, 5, 6];
-    
-    if (servoIds.length < JOINT_COUNT) {
-        console.error(`Error: Need ${JOINT_COUNT} servo IDs but only ${servoIds.length} provided`);
+    if (SERVO_IDS.length < JOINT_COUNT) {
+        console.error(`Error: Need ${JOINT_COUNT} servo IDs but only ${SERVO_IDS.length} provided`);
         console.error('Please configure more servo IDs in the servoIds array');
         process.exit(1);
     }
@@ -341,49 +437,14 @@ async function initializeServos() {
     
     // Create servo controllers, all sharing the same serial port
     for (let i = 0; i < JOINT_COUNT; i++) {
-        // Pass the shared SerialPort instance instead of the path
-        const servo = new RobotArm.ServoController(i + 1, sharedSerialPort, servoIds[i], SERIAL_BAUDRATE);
-        
-        try {
-            // This will set up the data handler but won't try to open the port
-            await servo.open();
-            
-            // Add servo to the list for data routing
-            allServoControllers.push(servo);
-            
-            // Add a delay between servo initializations to avoid simultaneous writes
-            if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 150));
-            }
-            
-            // First, try to ping the servo to verify communication
-            console.log(`Pinging servo ${i + 1} (ST3215 ID: ${servoIds[i]})...`);
-            const pingResult = await servo.ping();
-            if (!pingResult) {
-                console.log(`⚠️  Servo ${i + 1} (ID: ${servoIds[i]}) did not respond to ping - skipping`);
-                servos.push(null);
-                continue;
-            }
-            console.log(`✓ Servo ${i + 1} (ID: ${servoIds[i]}) responded to ping`);
-            
-            // Small delay after ping
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            // Apply hardware torque limit — caps max current draw even when blocked
-            await servo.setTorqueLimit(TORQUE_LIMIT_PERCENT);
-            console.log(`✓ Servo ${i + 1}: torque limit set to ${TORQUE_LIMIT_PERCENT}%`);
-
-            // NOTE: torque is NOT enabled at init - avoids power-sag when multiple
-            // servos hold position simultaneously.  Torque is enabled on first move.
-            servos.push(servo);
-            console.log(`Servo ${i + 1} initialized (ST3215 ID: ${servoIds[i]})`);
-        } catch (error) {
-            console.error(`Failed to initialize servo ${i + 1} (ST3215 ID: ${servoIds[i]}):`, error.message);
-            // Create a placeholder so the array stays aligned
-            servos.push(null);
+        if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 150));
         }
+
+        const servo = await tryInitializeServo(i, false);
+        servos.push(servo);
     }
-    
+
     console.log(`Initialized ${servos.filter(s => s !== null).length} of ${JOINT_COUNT} servos`);
 }
 
@@ -398,7 +459,11 @@ async function getAllServoStatus() {
     const startAll = Date.now();
 
     for (let i = 0; i < servos.length; i++) {
-        const servo = servos[i];
+        let servo = servos[i];
+
+        if (servo === null) {
+            servo = await tryReviveServoSlot(i);
+        }
 
         if (servo === null) {
             // Servo not available - push default status
@@ -430,6 +495,7 @@ async function getAllServoStatus() {
             });
         } catch (error) {
             console.error(`Error reading status from servo ${i + 1}:`, error.message);
+            servos[i] = null;
             statuses.push({
                 joint: i + 1,
                 available: false,
