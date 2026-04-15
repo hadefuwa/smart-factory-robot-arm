@@ -1331,6 +1331,8 @@ async function handleCommand(ws, data) {
                 ws.send(JSON.stringify({ type: 'error', message: failureMessage, failureReason: failureReason, solverMode: xyzIkDetails && xyzIkDetails.solverMode, appliedOrientation: xyzPose.orientation }));
                 break;
             }
+            // Build diagnostics for the response (orientation is best-effort, not a blocker)
+            const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
             // Send moveToAngle for each available joint (already inside queueCommand context)
             const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
             for (let ji = 0; ji < xyzAngles.length; ji++) {
