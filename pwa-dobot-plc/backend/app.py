@@ -1051,39 +1051,62 @@ def init_clients():
             height=detection_roi_config.get('height', 100)
         )
     # Initialize camera and keep it always active
+    def _camera_retry_thread():
+        “””Background thread: retries camera init, escalates to USB reset then reboot.”””
+        consecutive_failures = 0
+        usb_reset_done = False
+
+        while True:
+            time.sleep(5)
+            if camera_service is None:
+                continue
+            try:
+                cam_ok = camera_service.camera is not None and camera_service.camera.isOpened()
+                if not cam_ok:
+                    ok = camera_service.initialize_camera()
+                    if ok:
+                        logger.info(“Camera initialized successfully (retry after %d failures)”, consecutive_failures)
+                        consecutive_failures = 0
+                        usb_reset_done = False
+                        break  # Camera is up — stop retrying
+                    else:
+                        # Only escalate when the device node actually exists (camera physically connected).
+                        if _camera_device_present():
+                            consecutive_failures += 1
+                            logger.debug(“Camera init failed (attempt %d)”, consecutive_failures)
+
+                            # ~60 s of failures → try USB soft reset once
+                            if consecutive_failures == 12 and not usb_reset_done:
+                                logger.warning(
+                                    “Camera unresponsive for ~60 s — attempting USB soft reset”
+                                )
+                                usb_reset_done = True
+                                _usb_camera_reset()
+                                consecutive_failures = 0  # give fresh window after reset
+
+                            # ~120 s of failures after USB reset → reboot
+                            elif usb_reset_done and consecutive_failures >= 12:
+                                logger.error(
+                                    “Camera still unresponsive after USB reset — rebooting system”
+                                )
+                                time.sleep(2)
+                                subprocess.run(['sudo', 'reboot'], timeout=10)
+                        else:
+                            # Device node absent — camera simply not plugged in, keep waiting
+                            consecutive_failures = 0
+            except Exception:
+                pass
+
     try:
         success = camera_service.initialize_camera()
         if success:
-            logger.info("ðŸ“· Camera initialized and will stay always active")
+            logger.info(“Camera initialized and will stay always active”)
         else:
-            logger.warning("ðŸ“· Camera initialization failed - will retry automatically")
-            # Retry in background
-            def retry_camera_init():
-                while True:
-                    time.sleep(5)  # Retry every 5 seconds
-                    if camera_service is not None:
-                        try:
-                            if camera_service.camera is None or (camera_service.camera is not None and not camera_service.camera.isOpened()):
-                                success = camera_service.initialize_camera()
-                                if success:
-                                    logger.info("ðŸ“· Camera initialized successfully (retry)")
-                                    break
-                        except Exception:
-                            pass
-            threading.Thread(target=retry_camera_init, daemon=True).start()
+            logger.warning(“Camera initialization failed - will retry automatically”)
+            threading.Thread(target=_camera_retry_thread, daemon=True).start()
     except Exception as e:
-        logger.warning(f"Camera initialization failed (may not be connected): {e}")
-        # Retry in background
-        def retry_camera_init():
-            while True:
-                time.sleep(5)
-                if camera_service is not None:
-                    try:
-                        if camera_service.camera is None or (camera_service.camera is not None and not camera_service.camera.isOpened()):
-                            camera_service.initialize_camera()
-                    except Exception:
-                        pass
-        threading.Thread(target=retry_camera_init, daemon=True).start()
+        logger.warning(f”Camera initialization failed (may not be connected): {e}”)
+        threading.Thread(target=_camera_retry_thread, daemon=True).start()
 
     # YOLO model is now loaded in the separate vision-service process
     # No need to load it here - all YOLO calls go through vision service
@@ -2403,6 +2426,46 @@ def write_plc_fault_bit(defects_found: bool):
     except Exception as e:
         logger.debug(f"Error in write_plc_fault_bit: {e}")
         return {'written': False, 'reason': str(e)}
+
+def _usb_camera_reset():
+    """Soft-reset the USB camera by cycling its V4L2 device's USB authorized flag.
+
+    Returns True if a USB device was found and cycled, False otherwise.
+    Requires passwordless sudo (pi ALL=(ALL) NOPASSWD: ALL).
+    """
+    import glob
+    try:
+        for video_dev in sorted(glob.glob('/sys/class/video4linux/video*/device')):
+            real = os.path.realpath(video_dev)
+            # Walk up the sysfs path looking for the USB device (has idVendor + authorized)
+            path = real
+            for _ in range(8):
+                path = os.path.dirname(path)
+                auth = os.path.join(path, 'authorized')
+                if os.path.exists(auth) and os.path.exists(os.path.join(path, 'idVendor')):
+                    logger.warning("Camera USB reset: disabling USB device at %s", path)
+                    subprocess.run(
+                        ['sudo', 'sh', '-c', f'echo 0 > {auth}'],
+                        timeout=5, capture_output=True
+                    )
+                    time.sleep(2)
+                    logger.warning("Camera USB reset: re-enabling USB device at %s", path)
+                    subprocess.run(
+                        ['sudo', 'sh', '-c', f'echo 1 > {auth}'],
+                        timeout=5, capture_output=True
+                    )
+                    time.sleep(4)
+                    return True
+    except Exception as e:
+        logger.warning("USB camera reset error: %s", e)
+    return False
+
+
+def _camera_device_present():
+    """Return True if any V4L2 video capture device node exists on the system."""
+    import glob
+    return bool(glob.glob('/dev/video*'))
+
 
 def generate_frames():
     """Generator function for MJPEG streaming"""
