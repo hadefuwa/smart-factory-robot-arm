@@ -2101,6 +2101,53 @@
     let roiCurrentY = 0;
     let currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
 
+    /**
+     * Returns the actual rendered image rect within the <img> element when
+     * object-fit: contain is used. Accounts for letterbox / pillarbox padding.
+     * All values are in display pixels relative to the img element's top-left.
+     */
+    function getRenderedImageGeometry(imgElement) {
+      const naturalW = imgElement.naturalWidth || imgElement.width;
+      const naturalH = imgElement.naturalHeight || imgElement.height;
+      const displayW = imgElement.offsetWidth;
+      const displayH = imgElement.offsetHeight;
+
+      if (!naturalW || !naturalH || !displayW || !displayH) {
+        return { x: 0, y: 0, width: displayW, height: displayH };
+      }
+
+      const naturalAspect = naturalW / naturalH;
+      const displayAspect = displayW / displayH;
+
+      let renderedW, renderedH;
+      if (displayAspect > naturalAspect) {
+        // Pillarboxed: height fills, width has side padding
+        renderedH = displayH;
+        renderedW = renderedH * naturalAspect;
+      } else {
+        // Letterboxed: width fills, height has top/bottom padding
+        renderedW = displayW;
+        renderedH = renderedW / naturalAspect;
+      }
+
+      return {
+        x: (displayW - renderedW) / 2,
+        y: (displayH - renderedH) / 2,
+        width: renderedW,
+        height: renderedH,
+      };
+    }
+
+    /** Sync canvas internal resolution and CSS size to the current display size. */
+    function syncCanvasToDisplay(canvas, imgElement) {
+      const w = imgElement.offsetWidth;
+      const h = imgElement.offsetHeight;
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+    }
+
     async function loadDetectionRoi() {
       try {
         const response = await fetch(`${API_BASE}/api/vision/roi?t=${Date.now()}`, { cache: 'no-store' });
@@ -2129,10 +2176,7 @@
         return;
       }
 
-      roiOverlay.width = cameraFrame.width;
-      roiOverlay.height = cameraFrame.height;
-      roiOverlay.style.width = cameraFrame.offsetWidth + 'px';
-      roiOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      syncCanvasToDisplay(roiOverlay, cameraFrame);
       roiOverlay.style.display = 'block';
       roiOverlay.style.pointerEvents = 'auto';
 
@@ -2174,18 +2218,19 @@
       roiCurrentY = event.clientY - rect.top;
 
       const cameraFrame = document.getElementById('cameraFrame');
-      const canvasWidth = cameraFrame.width;
-      const canvasHeight = cameraFrame.height;
+      const geo = getRenderedImageGeometry(cameraFrame);
 
-      const x1 = Math.min(roiStartX, roiCurrentX);
-      const y1 = Math.min(roiStartY, roiCurrentY);
-      const x2 = Math.max(roiStartX, roiCurrentX);
-      const y2 = Math.max(roiStartY, roiCurrentY);
+      // Clamp draw coordinates to the actual image content area (ignore letterbox padding)
+      const x1 = Math.max(geo.x, Math.min(roiStartX, roiCurrentX));
+      const y1 = Math.max(geo.y, Math.min(roiStartY, roiCurrentY));
+      const x2 = Math.min(geo.x + geo.width, Math.max(roiStartX, roiCurrentX));
+      const y2 = Math.min(geo.y + geo.height, Math.max(roiStartY, roiCurrentY));
 
-      const xPercent = (x1 / canvasWidth) * 100;
-      const yPercent = (y1 / canvasHeight) * 100;
-      const widthPercent = ((x2 - x1) / canvasWidth) * 100;
-      const heightPercent = ((y2 - y1) / canvasHeight) * 100;
+      // Percentages relative to the actual rendered image area, not the element box
+      const xPercent = ((x1 - geo.x) / geo.width) * 100;
+      const yPercent = ((y1 - geo.y) / geo.height) * 100;
+      const widthPercent = ((x2 - x1) / geo.width) * 100;
+      const heightPercent = ((y2 - y1) / geo.height) * 100;
 
       // Allow very small ROI selections; only reject zero-size accidental clicks.
       if (widthPercent <= 0 || heightPercent <= 0) {
@@ -2270,19 +2315,18 @@
 
       if (cameraFrame.style.display === 'none') return;
 
-      roiOverlay.width = cameraFrame.width;
-      roiOverlay.height = cameraFrame.height;
-      roiOverlay.style.width = cameraFrame.offsetWidth + 'px';
-      roiOverlay.style.height = cameraFrame.offsetHeight + 'px';
+      syncCanvasToDisplay(roiOverlay, cameraFrame);
       roiOverlay.style.display = 'block';
 
       const ctx = roiOverlay.getContext('2d');
       ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
 
-      const roiX = (x / 100) * roiOverlay.width;
-      const roiY = (y / 100) * roiOverlay.height;
-      const roiWidth = (width / 100) * roiOverlay.width;
-      const roiHeight = (height / 100) * roiOverlay.height;
+      // Convert percentages back to display pixels, offset by the actual image area
+      const geo = getRenderedImageGeometry(cameraFrame);
+      const roiX = geo.x + (x / 100) * geo.width;
+      const roiY = geo.y + (y / 100) * geo.height;
+      const roiWidth = (width / 100) * geo.width;
+      const roiHeight = (height / 100) * geo.height;
 
       ctx.strokeStyle = '#00e5ff';
       ctx.lineWidth = 3;
