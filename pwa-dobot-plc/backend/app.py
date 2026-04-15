@@ -1,4 +1,4 @@
-"""
+﻿"""
 PWA Dobot-PLC Control Backend
 Flask API with WebSocket support for real-time PLC monitoring
 """
@@ -203,7 +203,7 @@ ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
 ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
 DEFAULT_TCP_DOWN_ORIENTATION = {'x': 0.0, 'y': 0.0, 'z': -1.0}
 
-# ── PLC Auto-Move Background Thread ──────────────────────────────────────────
+# â"€â"€ PLC Auto-Move Background Thread â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 # This mirrors the plcAutoTick() JavaScript function in robot-arm-v3-page.js.
 # It runs all the time so the arm responds to PLC commands even when nobody
 # has robot-arm.html open.
@@ -226,7 +226,7 @@ def plc_auto_backend_tick():
     Called every 300 ms by the background loop below.
     """
     # If the browser page is open (polled status within the last 3 seconds),
-    # let the JavaScript handle the PLC auto-move — nothing to do here.
+    # let the JavaScript handle the PLC auto-move â€" nothing to do here.
     seconds_since_ui_poll = time.time() - robot_arm_ui_last_poll_time
     if seconds_since_ui_poll < 3.0:
         return
@@ -267,7 +267,7 @@ def plc_auto_backend_tick():
     # Build a string key so we can tell when the target has changed.
     target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
     if plc_auto_backend_state['last_sent_target_key'] == target_key:
-        return  # Target unchanged — nothing to do.
+        return  # Target unchanged â€" nothing to do.
 
     # Send the move command.
     plc_auto_backend_state['move_in_flight'] = True
@@ -298,7 +298,7 @@ def plc_auto_backend_tick():
                     except Exception:
                         pass
                     logger.info(
-                        'PLC auto-move backend: moved to x=%s y=%s z=%s → %s',
+                        'PLC auto-move backend: moved to x=%s y=%s z=%s â†' %s',
                         x, y, z, response.get('type', '?')
                     )
                 except Exception as e:
@@ -324,7 +324,7 @@ def plc_auto_backend_loop():
             plc_auto_backend_tick()
         except Exception as e:
             logger.warning('PLC auto-move backend loop error: %s', e)
-        time.sleep(0.3)  # 300 ms — same interval as the JavaScript version
+        time.sleep(0.3)  # 300 ms â€" same interval as the JavaScript version
 
 
 def start_plc_auto_move_thread():
@@ -1052,7 +1052,7 @@ def init_clients():
         )
     # Initialize camera and keep it always active
     def _camera_retry_thread():
-        “””Background thread: retries camera init, escalates to USB reset then reboot.”””
+        â€œâ€â€Background thread: retries camera init, escalates to USB reset then reboot.â€â€â€
         consecutive_failures = 0
         usb_reset_done = False
 
@@ -1065,34 +1065,34 @@ def init_clients():
                 if not cam_ok:
                     ok = camera_service.initialize_camera()
                     if ok:
-                        logger.info(“Camera initialized successfully (retry after %d failures)”, consecutive_failures)
+                        logger.info(â€œCamera initialized successfully (retry after %d failures)â€, consecutive_failures)
                         consecutive_failures = 0
                         usb_reset_done = False
-                        break  # Camera is up — stop retrying
+                        break  # Camera is up â€" stop retrying
                     else:
                         # Only escalate when the device node actually exists (camera physically connected).
                         if _camera_device_present():
                             consecutive_failures += 1
-                            logger.debug(“Camera init failed (attempt %d)”, consecutive_failures)
+                            logger.debug(â€œCamera init failed (attempt %d)â€, consecutive_failures)
 
-                            # ~60 s of failures → try USB soft reset once
+                            # ~60 s of failures â†' try USB soft reset once
                             if consecutive_failures == 12 and not usb_reset_done:
                                 logger.warning(
-                                    “Camera unresponsive for ~60 s — attempting USB soft reset”
+                                    â€œCamera unresponsive for ~60 s â€" attempting USB soft resetâ€
                                 )
                                 usb_reset_done = True
                                 _usb_camera_reset()
                                 consecutive_failures = 0  # give fresh window after reset
 
-                            # ~120 s of failures after USB reset → reboot
+                            # ~120 s of failures after USB reset â†' reboot
                             elif usb_reset_done and consecutive_failures >= 12:
                                 logger.error(
-                                    “Camera still unresponsive after USB reset — rebooting system”
+                                    â€œCamera still unresponsive after USB reset â€" rebooting systemâ€
                                 )
                                 time.sleep(2)
                                 subprocess.run(['sudo', 'reboot'], timeout=10)
                         else:
-                            # Device node absent — camera simply not plugged in, keep waiting
+                            # Device node absent â€" camera simply not plugged in, keep waiting
                             consecutive_failures = 0
             except Exception:
                 pass
@@ -1100,12 +1100,12 @@ def init_clients():
     try:
         success = camera_service.initialize_camera()
         if success:
-            logger.info(“Camera initialized and will stay always active”)
+            logger.info(â€œCamera initialized and will stay always activeâ€)
         else:
-            logger.warning(“Camera initialization failed - will retry automatically”)
+            logger.warning(â€œCamera initialization failed - will retry automaticallyâ€)
             threading.Thread(target=_camera_retry_thread, daemon=True).start()
     except Exception as e:
-        logger.warning(f”Camera initialization failed (may not be connected): {e}”)
+        logger.warning(fâ€Camera initialization failed (may not be connected): {e}â€)
         threading.Thread(target=_camera_retry_thread, daemon=True).start()
 
     # YOLO model is now loaded in the separate vision-service process
@@ -1114,7 +1114,7 @@ def init_clients():
 
     # Initialize NEW PLC worker (now that camera_service is ready)
     try:
-        logger.info("🔧 Initializing NEW PLC worker architecture...")
+        logger.info("ðŸ"§ Initializing NEW PLC worker architecture...")
         plc_worker = init_plc_worker(
             plc_ip=plc_config['ip'],
             camera_service=camera_service,
@@ -1136,7 +1136,7 @@ def init_clients():
         start_plc_auto_move_thread()
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
-        logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
+        logger.info("âœ… NEW PLC worker started (100ms cycle, cache-based reads)")
     except Exception as e:
         logger.error(f"Failed to initialize PLC worker: {e}")
         plc_worker = None
@@ -1670,7 +1670,7 @@ def robot_arm_status():
 @app.route('/api/robot-arm/command', methods=['POST'])
 def robot_arm_command():
     """
-    Generic passthrough — send any command payload to the Pi WebSocket service.
+    Generic passthrough â€" send any command payload to the Pi WebSocket service.
     Body: { "command": "...", ...params, "_recvTimeout": 30 }
     Optional _recvTimeout overrides the default 5s recv wait.
     """
@@ -1737,7 +1737,7 @@ def robot_arm_move_xyz():
                 ws.settimeout(3)
             resp_type = response.get('type', '')
             success = resp_type in ('success', 'ikResult', 'moving')
-            # 'stall' is a handled safety event — not an IK failure
+            # 'stall' is a handled safety event â€" not an IK failure
             is_stall = resp_type == 'stall'
             failure_reason = str(response.get('failureReason', '') or '')
             ik_failed = not success and not is_stall and (
@@ -1858,12 +1858,12 @@ def dobot_debug():
 @app.route('/api/dobot/connect', methods=['POST'])
 def dobot_connect():
     """Connect to Dobot"""
-    logger.info("ðŸ”Œ Manual Dobot connection requested")
+    logger.info("Ã°Å¸â€Å' Manual Dobot connection requested")
     success = dobot_client.connect()
     if success:
-        logger.info("âœ… Manual Dobot connection successful")
+        logger.info("Ã¢Å"â€¦ Manual Dobot connection successful")
     else:
-        logger.error(f"âŒ Manual Dobot connection failed: {dobot_client.last_error}")
+        logger.error(f"Ã¢ÂÅ' Manual Dobot connection failed: {dobot_client.last_error}")
     return jsonify({
         'success': success,
         'connected': dobot_client.connected,
@@ -1876,9 +1876,9 @@ def dobot_home():
     if not dobot_client.connected:
         return jsonify({'error': 'Dobot not connected'}), 503
 
-    logger.info("ðŸ  Home command received from web interface")
+    logger.info("Ã°Å¸ÂÂ  Home command received from web interface")
     success = dobot_client.home(wait=True)  # Wait=True for immediate execution
-    logger.info(f"âœ… Home command result: {success}")
+    logger.info(f"Ã¢Å"â€¦ Home command result: {success}")
     return jsonify({'success': success})
 
 @app.route('/api/dobot/move', methods=['POST'])
@@ -1893,7 +1893,7 @@ def dobot_move():
 
     # Get position before move
     pos_before = dobot_client.get_pose()
-    logger.info(f"â–¶ï¸ Move command: ({data['x']}, {data['y']}, {data['z']}, {data.get('r', 0)}) - Current: ({pos_before['x']:.1f}, {pos_before['y']:.1f}, {pos_before['z']:.1f})")
+    logger.info(f"Ã¢â€"Â¶Ã¯Â¸Â Move command: ({data['x']}, {data['y']}, {data['z']}, {data.get('r', 0)}) - Current: ({pos_before['x']:.1f}, {pos_before['y']:.1f}, {pos_before['z']:.1f})")
 
     success = dobot_client.move_to(
         data['x'],
@@ -1914,14 +1914,14 @@ def dobot_move():
                    (pos_after['z'] - pos_before['z'])**2)**0.5
 
         if distance > 1.0:  # Moved more than 1mm
-            logger.info(f"âœ… ACTUAL MOVEMENT: Moved {distance:.1f}mm to ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
+            logger.info(f"Ã¢Å"â€¦ ACTUAL MOVEMENT: Moved {distance:.1f}mm to ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
             return jsonify({'success': True, 'executed': True, 'distance_moved': round(distance, 1)})
         else:
-            logger.error(f"âš ï¸ ROBOT DID NOT MOVE! Distance: {distance:.1f}mm - Position: ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
+            logger.error(f"Ã¢Å¡Â Ã¯Â¸Â ROBOT DID NOT MOVE! Distance: {distance:.1f}mm - Position: ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
             return jsonify({'success': False, 'error': f'Robot did not move (only {distance:.1f}mm)', 'distance_moved': round(distance, 1)}), 500
     else:
         error_msg = dobot_client.last_error or 'Movement failed'
-        logger.error(f"âŒ Move command failed: {error_msg}")
+        logger.error(f"Ã¢ÂÅ' Move command failed: {error_msg}")
         return jsonify({'success': False, 'error': error_msg}), 500
 
 @app.route('/api/dobot/pose', methods=['GET'])
@@ -1943,11 +1943,11 @@ def dobot_suction():
     enable = data.get('enable', False)
     
     try:
-        logger.info(f"ðŸ’¨ Suction cup: {'ON' if enable else 'OFF'}")
+        logger.info(f"Ã°Å¸â€™Â¨ Suction cup: {'ON' if enable else 'OFF'}")
         dobot_client.set_suction(enable)
         return jsonify({'success': True, 'enabled': enable})
     except Exception as e:
-        logger.error(f"âŒ Suction control failed: {e}")
+        logger.error(f"Ã¢ÂÅ' Suction control failed: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/dobot/gripper', methods=['POST'])
@@ -1962,23 +1962,23 @@ def dobot_gripper():
     try:
         # Check if gripper control method exists
         if hasattr(dobot_client, 'set_gripper'):
-            logger.info(f"âœ‹ Gripper: {'OPEN' if open_gripper else 'CLOSE'}")
+            logger.info(f"Ã¢Å"â€¹ Gripper: {'OPEN' if open_gripper else 'CLOSE'}")
             dobot_client.set_gripper(open_gripper)
             return jsonify({'success': True, 'open': open_gripper})
         else:
-            logger.warning("âš ï¸ Gripper not available on this Dobot model")
+            logger.warning("Ã¢Å¡Â Ã¯Â¸Â Gripper not available on this Dobot model")
             return jsonify({
                 'success': False,
                 'message': 'Gripper not available. This Dobot model only has suction cup.'
             })
     except Exception as e:
-        logger.error(f"âŒ Gripper control failed: {e}")
+        logger.error(f"Ã¢ÂÅ' Gripper control failed: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/emergency-stop', methods=['POST'])
 def emergency_stop():
     """Emergency stop - stop both Dobot and signal PLC"""
-    logger.error("ðŸ›‘ EMERGENCY STOP TRIGGERED")
+    logger.error("Ã°Å¸â€ºâ€˜ EMERGENCY STOP TRIGGERED")
 
     results = {}
 
@@ -2019,7 +2019,7 @@ def dobot_test():
 
     try:
         # Step 1: Get current position
-        logger.info("ðŸ§ª Test Step 1: Getting current position...")
+        logger.info("Ã°Å¸Â§Âª Test Step 1: Getting current position...")
         pos = dobot_client.get_pose()
         results.append({
             'step': 1,
@@ -2030,7 +2030,7 @@ def dobot_test():
         time.sleep(0.5)
 
         # Step 2: Move to home position
-        logger.info("ðŸ§ª Test Step 2: Moving to HOME position...")
+        logger.info("Ã°Å¸Â§Âª Test Step 2: Moving to HOME position...")
         if dobot_client.home(wait=True):
             results.append({
                 'step': 2,
@@ -2044,7 +2044,7 @@ def dobot_test():
         time.sleep(1)
 
         # Step 3: Verify home position
-        logger.info("ðŸ§ª Test Step 3: Verifying position...")
+        logger.info("Ã°Å¸Â§Âª Test Step 3: Verifying position...")
         pos = dobot_client.get_pose()
         results.append({
             'step': 3,
@@ -2055,7 +2055,7 @@ def dobot_test():
         time.sleep(0.5)
 
         # Step 4: Small movement test (20mm forward)
-        logger.info("ðŸ§ª Test Step 4: Small movement test...")
+        logger.info("Ã°Å¸Â§Âª Test Step 4: Small movement test...")
         home = dobot_client.HOME_POSITION
         if dobot_client.move_to(home['x'] + 20, home['y'], home['z'], home['r'], wait=True):
             results.append({
@@ -2067,7 +2067,7 @@ def dobot_test():
             time.sleep(1)
             
             # Move back
-            logger.info("ðŸ§ª Test Step 4b: Moving back...")
+            logger.info("Ã°Å¸Â§Âª Test Step 4b: Moving back...")
             dobot_client.home(wait=True)
             time.sleep(0.5)
         else:
@@ -2075,7 +2075,7 @@ def dobot_test():
             success = False
 
         # Step 5: Suction test
-        logger.info("ðŸ§ª Test Step 5: Testing suction cup...")
+        logger.info("Ã°Å¸Â§Âª Test Step 5: Testing suction cup...")
         try:
             dobot_client.set_suction(True)
             time.sleep(2)
@@ -2090,7 +2090,7 @@ def dobot_test():
             results.append({'step': 5, 'name': 'Suction Cup Test', 'success': False, 'message': str(e)})
             success = False
 
-        logger.info("âœ… Dobot test sequence completed!")
+        logger.info("Ã¢Å"â€¦ Dobot test sequence completed!")
         return jsonify({
             'success': success,
             'steps': results,
@@ -2098,7 +2098,7 @@ def dobot_test():
         })
 
     except Exception as e:
-        logger.error(f"âŒ Test failed: {e}")
+        logger.error(f"Ã¢ÂÅ' Test failed: {e}")
         return jsonify({
             'success': False,
             'steps': results,
@@ -2209,7 +2209,7 @@ def update_settings():
         save_config(current_config)
         apply_runtime_plc_config(current_config)
         
-        logger.info("âš™ï¸ Settings updated - restart required to apply changes")
+        logger.info("Ã¢Å¡â„¢Ã¯Â¸Â Settings updated - restart required to apply changes")
         return jsonify({
             'success': True,
             'message': 'Settings saved. Restart server to apply changes.'
@@ -2222,14 +2222,14 @@ def update_settings():
 def restart_server():
     """Restart the server"""
     try:
-        logger.info("ðŸ”„ Server restart requested")
+        logger.info("Ã°Å¸â€â€ž Server restart requested")
         
         # Try PM2 restart first (if running under PM2)
         try:
             result = subprocess.run(['pm2', 'restart', 'pwa-dobot-plc'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                logger.info("âœ… PM2 restart successful")
+                logger.info("Ã¢Å"â€¦ PM2 restart successful")
                 return jsonify({
                     'success': True,
                     'message': 'Server restarting via PM2...'
@@ -2242,7 +2242,7 @@ def restart_server():
             result = subprocess.run(['sudo', 'systemctl', 'restart', 'pwa-dobot-plc'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                logger.info("âœ… Systemctl restart successful")
+                logger.info("Ã¢Å"â€¦ Systemctl restart successful")
                 return jsonify({
                     'success': True,
                     'message': 'Server restarting via systemctl...'
@@ -2251,7 +2251,7 @@ def restart_server():
             pass
         
         # Last resort: exit the process (will be restarted by supervisor/PM2)
-        logger.info("âš ï¸ No restart method available, exiting process")
+        logger.info("Ã¢Å¡Â Ã¯Â¸Â No restart method available, exiting process")
         threading.Timer(2.0, lambda: sys.exit(0)).start()
         return jsonify({
             'success': True,
@@ -2317,7 +2317,7 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
             'running': True,
             'message': 'PLC start bit is TRUE - running 1-sample analysis (NEW WORKER).'
         })
-        logger.info("🔄 Vision cycle (NEW): Starting processing")
+        logger.info("ðŸ"„ Vision cycle (NEW): Starting processing")
 
         # Get persisted params
         persisted_params = get_saved_object_params()
@@ -2351,7 +2351,7 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
         steel = (detected_color == 'steel')
         aluminum = (detected_color == 'aluminum')
 
-        logger.info(f"🔍 Detection: {detected_color}, code={color_code}, conf={confidence}%")
+        logger.info(f"ðŸ" Detection: {detected_color}, code={color_code}, conf={confidence}%")
 
         # Queue results via NEW worker helper (handles all PLC writes)
         worker.queue_vision_result(
@@ -2362,7 +2362,7 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
             aluminum=aluminum
         )
 
-        logger.info(f"✅ Vision cycle (NEW): Completed - {detected_color or 'none'} ({confidence}%)")
+        logger.info(f"âœ… Vision cycle (NEW): Completed - {detected_color or 'none'} ({confidence}%)")
 
         latest_plc_cycle_result.update({
             'timestamp': time.time(),
@@ -3185,7 +3185,7 @@ def vision_analyze():
             
             if central_counter:
                 # Only process the most central counter
-                logger.info(f"ðŸŽ¯ Processing most central counter (out of {len(detected_objects)} detected)")
+                logger.info(f"Ã°Å¸Å½Â¯ Processing most central counter (out of {len(detected_objects)} detected)")
                 
                 # Load existing counter positions (from JSON file and saved images)
                 existing_counters = load_existing_counter_positions()
@@ -3459,7 +3459,7 @@ def vision_detect():
 @app.route('/api/vision/process-manual', methods=['POST'])
 def vision_process_manual():
     """Manually trigger vision processing"""
-    logger.info("ðŸ“¸ Manual vision processing triggered via API")
+    logger.info("Ã°Å¸â€œÂ¸ Manual vision processing triggered via API")
 
     if plc_client is None or not hasattr(plc_client, 'worker') or plc_client.worker is None:
         return jsonify({'success': False, 'error': 'PLC worker not initialized'}), 503
@@ -3492,7 +3492,7 @@ def test_color_voting():
         min_area = data.get('min_area', persisted_params['min_area'])
         max_area = data.get('max_area', persisted_params['max_area'])
 
-        logger.info(f"ðŸ§ª Testing color voting with {num_samples} samples")
+        logger.info(f"Ã°Å¸Â§Âª Testing color voting with {num_samples} samples")
 
         # Run majority voting detection
         result = camera_service.detect_cube_color_with_voting(
@@ -3916,7 +3916,7 @@ def write_robot_positions():
     from snap7.util import set_int as snap7_set_int
     data = request.get_json(silent=True) or {}
 
-    # Map: request key → DB123 tag name
+    # Map: request key â†' DB123 tag name
     FIELD_MAP = {
         'pickup_x':      'pickup_location_x',
         'pickup_y':      'pickup_location_y',
@@ -3981,7 +3981,7 @@ def write_robot_positions():
         if req_key not in data:
             continue
         if req_key in blocked_keys:
-            continue  # skip — IK rejected this group
+            continue  # skip â€" IK rejected this group
         try:
             value = int(data[req_key])
             tag = worker.main_db_tags.get(tag_name)
@@ -4468,7 +4468,7 @@ _IO_LINK_HISTORY_MAX = 120
 
 
 def _parse_supervision_number(val, default=0):
-    """Parse supervision value to number. E.g. '251mA'->251, '23758mV'->23.758, '39Â°C'->39"""
+    """Parse supervision value to number. E.g. '251mA'->251, '23758mV'->23.758, '39Ã‚Â°C'->39"""
     if val is None or val == '':
         return default
     s = str(val).strip()
@@ -4477,7 +4477,7 @@ def _parse_supervision_number(val, default=0):
         num = float(m.group(1))
         if 'mV' in s.lower():
             return round(num / 1000, 2)
-        if 'mA' in s.lower() or 'Â°c' in s.lower() or 'c' in s.lower():
+        if 'mA' in s.lower() or 'Ã‚Â°c' in s.lower() or 'c' in s.lower():
             return num
         return num
     try:
@@ -5088,24 +5088,24 @@ if __name__ == '__main__':
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
         plc_ip = plc_client.ip if hasattr(plc_client, 'ip') else 'unknown'
-        logger.info(f"ðŸ”Œ Attempting to connect to PLC at {plc_ip}...")
+        logger.info(f"Ã°Å¸â€Å' Attempting to connect to PLC at {plc_ip}...")
         plc_connected = plc_client.connect()
         if plc_connected:
-            logger.info(f"âœ… PLC connected successfully to {plc_ip}")
+            logger.info(f"Ã¢Å"â€¦ PLC connected successfully to {plc_ip}")
         else:
-            logger.warning(f"âš ï¸ PLC connection failed: {plc_client.last_error}")
-            logger.info("ðŸ’¡ PLC will retry connection automatically, or use /api/plc/connect endpoint")
+            logger.warning(f"Ã¢Å¡Â Ã¯Â¸Â PLC connection failed: {plc_client.last_error}")
+            logger.info("Ã°Å¸â€™Â¡ PLC will retry connection automatically, or use /api/plc/connect endpoint")
     else:
         logger.info("PLC client not initialized - PLC features disabled")
 
     # Auto-connect to Dobot
-    logger.info("ðŸ¤– Attempting to connect to Dobot robot...")
+    logger.info("Ã°Å¸Â¤â€" Attempting to connect to Dobot robot...")
     dobot_connected = dobot_client.connect()
     if dobot_connected:
-        logger.info("âœ… Dobot connected successfully")
+        logger.info("Ã¢Å"â€¦ Dobot connected successfully")
     else:
-        logger.error(f"âŒ Dobot connection failed: {dobot_client.last_error}")
-        logger.error("ðŸ’¡ Check the debug logs above for detailed troubleshooting steps")
+        logger.error(f"Ã¢ÂÅ' Dobot connection failed: {dobot_client.last_error}")
+        logger.error("Ã°Å¸â€™Â¡ Check the debug logs above for detailed troubleshooting steps")
 
 
     # Start server
@@ -5164,7 +5164,7 @@ if __name__ == '__main__':
     if os.path.exists(cert_path) and os.path.exists(key_path):
         # Werkzeug run_simple expects ssl_context as (cert_path, key_path) tuple
         run_kwargs['ssl_context'] = (cert_path, key_path)
-        logger.info(f"ðŸ”’ HTTPS enabled (cert: {cert_path})")
+        logger.info(f"Ã°Å¸â€â€™ HTTPS enabled (cert: {cert_path})")
         logger.info(f"   Camera stream: https://<pi-ip>:{port}/api/camera/stream")
     else:
         logger.info("HTTP only (no SSL certs - run deploy/generate_ssl_cert.sh for HTTPS)")
