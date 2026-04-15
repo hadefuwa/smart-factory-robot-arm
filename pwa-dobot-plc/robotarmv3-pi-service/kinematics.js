@@ -738,20 +738,19 @@ class RobotKinematics {
             }
 
             if (hasOrientationTarget) {
-                console.log(
-                    'IK orientation summary: desiredTCP=',
-                    desiredToolZ,
-                    ' finalTCP=',
-                    finalToolZ,
-                    ' angle error~',
-                    orientationErrorDeg.toFixed(1),
-                    'deg'
-                );
                 if (orientationErrorDeg > orientationToleranceDeg) {
-                    this.lastInverseKinematicsResult.success = false;
-                    this.lastInverseKinematicsResult.failureReason = 'orientation_constrained_unreachable';
-                    this.lastInverseKinematicsResult.message = 'Target position is reachable, but not while keeping the TCP tool axis pointed down';
-                    return null;
+                    // Best-effort: orientation couldn't be fully satisfied but position is good.
+                    // Return the angles anyway so the move proceeds; log a warning.
+                    console.warn(
+                        'IK orientation best-effort: desiredTCP=', JSON.stringify(desiredToolZ),
+                        ' finalTCP=', JSON.stringify(finalToolZ),
+                        ' angle error~', orientationErrorDeg.toFixed(1), 'deg (tolerance', orientationToleranceDeg, 'deg) — proceeding anyway'
+                    );
+                    this.lastInverseKinematicsResult.orientationWarning = true;
+                } else {
+                    console.log(
+                        'IK orientation OK: angle error~', orientationErrorDeg.toFixed(1), 'deg'
+                    );
                 }
             }
         } catch (e) {

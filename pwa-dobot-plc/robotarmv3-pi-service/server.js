@@ -1331,21 +1331,6 @@ async function handleCommand(ws, data) {
                 ws.send(JSON.stringify({ type: 'error', message: failureMessage, failureReason: failureReason, solverMode: xyzIkDetails && xyzIkDetails.solverMode, appliedOrientation: xyzPose.orientation }));
                 break;
             }
-            const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
-            if (xyzDiagnostics.orientationErrorDeg > xyzDiagnostics.orientationToleranceDeg) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: 'moveToXYZ: reachable position but not while keeping the TCP pointed down',
-                    failureReason: 'orientation_constrained_unreachable',
-                    solverMode: xyzDiagnostics.solverMode,
-                    appliedOrientation: xyzDiagnostics.appliedOrientation,
-                    tcpDirection: xyzDiagnostics.tcpDirection,
-                    positionErrorMm: xyzDiagnostics.positionErrorMm,
-                    orientationErrorDeg: xyzDiagnostics.orientationErrorDeg,
-                    tcpConfig: xyzDiagnostics.tcpConfig
-                }));
-                break;
-            }
             // Send moveToAngle for each available joint (already inside queueCommand context)
             const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
             for (let ji = 0; ji < xyzAngles.length; ji++) {
@@ -1513,30 +1498,17 @@ async function handleCommand(ws, data) {
                 }));
             } else {
                 const ikDiagnostics = buildIkDiagnostics(targetPose, angles, ikAvailableJointCount);
-                if (ikDiagnostics.orientationErrorDeg > ikDiagnostics.orientationToleranceDeg) {
-                    ws.send(JSON.stringify({
-                        type: 'error',
-                        message: 'inverseKinematics: reachable position but not while keeping the TCP pointed down',
-                        failureReason: 'orientation_constrained_unreachable',
-                        solverMode: ikDiagnostics.solverMode,
-                        appliedOrientation: ikDiagnostics.appliedOrientation,
-                        tcpDirection: ikDiagnostics.tcpDirection,
-                        positionErrorMm: ikDiagnostics.positionErrorMm,
-                        orientationErrorDeg: ikDiagnostics.orientationErrorDeg,
-                        tcpConfig: ikDiagnostics.tcpConfig
-                    }));
-                } else {
-                    ws.send(JSON.stringify({
-                        type: 'ikResult',
-                        angles,
-                        appliedOrientation: ikDiagnostics.appliedOrientation,
-                        tcpDirection: ikDiagnostics.tcpDirection,
-                        positionErrorMm: ikDiagnostics.positionErrorMm,
-                        orientationErrorDeg: ikDiagnostics.orientationErrorDeg,
-                        solverMode: ikDiagnostics.solverMode,
-                        tcpConfig: ikDiagnostics.tcpConfig
-                    }));
-                }
+                ws.send(JSON.stringify({
+                    type: 'ikResult',
+                    angles,
+                    appliedOrientation: ikDiagnostics.appliedOrientation,
+                    tcpDirection: ikDiagnostics.tcpDirection,
+                    positionErrorMm: ikDiagnostics.positionErrorMm,
+                    orientationErrorDeg: ikDiagnostics.orientationErrorDeg,
+                    orientationWarning: ikDiagnostics.orientationErrorDeg > ikDiagnostics.orientationToleranceDeg,
+                    solverMode: ikDiagnostics.solverMode,
+                    tcpConfig: ikDiagnostics.tcpConfig
+                }));
             }
             break;
         }
