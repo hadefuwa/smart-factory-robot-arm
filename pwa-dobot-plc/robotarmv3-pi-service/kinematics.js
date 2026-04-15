@@ -730,6 +730,13 @@ class RobotKinematics {
                 tcpConfig: tcpConfig
             };
             if (finalError > 10.0) {
+                // Warm-start seed (current servo positions) led to a local minimum.
+                // Retry once from a clean all-zeros seed before giving up — this handles
+                // cases where a stall left the arm at a random position that confused the solver.
+                if (!options || !options._retried) {
+                    console.warn('IK: warm-start convergence failed (' + finalError.toFixed(1) + 'mm). Retrying from zero seed.');
+                    return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _retried: true }));
+                }
                 console.warn('Inverse kinematics could not reach target within 10mm. Final error =', finalError.toFixed(2), 'mm');
                 this.lastInverseKinematicsResult.success = false;
                 this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
