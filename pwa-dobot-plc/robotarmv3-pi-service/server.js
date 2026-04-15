@@ -24,8 +24,8 @@ const { RobotKinematics } = require('./kinematics');
 
 // Configuration
 const PORT = parseInt(process.env.ROBOT_ARM_PORT || "8080");
-const JOINT_COUNT = 6; // Number of robot arm joints (ST3215 servos)
-const SERVO_IDS = [1, 2, 3, 4, 5, 6];
+const JOINT_COUNT = 5; // Number of robot arm joints (ST3215 servos)
+const SERVO_IDS = [1, 2, 3, 4, 5];
 const SERIAL_PORT = '/dev/ttyACM0'; // ST3215 driver board (CDC-ACM device)
 const SERIAL_BAUDRATE = 1000000; // ST3215 bus baud rate for this Pi setup
 
