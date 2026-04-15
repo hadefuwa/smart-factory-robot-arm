@@ -1858,7 +1858,7 @@ def dobot_debug():
 @app.route('/api/dobot/connect', methods=['POST'])
 def dobot_connect():
     """Connect to Dobot"""
-    logger.info("ðŸ"Œ Manual Dobot connection requested")
+    logger.info("ðŸ”Œ Manual Dobot connection requested")
     success = dobot_client.connect()
     if success:
         logger.info("âœ… Manual Dobot connection successful")
@@ -2222,7 +2222,7 @@ def update_settings():
 def restart_server():
     """Restart the server"""
     try:
-        logger.info("ðŸ"„ Server restart requested")
+        logger.info("ðŸ”„ Server restart requested")
         
         # Try PM2 restart first (if running under PM2)
         try:
@@ -3459,7 +3459,7 @@ def vision_detect():
 @app.route('/api/vision/process-manual', methods=['POST'])
 def vision_process_manual():
     """Manually trigger vision processing"""
-    logger.info("ðŸ"¸ Manual vision processing triggered via API")
+    logger.info("ðŸ“¸ Manual vision processing triggered via API")
 
     if plc_client is None or not hasattr(plc_client, 'worker') or plc_client.worker is None:
         return jsonify({'success': False, 'error': 'PLC worker not initialized'}), 503
@@ -5088,7 +5088,7 @@ if __name__ == '__main__':
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
         plc_ip = plc_client.ip if hasattr(plc_client, 'ip') else 'unknown'
-        logger.info(f"ðŸ"Œ Attempting to connect to PLC at {plc_ip}...")
+        logger.info(f"ðŸ”Œ Attempting to connect to PLC at {plc_ip}...")
         plc_connected = plc_client.connect()
         if plc_connected:
             logger.info(f"âœ… PLC connected successfully to {plc_ip}")
@@ -5164,7 +5164,7 @@ if __name__ == '__main__':
     if os.path.exists(cert_path) and os.path.exists(key_path):
         # Werkzeug run_simple expects ssl_context as (cert_path, key_path) tuple
         run_kwargs['ssl_context'] = (cert_path, key_path)
-        logger.info(f"ðŸ"’ HTTPS enabled (cert: {cert_path})")
+        logger.info(f"ðŸ”’ HTTPS enabled (cert: {cert_path})")
         logger.info(f"   Camera stream: https://<pi-ip>:{port}/api/camera/stream")
     else:
         logger.info("HTTP only (no SSL certs - run deploy/generate_ssl_cert.sh for HTTPS)")
