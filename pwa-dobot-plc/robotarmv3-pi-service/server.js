@@ -44,6 +44,11 @@ let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
 let STALL_POLL_MS    = 200;  // how often to sample positions during a move
 let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
 let STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+
+// Serial bus watchdog: if ALL servos fail for this many consecutive getStatus calls,
+// exit so systemd (Restart=always) can restart the process and reinitialise the serial port.
+const ALL_FAIL_EXIT_THRESHOLD = 10;
+let consecutiveAllFailCount = 0;
 const DEFAULT_TCP_DOWN_ORIENTATION = { x: 0, y: 0, z: -1 };
 const FIVE_JOINT_ORIENTATION_TOLERANCE_DEG = 12.0;
 const SIX_JOINT_ORIENTATION_TOLERANCE_DEG = 8.0;
@@ -713,6 +718,20 @@ async function handleCommand(ws, data) {
         case 'getStatus': {
             // Send status of all servos, plus current XYZ position from FK
             const statuses = await getAllServoStatus();
+
+            // Serial bus watchdog: if the bus gets stuck, all servos go unavailable.
+            // After threshold consecutive all-fail polls, exit so systemd restarts cleanly.
+            const anyAvailable = statuses.some(s => s.available);
+            if (!anyAvailable) {
+                consecutiveAllFailCount++;
+                if (consecutiveAllFailCount >= ALL_FAIL_EXIT_THRESHOLD) {
+                    console.error(`[WATCHDOG] All servos unavailable for ${consecutiveAllFailCount} consecutive polls — exiting for systemd restart`);
+                    process.exit(1);
+                }
+            } else {
+                consecutiveAllFailCount = 0;
+            }
+
             let currentXYZ = null;
             if (robotKinematics.isConfigured()) {
                 try {
