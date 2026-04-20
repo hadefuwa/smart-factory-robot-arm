@@ -76,32 +76,69 @@
     { key: 'target_z',              label: 'Target Z',        type: 'int',  unit: 'mm', group: 'PLC Commands' }
   ];
 
+  // ── Comms log ─────────────────────────────────────────────────────────────
+  var COMMS_LOG_MAX = 500;
+  var commsEntries = [];
+  var commsSeq = 0;
+  var commsFilter = 'all';   // 'all' | 'plc' | 'robot' | 'cmd' | 'err'
+  var commsHidePolls = false;
+
   // ── helpers ──────────────────────────────────────────────────────────────
 
   function el(id) { return document.getElementById(id); }
 
   async function apiRequest(url, options) {
-    var response = await fetch(url, options || {});
-    var rawText = await response.text();
-    var data = null;
+    var t0 = Date.now();
+    var method = (options && options.method) || 'GET';
+    var reqBody = null;
+    try { if (options && options.body) reqBody = JSON.parse(options.body); } catch (_) {}
+
+    var entry = { seq: ++commsSeq, ts: new Date(), method: method, url: url, reqBody: reqBody, status: null, ok: null, latencyMs: null, resBody: null, error: null };
+
+    var response, rawText, data;
     try {
-      data = rawText ? JSON.parse(rawText) : {};
-    } catch (_) {
-      var snippet = (rawText || '').trim().slice(0, 120);
+      response = await fetch(url, options || {});
+      rawText = await response.text();
+      entry.status = response.status;
+      entry.latencyMs = Date.now() - t0;
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (_) {
+        var snippet = (rawText || '').trim().slice(0, 200);
+        entry.ok = false;
+        entry.error = !response.ok
+          ? ('HTTP ' + response.status + ': ' + (snippet || 'non-JSON response'))
+          : ('Invalid JSON: ' + (snippet || 'empty response'));
+        entry.resBody = { _raw: snippet };
+        pushCommsEntry(entry);
+        if (!response.ok) throw new Error('HTTP ' + response.status + ' from ' + url + ': ' + (snippet || 'non-JSON response'));
+        throw new Error('Invalid JSON response from ' + url + ': ' + (snippet || 'empty response'));
+      }
       if (!response.ok) {
-        throw new Error('HTTP ' + response.status + ' from ' + url + ': ' + (snippet || 'non-JSON response'));
+        var msg = 'Request failed';
+        if (data) {
+          if (data.error) msg = data.error;
+          else if (data.bridge_response && data.bridge_response.message) msg = data.bridge_response.message;
+        }
+        entry.ok = false;
+        entry.error = msg;
+        entry.resBody = data;
+        pushCommsEntry(entry);
+        throw new Error(msg);
       }
-      throw new Error('Invalid JSON response from ' + url + ': ' + (snippet || 'empty response'));
-    }
-    if (!response.ok) {
-      var msg = 'Request failed';
-      if (data) {
-        if (data.error) msg = data.error;
-        else if (data.bridge_response && data.bridge_response.message) msg = data.bridge_response.message;
+      entry.ok = true;
+      entry.resBody = data;
+      pushCommsEntry(entry);
+      return data;
+    } catch (e) {
+      if (entry.latencyMs === null) {
+        entry.latencyMs = Date.now() - t0;
+        entry.ok = false;
+        entry.error = e.message;
+        pushCommsEntry(entry);
       }
-      throw new Error(msg);
+      throw e;
     }
-    return data;
   }
 
   async function cmd(payload, recvTimeout) {
@@ -358,6 +395,213 @@
     eventLog = [];
     var box = el('eventLogOut');
     if (box) box.textContent = 'Log cleared.';
+  }
+
+  // ── Comms log functions ───────────────────────────────────────────────────
+
+  function pushCommsEntry(entry) {
+    commsEntries.push(entry);
+    if (commsEntries.length > COMMS_LOG_MAX) commsEntries.shift();
+    var countEl = el('commsCount');
+    if (countEl) countEl.textContent = commsEntries.length + ' / ' + COMMS_LOG_MAX;
+    var panel = el('tab-commslog');
+    if (panel && panel.classList.contains('active')) renderCommsLog();
+  }
+
+  function commsEntryCategory(entry) {
+    var url = entry.url || '';
+    if (url.indexOf('/api/plc/db125/read') === 0) return 'poll-plc';
+    if (url === '/api/robot-arm/status') return 'poll-arm';
+    if (url.indexOf('/api/plc/') === 0) return 'plc';
+    if (url.indexOf('/api/robot-arm/') === 0) return 'robot';
+    return 'other';
+  }
+
+  function commsEntryMatchesFilter(entry) {
+    var cat = commsEntryCategory(entry);
+    if (commsHidePolls && (cat === 'poll-plc' || cat === 'poll-arm')) return false;
+    if (commsFilter === 'all') return true;
+    if (commsFilter === 'plc') return cat === 'plc' || cat === 'poll-plc';
+    if (commsFilter === 'robot') return cat === 'robot' || cat === 'poll-arm';
+    if (commsFilter === 'cmd') return entry.method === 'POST';
+    if (commsFilter === 'err') return !entry.ok;
+    return true;
+  }
+
+  function commsEntrySummary(entry) {
+    if (!entry.ok && entry.error) return 'ERR: ' + entry.error.slice(0, 120);
+    var url = entry.url || '';
+    var res = entry.resBody || {};
+
+    if (url.indexOf('/api/plc/db125/read') >= 0) {
+      var tags = res.tags || {};
+      var parts = [];
+      if (tags.target_x !== undefined) parts.push('X:' + tags.target_x);
+      if (tags.target_y !== undefined) parts.push('Y:' + tags.target_y);
+      if (tags.target_z !== undefined) parts.push('Z:' + tags.target_z);
+      if (tags.home_command)      parts.push('HOME');
+      if (tags.pickup_command)    parts.push('PICKUP');
+      if (tags.pallet_command)    parts.push('PALLET');
+      if (tags.quarantine_command) parts.push('QUARAN');
+      if (tags.busy)              parts.push('BUSY');
+      if (tags.move_complete)     parts.push('MOVE_DONE');
+      return (res.plc_connected ? 'PLC-ON' : 'PLC-OFF') + (parts.length ? '  ' + parts.join(' ') : '');
+    }
+
+    if (url === '/api/robot-arm/status') {
+      if (!res.connected) return 'Bridge offline';
+      var joints = (res.status && res.status.joints) || [];
+      var xyz = res.status && res.status.currentXYZ;
+      var xyzStr = xyz ? ('XYZ:(' + (xyz.x||0).toFixed(0) + ',' + (xyz.y||0).toFixed(0) + ',' + (xyz.z||0).toFixed(0) + ')') : '';
+      var moving = joints.filter(function(j) { return j.isMoving; });
+      return joints.length + ' joints' + (moving.length ? ' (' + moving.length + ' moving)' : '') + (xyzStr ? '  ' + xyzStr : '');
+    }
+
+    if (url === '/api/robot-arm/command') {
+      var cmdName = (entry.reqBody && entry.reqBody.command) || '?';
+      var br = res.bridge_response || {};
+      return 'CMD:' + cmdName + (br.message ? '  \u2192 ' + br.message.slice(0, 70) : (res.success !== false ? '  \u2192 OK' : '  \u2192 FAIL'));
+    }
+
+    if (url.indexOf('/api/robot-arm/move-xyz') >= 0) {
+      var req = entry.reqBody || {};
+      var br2 = res.bridge_response || {};
+      var pfx = 'MOVE-XYZ x=' + req.x + ' y=' + req.y + ' z=' + req.z + ' spd=' + req.speed;
+      if (res.stalled || (br2.type === 'stall')) return pfx + '  \u2192 STALL' + (br2.cause ? ': ' + br2.cause : '');
+      if (res.success) {
+        var angles = (br2.angles || []).map(function(a) { return a.toFixed(1) + '\u00b0'; }).join(',');
+        return pfx + '  \u2192 OK [' + angles + ']';
+      }
+      return pfx + '  \u2192 ' + (br2.message || 'FAIL');
+    }
+
+    if (url.indexOf('/api/robot-arm/move') >= 0) {
+      var req2 = entry.reqBody || {};
+      return 'MOVE J' + req2.joint + ' ' + req2.angle + '\u00b0 spd=' + req2.speed + (res.success ? '  \u2192 OK' : '  \u2192 FAIL');
+    }
+
+    if (url.indexOf('/api/plc/positions/write') >= 0) {
+      var req3 = entry.reqBody || {};
+      return 'POS-WRITE: ' + JSON.stringify(req3).slice(0, 80) + (res.success ? '  \u2192 OK' : '  \u2192 FAIL');
+    }
+
+    if (url.indexOf('/api/plc/positions/read') >= 0) return 'POS-READ' + (res.plc_connected ? ' OK' : ' PLC-OFF');
+
+    if (url.indexOf('/api/robot-arm/connect') >= 0) return 'CONNECT' + (res.success ? ' OK' : ' FAIL');
+    if (url.indexOf('/api/robot-arm/disconnect') >= 0) return 'DISCONNECT';
+    if (url.indexOf('/api/robot-arm/stop') >= 0) return 'STOP' + (res.success ? ' OK' : ' FAIL');
+    if (url.indexOf('/api/robot-arm/fault-config') >= 0) return 'FAULT-CONFIG' + (entry.method === 'POST' ? ' SAVE' : ' READ') + (res.success ? ' OK' : '');
+
+    return url.split('/').pop() + (res.success !== undefined ? (res.success ? ' OK' : ' FAIL') : '');
+  }
+
+  function renderCommsLog() {
+    var tbody = el('commsTbody');
+    if (!tbody) return;
+    var filtered = commsEntries.filter(commsEntryMatchesFilter);
+    var countEl = el('commsCount');
+    if (countEl) countEl.textContent = filtered.length + ' shown / ' + commsEntries.length + ' total (max ' + COMMS_LOG_MAX + ')';
+
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:2rem">No entries match current filter…</td></tr>';
+      return;
+    }
+
+    var rows = [];
+    for (var i = filtered.length - 1; i >= 0; i--) {
+      var e = filtered[i];
+      var cat = commsEntryCategory(e);
+      var rowClass = !e.ok ? 'comms-row-err' : (cat === 'poll-plc' || cat === 'poll-arm') ? 'comms-row-poll' : cat === 'plc' ? 'comms-row-plc' : 'comms-row-ok';
+      var ts = e.ts;
+      var timeStr = String(ts.getHours()).padStart(2, '0') + ':' + String(ts.getMinutes()).padStart(2, '0') + ':' + String(ts.getSeconds()).padStart(2, '0') + '.' + String(ts.getMilliseconds()).padStart(3, '0');
+      var urlShort = (e.url || '').replace('/api/robot-arm/', 'ARM/').replace('/api/plc/', 'PLC/');
+      var statusStr = e.status ? String(e.status) : (e.ok === false ? 'ERR' : '—');
+      var statusClass = e.ok ? 'comms-status-ok' : 'comms-status-err';
+      var latStr = e.latencyMs !== null ? e.latencyMs + 'ms' : '—';
+      var summary = commsEntrySummary(e);
+      rows.push(
+        '<tr class="' + rowClass + '" data-comms-seq="' + e.seq + '">' +
+        '<td>' + e.seq + '</td>' +
+        '<td>' + timeStr + '</td>' +
+        '<td>' + e.method + '</td>' +
+        '<td>' + urlShort + '</td>' +
+        '<td><span class="' + statusClass + '">' + statusStr + '</span></td>' +
+        '<td>' + latStr + '</td>' +
+        '<td><span class="comms-summary" title="' + summary.replace(/&/g,'&amp;').replace(/"/g, '&quot;') + '">' + summary.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span></td>' +
+        '</tr>'
+      );
+    }
+    tbody.innerHTML = rows.join('');
+
+    tbody.querySelectorAll('tr[data-comms-seq]').forEach(function (row) {
+      row.addEventListener('click', function () {
+        var seq = Number(row.getAttribute('data-comms-seq'));
+        for (var j = 0; j < commsEntries.length; j++) {
+          if (commsEntries[j].seq === seq) { showCommsDetail(commsEntries[j]); break; }
+        }
+      });
+    });
+  }
+
+  function showCommsDetail(entry) {
+    var detail = el('commsDetail');
+    var title  = el('commsDetailTitle');
+    var reqEl  = el('commsDetailReq');
+    var resEl  = el('commsDetailRes');
+    if (!detail) return;
+    var ts = entry.ts;
+    var timeStr = ts.toISOString().slice(11, 23);
+    if (title) title.textContent = '#' + entry.seq + '  ' + entry.method + ' ' + entry.url + '  at ' + timeStr + '  (' + (entry.latencyMs !== null ? entry.latencyMs + 'ms' : '—') + ')';
+    if (reqEl) reqEl.textContent = entry.reqBody ? JSON.stringify(entry.reqBody, null, 2) : '(no request body)';
+    if (resEl) {
+      var txt = '';
+      if (entry.error) txt = 'ERROR: ' + entry.error + '\n\n';
+      txt += entry.resBody ? JSON.stringify(entry.resBody, null, 2) : (entry.status ? '(empty response)' : '(no response received — network error)');
+      resEl.textContent = txt;
+    }
+    detail.style.display = '';
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function clearCommsLog() {
+    commsEntries = [];
+    commsSeq = 0;
+    var tbody = el('commsTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:2rem">Log cleared.</td></tr>';
+    var countEl = el('commsCount');
+    if (countEl) countEl.textContent = '0 entries';
+    var detail = el('commsDetail');
+    if (detail) detail.style.display = 'none';
+  }
+
+  function exportCommsCsv() {
+    if (!commsEntries.length) { showMsg('No comms data to export', true); return; }
+    var rows = ['seq,time_iso,method,url,http_status,ok,latency_ms,error,request_body,response_body'];
+    commsEntries.forEach(function (e) {
+      function q(v) { return '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"'; }
+      rows.push([
+        e.seq,
+        e.ts.toISOString(),
+        e.method,
+        q(e.url),
+        e.status || '',
+        e.ok ? 'true' : 'false',
+        e.latencyMs !== null ? e.latencyMs : '',
+        q(e.error || ''),
+        q(e.reqBody ? JSON.stringify(e.reqBody).slice(0, 300) : ''),
+        q(e.resBody ? JSON.stringify(e.resBody).slice(0, 300) : '')
+      ].join(','));
+    });
+    var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var csvUrl = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = csvUrl;
+    link.download = 'robot-arm-comms-' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(csvUrl);
+    showMsg('Comms CSV exported (' + commsEntries.length + ' entries)');
   }
 
   async function moveXYZ() {
@@ -1390,6 +1634,7 @@
         tab.classList.add('active');
         var panel = el('tab-' + target);
         if (panel) panel.classList.add('active');
+        if (target === 'commslog') renderCommsLog();
       });
     });
   }
@@ -1556,6 +1801,28 @@
         }
       });
     }
+
+    // Comms log tab
+    document.querySelectorAll('.comms-filter-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        commsFilter = btn.getAttribute('data-filter');
+        document.querySelectorAll('.comms-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderCommsLog();
+      });
+    });
+    var hidePollsChk = el('commsHidePolls');
+    if (hidePollsChk) {
+      hidePollsChk.addEventListener('change', function () {
+        commsHidePolls = hidePollsChk.checked;
+        renderCommsLog();
+      });
+    }
+    if ((b = el('commsClearBtn')))    b.addEventListener('click', clearCommsLog);
+    if ((b = el('commsExportBtn')))   b.addEventListener('click', exportCommsCsv);
+    if ((b = el('commsDetailClose'))) b.addEventListener('click', function () {
+      var d = el('commsDetail'); if (d) d.style.display = 'none';
+    });
   }
 
   function init() {
