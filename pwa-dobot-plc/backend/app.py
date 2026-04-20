@@ -1084,13 +1084,12 @@ def init_clients():
                                 _usb_camera_reset()
                                 consecutive_failures = 0  # give fresh window after reset
 
-                            # ~120 s of failures after USB reset → reboot
+                            # Camera still unresponsive after USB reset — log and keep waiting
                             elif usb_reset_done and consecutive_failures >= 12:
-                                logger.error(
-                                    "Camera still unresponsive after USB reset — rebooting system"
+                                logger.warning(
+                                    "Camera still unresponsive after USB reset — no camera available, continuing without it"
                                 )
-                                time.sleep(2)
-                                subprocess.run(['sudo', 'reboot'], timeout=10)
+                                break  # Stop retry loop; camera unavailable
                         else:
                             # Device node absent — camera simply not plugged in, keep waiting
                             consecutive_failures = 0
