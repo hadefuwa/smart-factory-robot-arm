@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position
 from dobot_client import DobotClient
 from camera_service import CameraService
 # DISABLED: Digital twin import commented out to reduce CPU usage
@@ -1650,6 +1650,18 @@ def robot_arm_status():
                 queue_robot_status(connected=True)
             except Exception:
                 pass
+
+            # Write current XYZ position (bytes 16/18/20) to DB125
+            try:
+                xyz = response.get('currentXYZ') or {}
+                if xyz.get('x') is not None:
+                    queue_robot_position(
+                        int(round(xyz['x'])),
+                        int(round(xyz['y'])),
+                        int(round(xyz['z'])),
+                    )
+            except Exception as pe:
+                logger.warning(f"Position write to PLC failed: {pe}")
 
             return jsonify({
                 'success': True,
