@@ -1586,7 +1586,24 @@ process.on('SIGTERM', cleanup);
 let lastSerialActivity = Date.now();
 let portOpenedAt = Date.now();
 const PORT_SESSION_MS = 5200;
-async function maybeReopenPort() {    if (!sharedSerialPort || !sharedSerialPort.isOpen) return;    const age = Date.now() - portOpenedAt;    if (age < PORT_SESSION_MS) return;    console.log("[PORT SESSION] Renewing after " + age + "ms...");    await new Promise((res) => { sharedSerialPort.close((err) => { if(err) console.error("Close err:", err.message); res(); }); });    await new Promise((res, rej) => { sharedSerialPort.open((err) => { if(err) { console.error("Reopen err:", err.message); rej(err); } else { portOpenedAt = Date.now(); lastSerialActivity = Date.now(); console.log("[PORT SESSION] Renewed"); res(); } }); });}
+async function maybeReopenPort() {
+    if (!sharedSerialPort || !sharedSerialPort.isOpen) return;
+    const age = Date.now() - portOpenedAt;
+    if (age < PORT_SESSION_MS) return;
+    console.log("[PORT SESSION] Renewing after " + age + "ms...");
+    await new Promise((res) => { sharedSerialPort.close((err) => { if(err) console.error("Close err:", err.message); res(); }); });
+    await new Promise((res, rej) => {
+        const openTimeout = setTimeout(() => {
+            console.error("[PORT SESSION] open() hung for 6s — exiting for systemd restart");
+            process.exit(1);
+        }, 6000);
+        sharedSerialPort.open((err) => {
+            clearTimeout(openTimeout);
+            if (err) { console.error("Reopen err:", err.message); rej(err); }
+            else { portOpenedAt = Date.now(); lastSerialActivity = Date.now(); console.log("[PORT SESSION] Renewed"); res(); }
+        });
+    });
+}
 const origQueueWrite = queueWrite;
 // Track last activity by wrapping queueWrite
 async function trackedQueueWrite(writeFn) {
