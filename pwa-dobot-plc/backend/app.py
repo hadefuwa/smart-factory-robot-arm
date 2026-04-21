@@ -219,6 +219,38 @@ plc_auto_backend_state = {
     'move_in_flight': False,        # True while we are waiting for a move reply
 }
 
+# Safety interlock state: tracks whether we have already sent torque-off for the
+# current unsafe condition so we don't spam the bridge every 300 ms.
+_safety_interlock = {
+    'torque_killed': False,   # True after we have sent setTorqueAll(false)
+    'last_reason': None,      # Human-readable reason logged on transition
+}
+
+
+def _send_safety_torque_off(reason: str):
+    """
+    Send setTorqueAll(enabled=False) to the bridge if it is reachable.
+    Logs the reason and updates _safety_interlock.
+    """
+    if _safety_interlock['torque_killed']:
+        return  # already killed — don't repeat unless state cleared
+    logger.warning('SAFETY INTERLOCK: %s — disabling robot arm torque', reason)
+    _safety_interlock['torque_killed'] = True
+    _safety_interlock['last_reason'] = reason
+    try:
+        with robot_arm_bridge_lock:
+            ws = robot_arm_bridge_state.get('ws')
+            if ws and robot_arm_bridge_state.get('connected'):
+                ws.settimeout(2)
+                try:
+                    ws.send(json.dumps({'command': 'setTorqueAll', 'enabled': False}))
+                    ws.recv()  # consume response
+                finally:
+                    ws.settimeout(3)
+    except Exception as e:
+        logger.warning('Safety torque-off send failed (bridge may be down): %s', e)
+
+
 def plc_auto_backend_tick():
     """
     Reads PLC DB125 target coordinates from the cache and sends a moveToXYZ
@@ -245,6 +277,38 @@ def plc_auto_backend_tick():
     # only appears in the HTTP response built by /api/plc/db125/read).
     if not cache.get('connected', False):
         return
+
+    # ── Safety interlock ─────────────────────────────────────────────────────
+    # DB123.DBX40.0 = system_safety_ok (E-stop / safety circuit OK)
+    # DB125.DBX0.0  = robot arm bridge connected (written by this backend)
+    # If either is false, kill torque and block all auto-moves.
+    safety_ok = bool(cache.get('system_safety_ok', False))
+    arm_connected = bool(robot_arm_bridge_state.get('connected', False))
+    interlock_active = not safety_ok or not arm_connected
+
+    if interlock_active:
+        if not safety_ok:
+            _send_safety_torque_off('DB123.DBX40.0 (system_safety_ok) is FALSE')
+        elif not arm_connected:
+            _send_safety_torque_off('DB125.DBX0.0 (robot arm bridge connected) is FALSE')
+        # Still try to reconnect the bridge so torque-off reaches it when it comes back
+        if not arm_connected:
+            try:
+                ensure_robot_arm_bridge_connected()
+                # Bridge just reconnected while safety is still bad — kill torque immediately
+                if not safety_ok and robot_arm_bridge_state.get('connected'):
+                    _safety_interlock['torque_killed'] = False  # force re-send
+                    _send_safety_torque_off('DB123.DBX40.0 still FALSE after bridge reconnect')
+            except Exception:
+                pass
+        return
+
+    # Safety cleared — reset interlock so we log again if it trips again later
+    if _safety_interlock['torque_killed']:
+        logger.info('SAFETY INTERLOCK cleared (safety_ok=%s, arm_connected=%s)', safety_ok, arm_connected)
+        _safety_interlock['torque_killed'] = False
+        _safety_interlock['last_reason'] = None
+    # ─────────────────────────────────────────────────────────────────────────
 
     # Only act when the robot arm bridge is connected.
     if not robot_arm_bridge_state.get('connected'):
