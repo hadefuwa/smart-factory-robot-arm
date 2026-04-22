@@ -1354,8 +1354,15 @@ async function handleCommand(ws, data) {
             }
             // Build diagnostics for the response (orientation is best-effort, not a blocker)
             const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
-            // Send moveToAngle for each available joint (already inside queueCommand context)
+            // Re-enable torque before moving — stopServo() (fired on stall) disables torque and
+            // moveToAngle() only writes the goal position register without re-enabling it, so every
+            // subsequent move would be a no-op and trigger another immediate stall.
             const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
+            for (let ji = 0; ji < xyzAngles.length; ji++) {
+                if (servos[ji] !== null) {
+                    try { await servos[ji].startServo(); } catch (_) {}
+                }
+            }
             for (let ji = 0; ji < xyzAngles.length; ji++) {
                 if (servos[ji] !== null) {
                     await servos[ji].moveToAngle(xyzAngles[ji], moveSpeed);
