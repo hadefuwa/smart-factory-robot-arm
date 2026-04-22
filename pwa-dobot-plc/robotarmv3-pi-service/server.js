@@ -50,9 +50,11 @@ let STALL_POLL_MS    = 200;  // how often to sample positions during a move
 let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
 let STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
 
-// Serial bus watchdog: if ALL servos fail for this many consecutive getStatus calls,
-// exit so systemd (Restart=always) can restart the process and reinitialise the serial port.
+// Serial bus watchdog:
+// - We always track repeated all-fail status polls for diagnostics.
+// - Process exit is now opt-in via env var because forced restart loops hide root cause.
 const ALL_FAIL_EXIT_THRESHOLD = 10;
+const ALL_FAIL_EXIT_ENABLED = process.env.ROBOT_ALL_FAIL_EXIT_ENABLED === '1';
 let consecutiveAllFailCount = 0;
 const DEFAULT_TCP_DOWN_ORIENTATION = { x: 0, y: 0, z: -1 };
 const FIVE_JOINT_ORIENTATION_TOLERANCE_DEG = 12.0;
@@ -744,13 +746,17 @@ async function handleCommand(ws, data) {
             const statuses = await getAllServoStatus();
 
             // Serial bus watchdog: if the bus gets stuck, all servos go unavailable.
-            // After threshold consecutive all-fail polls, exit so systemd restarts cleanly.
+            // Keep counting for diagnostics. Exit is optional and disabled by default.
             const anyAvailable = statuses.some(s => s.available);
             if (!anyAvailable) {
                 consecutiveAllFailCount++;
                 if (consecutiveAllFailCount >= ALL_FAIL_EXIT_THRESHOLD) {
-                    console.error(`[WATCHDOG] All servos unavailable for ${consecutiveAllFailCount} consecutive polls — exiting for systemd restart`);
-                    process.exit(1);
+                    if (ALL_FAIL_EXIT_ENABLED) {
+                        console.error(`[WATCHDOG] All servos unavailable for ${consecutiveAllFailCount} consecutive polls — exiting for systemd restart (ROBOT_ALL_FAIL_EXIT_ENABLED=1)`);
+                        process.exit(1);
+                    } else {
+                        console.warn(`[WATCHDOG] All servos unavailable for ${consecutiveAllFailCount} consecutive polls — keeping process alive (ROBOT_ALL_FAIL_EXIT_ENABLED is not 1)`);
+                    }
                 }
             } else {
                 consecutiveAllFailCount = 0;

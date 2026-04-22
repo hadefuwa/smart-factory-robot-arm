@@ -1857,15 +1857,31 @@ def robot_arm_status():
             response = send_robot_arm_command({'command': 'getStatus'})
             robot_arm_bridge_state['last_status'] = response
 
+            joints = response.get('joints', [])
+            available_joints = [joint for joint in joints if joint.get('available', False)]
+            if len(joints) > 0 and len(available_joints) == 0:
+                # Bridge websocket is still up, but no servo status is readable.
+                # Treat this as a disconnected robot state for API consumers.
+                queue_robot_status(connected=False, busy=False)
+                robot_arm_bridge_state['last_error'] = 'Robot arm bridge connected but all servos unavailable'
+                return jsonify({
+                    'success': False,
+                    'connected': False,
+                    'host': robot_arm_bridge_state.get('host'),
+                    'port': robot_arm_bridge_state.get('port'),
+                    'error': robot_arm_bridge_state['last_error'],
+                    'status': response,
+                    'manual_override_active': _manual_override_active(),
+                    'manual_override_remaining_seconds': _manual_override_remaining_seconds(),
+                }), 503
+
             # Compute servo fault aggregates and push to PLC
             try:
                 cfg = load_config().get('robot_arm_faults', {})
                 temp_max   = float(cfg.get('temp_max_c',    60))
                 volt_min   = float(cfg.get('voltage_min_v', 7.0))
                 load_max   = float(cfg.get('load_max_pct',  80))
-
-                joints = response.get('joints', [])
-                available = [j for j in joints if j.get('available', False)]
+                available = available_joints
 
                 any_moving    = any(j.get('isMoving', False) for j in available)
                 any_overtemp  = any(j.get('temperature', 0) > temp_max for j in available)
