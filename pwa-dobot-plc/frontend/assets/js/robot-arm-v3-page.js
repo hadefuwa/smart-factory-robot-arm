@@ -82,6 +82,7 @@
   var commsSeq = 0;
   var commsFilter = 'all';   // 'all' | 'plc' | 'robot' | 'cmd' | 'err'
   var commsHidePolls = false;
+  var commsPaused = false;
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -400,6 +401,7 @@
   // ── Comms log functions ───────────────────────────────────────────────────
 
   function pushCommsEntry(entry) {
+    if (commsPaused) return;
     commsEntries.push(entry);
     if (commsEntries.length > COMMS_LOG_MAX) commsEntries.shift();
     var countEl = el('commsCount');
@@ -602,6 +604,18 @@
     document.body.removeChild(link);
     URL.revokeObjectURL(csvUrl);
     showMsg('Comms CSV exported (' + commsEntries.length + ' entries)');
+  }
+
+  function setCommsPaused(paused) {
+    commsPaused = !!paused;
+    var pauseBtn = el('commsPauseBtn');
+    if (!pauseBtn) return;
+
+    var icon = commsPaused ? 'play_arrow' : 'pause';
+    var label = commsPaused ? 'Resume' : 'Pause';
+    pauseBtn.setAttribute('aria-pressed', commsPaused ? 'true' : 'false');
+    pauseBtn.title = commsPaused ? 'Resume comms log updates' : 'Pause comms log updates';
+    pauseBtn.innerHTML = '<i class="material-icons" style="font-size:14px">' + icon + '</i> ' + label;
   }
 
   async function moveXYZ() {
@@ -1820,6 +1834,11 @@
     }
     if ((b = el('commsClearBtn')))    b.addEventListener('click', clearCommsLog);
     if ((b = el('commsExportBtn')))   b.addEventListener('click', exportCommsCsv);
+    if ((b = el('commsPauseBtn'))) {
+      b.addEventListener('click', function () {
+        setCommsPaused(!commsPaused);
+      });
+    }
     if ((b = el('commsDetailClose'))) b.addEventListener('click', function () {
       var d = el('commsDetail'); if (d) d.style.display = 'none';
     });
@@ -1833,6 +1852,7 @@
     startPlcAutoMove();
     loadPositions();
     loadFaultConfig();
+    setCommsPaused(false);
   }
 
   window.addEventListener('beforeunload', function () {

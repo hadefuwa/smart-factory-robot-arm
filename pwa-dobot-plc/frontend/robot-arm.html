@@ -242,17 +242,17 @@
 
     /* ── Comms Log tab ── */
     .comms-toolbar { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.75rem; }
-    .comms-table-wrap { overflow:auto; max-height:calc(100vh - 300px); min-height:200px; border:1px solid var(--border); border-radius:0.5rem; }
-    .comms-table { width:100%; border-collapse:collapse; font-size:0.74rem; }
-    .comms-table th { position:sticky; top:0; z-index:1; background:var(--bg-card); text-align:left; padding:0.4rem 0.6rem; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); border-bottom:1px solid var(--border); white-space:nowrap; }
-    .comms-table td { padding:0.32rem 0.6rem; border-bottom:1px solid var(--border); vertical-align:middle; font-family:var(--font-mono); white-space:nowrap; }
+    .comms-table-wrap { overflow:auto; max-height:calc(100vh - 300px); min-height:200px; border:1px solid rgba(140,170,230,0.35); border-radius:0.5rem; background:rgba(8,16,30,0.6); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.04); }
+    .comms-table { width:100%; border-collapse:collapse; font-size:0.74rem; color:var(--text-primary); }
+    .comms-table th { position:sticky; top:0; z-index:1; background:rgba(18,31,56,0.98); text-align:left; padding:0.42rem 0.6rem; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#d8e8ff; border-bottom:1px solid rgba(120,160,230,0.35); white-space:nowrap; }
+    .comms-table td { padding:0.34rem 0.6rem; border-bottom:1px solid rgba(120,160,230,0.2); vertical-align:middle; font-family:var(--font-mono); white-space:nowrap; }
     .comms-table tr:last-child td { border-bottom:none; }
     .comms-table tbody tr { cursor:pointer; transition:background 0.1s; }
-    .comms-table tbody tr:hover { background:rgba(100,160,255,0.06); }
-    .comms-row-poll td { color:var(--text-muted); opacity:0.7; }
-    .comms-row-ok td { color:var(--text-primary); }
-    .comms-table tbody tr.comms-row-err td { color:var(--status-danger); background:color-mix(in srgb, var(--status-danger) 7%, transparent); }
-    .comms-table tbody tr.comms-row-plc td { color:#e8a040; }
+    .comms-table tbody tr:hover { background:rgba(80,140,235,0.2); }
+    .comms-row-poll td { color:#95a4bf; opacity:1; }
+    .comms-row-ok td { color:#f2f7ff; }
+    .comms-table tbody tr.comms-row-err td { color:#ffd3d3; background:rgba(180,32,42,0.28); }
+    .comms-table tbody tr.comms-row-plc td { color:#ffd48f; }
     .comms-status-ok { color:var(--status-success); font-weight:700; }
     .comms-status-err { color:var(--status-danger); font-weight:700; }
     .comms-summary { max-width:46ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
@@ -1084,6 +1084,9 @@
               </button>
               <button class="ra-btn ra-btn-ghost ra-btn-sm" id="commsExportBtn">
                 <i class="material-icons" style="font-size:14px">download</i> Export CSV
+              </button>
+              <button class="ra-btn ra-btn-ghost ra-btn-sm" id="commsPauseBtn" aria-pressed="false" title="Pause or resume comms log updates">
+                <i class="material-icons" style="font-size:14px">pause</i> Pause
               </button>
               <span id="commsCount" style="font-size:0.74rem;color:var(--text-muted);white-space:nowrap">0 entries</span>
             </div>
