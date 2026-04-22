@@ -36,8 +36,10 @@ const PERF_DEBUG = false;
 
 // Hardware torque limit applied to every servo at startup.
 // Caps the maximum motor force so a blocked joint cannot draw full current.
-// Range 0-100 (%). 50 = half power. Can be changed at runtime via setTorqueLimit command.
-let TORQUE_LIMIT_PERCENT = 50;
+// Range 0-100 (%). Can be changed at runtime via setTorqueLimit command.
+// Raised from 50 to 70: J2 (shoulder) was consistently stalling 24 steps short of
+// pallet position due to insufficient torque in the extended/rotated arm configuration.
+let TORQUE_LIMIT_PERCENT = 70;
 
 // Stall detection parameters — adjustable at runtime via setStallConfig command.
 let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
