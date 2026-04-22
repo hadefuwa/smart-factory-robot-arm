@@ -63,6 +63,7 @@ const MAX_SPEED = 3400;
 
 // Default baud rate for ST3215
 const DEFAULT_BAUDRATE = 1000000;
+const READ_RESPONSE_TIMEOUT_MS = 120;
 
 // Angle to steps conversion constants
 // Mapping: 0° = 2048 steps (center), -90° = 1024 steps, +90° = 3072 steps
@@ -516,13 +517,14 @@ setTimeout(resolve, 1);
                 }
             };
             
-            // Set timeout (50ms) - servo needs time to process and respond
+            // Bulk status reads can return larger payloads than simple position reads,
+            // so keep enough margin to avoid flapping the bridge on normal latency.
             const _readStart = Date.now();
             this.responseTimeout = setTimeout(() => {
                 console.log('[READ TIMEOUT s'+this.servoIdNumber+'] fired after ' + (Date.now()-_readStart) + 'ms, responseResolve was: ' + (this.responseResolve ? 'SET' : 'NULL'));
                 cleanupPendingRead();
                 reject(new Error('Read timeout'));
-            }, 50);
+            }, READ_RESPONSE_TIMEOUT_MS);
         });
 
         // Now send read instruction
