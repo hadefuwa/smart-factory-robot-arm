@@ -1332,12 +1332,15 @@ async function handleCommand(ws, data) {
             }
             // Seed the IK solver with the robot's current joint angles so it converges
             // to the nearest solution rather than jumping to an opposite configuration.
+            // Also capture torque state here so we can only re-enable on joints that need it.
             let xyzInitialAngles = null;
+            let xyzTorqueStates = [];
             let xyzAvailableJointCount = robotKinematics.getJointCount();
             try {
                 const xyzStatuses = await getAllServoStatus();
                 const xyzJc = robotKinematics.getJointCount();
                 const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees).slice(0, xyzJc);
+                xyzTorqueStates = xyzStatuses.map(s => s.torqueEnabled);
                 xyzAvailableJointCount = getAvailableKinematicJointCount(xyzStatuses);
                 if (xyzCurrentAngles.length === xyzJc) {
                     xyzInitialAngles = xyzCurrentAngles;
@@ -1363,13 +1366,16 @@ async function handleCommand(ws, data) {
             }
             // Build diagnostics for the response (orientation is best-effort, not a blocker)
             const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
-            // Re-enable torque before moving — stopServo() (fired on stall) disables torque and
-            // moveToAngle() only writes the goal position register without re-enabling it, so every
-            // subsequent move would be a no-op and trigger another immediate stall.
             const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
+            // Only re-enable torque on joints where it is actually off (e.g. after user pressed
+            // stop, or after a stall). Calling startServo() on an already-energised servo causes
+            // a micro-glitch as the servo briefly re-processes the enable command, which shows up
+            // as a small positional blip right before the move starts.
             for (let ji = 0; ji < xyzAngles.length; ji++) {
-                if (servos[ji] !== null) {
-                    try { await servos[ji].startServo(); } catch (_) {}
+                if (servos[ji] !== null && xyzTorqueStates[ji] === false) {
+                    try { await servos[ji].holdCurrentPosition(); } catch (_) {
+                        try { await servos[ji].startServo(); } catch (_2) {}
+                    }
                 }
             }
             for (let ji = 0; ji < xyzAngles.length; ji++) {
