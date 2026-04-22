@@ -39,9 +39,10 @@ const PERF_DEBUG = false;
 // Range 0-100 (%). Can be changed at runtime via setTorqueLimit command.
 // Raised from 50 to 70: J2 (shoulder) was consistently stalling 24 steps short of
 // pallet position due to insufficient torque in the extended/rotated arm configuration.
-// Raised from 80→85→95: J2 (shoulder) was stopping 21-28 steps short at 80%, causing
-// 15mm+ Z error. Temperatures at 40°C with plenty of headroom to 70°C thermal limit.
-let TORQUE_LIMIT_PERCENT = 95;
+// Raised from 80→85→95→100: J2 (shoulder) was stopping short due to gravity load.
+// At 95%: 14 steps short (4mm Z error). 100% allows full motor force.
+// J2 temperature was 41°C at 95% — well within 70°C thermal limit.
+let TORQUE_LIMIT_PERCENT = 100;
 
 // Stall detection parameters — adjustable at runtime via setStallConfig command.
 let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
