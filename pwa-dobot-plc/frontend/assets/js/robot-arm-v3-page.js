@@ -82,6 +82,7 @@
   var commsSeq = 0;
   var commsFilter = 'all';   // 'all' | 'plc' | 'robot' | 'cmd' | 'err'
   var commsHidePolls = false;
+  var commsGroupRepeats = true;
   var commsPaused = false;
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -497,21 +498,75 @@
     return url.split('/').pop() + (res.success !== undefined ? (res.success ? ' OK' : ' FAIL') : '');
   }
 
+  function buildCommsDisplayRows(filtered) {
+    if (!commsGroupRepeats) return filtered.slice();
+
+    var groupsByKey = {};
+    var order = [];
+
+    filtered.forEach(function (entry) {
+      var summary = commsEntrySummary(entry);
+      var key = [
+        entry.method || '',
+        entry.url || '',
+        entry.status || '',
+        entry.ok === true ? 'ok' : (entry.ok === false ? 'err' : 'na'),
+        summary
+      ].join('|');
+
+      var group = groupsByKey[key];
+      if (!group) {
+        group = {
+          entry: entry,
+          count: 1,
+          firstTs: entry.ts,
+          lastTs: entry.ts,
+          firstSeq: entry.seq,
+          lastSeq: entry.seq
+        };
+        groupsByKey[key] = group;
+        order.push(group);
+      } else {
+        group.count += 1;
+        if (entry.ts < group.firstTs) group.firstTs = entry.ts;
+        if (entry.ts > group.lastTs) {
+          group.lastTs = entry.ts;
+          group.entry = entry; // representative entry = newest in group
+          group.lastSeq = entry.seq;
+        }
+        if (entry.seq < group.firstSeq) group.firstSeq = entry.seq;
+      }
+    });
+
+    // Show newest groups first, same as non-grouped log ordering.
+    order.sort(function (a, b) { return b.lastTs - a.lastTs; });
+    return order;
+  }
+
   function renderCommsLog() {
     var tbody = el('commsTbody');
     if (!tbody) return;
     var filtered = commsEntries.filter(commsEntryMatchesFilter);
+    var displayRows = buildCommsDisplayRows(filtered);
     var countEl = el('commsCount');
-    if (countEl) countEl.textContent = filtered.length + ' shown / ' + commsEntries.length + ' total (max ' + COMMS_LOG_MAX + ')';
+    if (countEl) {
+      if (commsGroupRepeats) {
+        countEl.textContent = displayRows.length + ' grouped rows / ' + filtered.length + ' shown / ' + commsEntries.length + ' total (max ' + COMMS_LOG_MAX + ')';
+      } else {
+        countEl.textContent = filtered.length + ' shown / ' + commsEntries.length + ' total (max ' + COMMS_LOG_MAX + ')';
+      }
+    }
 
-    if (!filtered.length) {
+    if (!displayRows.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:2rem">No entries match current filter…</td></tr>';
       return;
     }
 
     var rows = [];
-    for (var i = filtered.length - 1; i >= 0; i--) {
-      var e = filtered[i];
+    for (var i = 0; i < displayRows.length; i++) {
+      var rowInfo = displayRows[i];
+      var e = rowInfo.entry || rowInfo;
+      var repeatCount = rowInfo.count || 1;
       var cat = commsEntryCategory(e);
       var rowClass = !e.ok ? 'comms-row-err' : (cat === 'poll-plc' || cat === 'poll-arm') ? 'comms-row-poll' : cat === 'plc' ? 'comms-row-plc' : 'comms-row-ok';
       var ts = e.ts;
@@ -521,8 +576,9 @@
       var statusClass = e.ok ? 'comms-status-ok' : 'comms-status-err';
       var latStr = e.latencyMs !== null ? e.latencyMs + 'ms' : '—';
       var summary = commsEntrySummary(e);
+      if (repeatCount > 1) summary += '  (x' + repeatCount + ')';
       rows.push(
-        '<tr class="' + rowClass + '" data-comms-seq="' + e.seq + '">' +
+        '<tr class="' + rowClass + '" data-comms-seq="' + e.seq + '" data-group-count="' + repeatCount + '">' +
         '<td>' + e.seq + '</td>' +
         '<td>' + timeStr + '</td>' +
         '<td>' + e.method + '</td>' +
@@ -538,14 +594,15 @@
     tbody.querySelectorAll('tr[data-comms-seq]').forEach(function (row) {
       row.addEventListener('click', function () {
         var seq = Number(row.getAttribute('data-comms-seq'));
+        var groupCount = Number(row.getAttribute('data-group-count')) || 1;
         for (var j = 0; j < commsEntries.length; j++) {
-          if (commsEntries[j].seq === seq) { showCommsDetail(commsEntries[j]); break; }
+          if (commsEntries[j].seq === seq) { showCommsDetail(commsEntries[j], groupCount); break; }
         }
       });
     });
   }
 
-  function showCommsDetail(entry) {
+  function showCommsDetail(entry, groupCount) {
     var detail = el('commsDetail');
     var title  = el('commsDetailTitle');
     var reqEl  = el('commsDetailReq');
@@ -557,7 +614,8 @@
     if (reqEl) reqEl.textContent = entry.reqBody ? JSON.stringify(entry.reqBody, null, 2) : '(no request body)';
     if (resEl) {
       var txt = '';
-      if (entry.error) txt = 'ERROR: ' + entry.error + '\n\n';
+      if ((groupCount || 1) > 1) txt += 'Grouped repeats: ' + groupCount + ' similar entries\n\n';
+      if (entry.error) txt += 'ERROR: ' + entry.error + '\n\n';
       txt += entry.resBody ? JSON.stringify(entry.resBody, null, 2) : (entry.status ? '(empty response)' : '(no response received — network error)');
       resEl.textContent = txt;
     }
@@ -1829,6 +1887,14 @@
     if (hidePollsChk) {
       hidePollsChk.addEventListener('change', function () {
         commsHidePolls = hidePollsChk.checked;
+        renderCommsLog();
+      });
+    }
+    var groupRepeatsChk = el('commsGroupRepeats');
+    if (groupRepeatsChk) {
+      groupRepeatsChk.checked = commsGroupRepeats;
+      groupRepeatsChk.addEventListener('change', function () {
+        commsGroupRepeats = groupRepeatsChk.checked;
         renderCommsLog();
       });
     }
