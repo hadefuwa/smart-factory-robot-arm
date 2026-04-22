@@ -219,6 +219,7 @@ plc_auto_backend_state = {
     'last_sent_target_key': None,   # "x|y|z|speed" of the last move we sent
     'move_in_flight': False,        # True while we are waiting for a move reply
     'last_sent_at': 0.0,            # time.time() of the last PLC target send attempt
+    'active_target_key': None,      # Same-key motion currently in progress
 }
 PLC_AUTO_TARGET_TOLERANCE_MM = 8
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
@@ -289,7 +290,7 @@ def _manual_override_active() -> bool:
     return _manual_override_remaining_seconds() > 0
 
 
-def plc_auto_backend_tick():
+def _legacy_plc_auto_backend_tick_unused():
     """
     Reads PLC DB125 target coordinates from the cache and sends a moveToXYZ
     command if the target has changed since the last send.
@@ -473,8 +474,22 @@ def plc_auto_backend_tick():
         return
 
     target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
+    active_target_key = plc_auto_backend_state.get('active_target_key')
+
+    if active_target_key and active_target_key != target_key:
+        logger.info('PLC auto-move backend: target changed from %s to %s', active_target_key, target_key)
+        plc_auto_backend_state['active_target_key'] = None
+
+    if active_target_key == target_key:
+        if _target_position_reached(cache, x, y, z):
+            logger.info('PLC auto-move backend: target reached x=%s y=%s z=%s', x, y, z)
+            plc_auto_backend_state['active_target_key'] = None
+        else:
+            return
+
     if plc_auto_backend_state['last_sent_target_key'] == target_key:
         if _target_position_reached(cache, x, y, z):
+            plc_auto_backend_state['active_target_key'] = None
             return
         if (time.time() - float(plc_auto_backend_state.get('last_sent_at') or 0.0)) < PLC_AUTO_RESEND_INTERVAL_S:
             return
@@ -497,7 +512,9 @@ def plc_auto_backend_tick():
                 ws.settimeout(15)
                 try:
                     response = send_robot_arm_command(payload)
+                    resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
+                    plc_auto_backend_state['active_target_key'] = target_key if resp_type in ('success', 'moving', 'ikResult') else None
                     ik_failed = (
                         response.get('type') == 'ikFailed'
                         or 'unreachable' in str(response).lower()
@@ -509,9 +526,10 @@ def plc_auto_backend_tick():
                         pass
                     logger.info(
                         'PLC auto-move backend: sent target x=%s y=%s z=%s speed=%s -> %s',
-                        x, y, z, speed, response.get('type', '?')
+                        x, y, z, speed, resp_type
                     )
                 except Exception as e:
+                    plc_auto_backend_state['active_target_key'] = None
                     logger.warning('PLC auto-move backend: move failed: %s', e)
                 finally:
                     try:
