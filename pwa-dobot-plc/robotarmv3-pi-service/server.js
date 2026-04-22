@@ -513,9 +513,8 @@ async function getAllServoStatus() {
                 if (!isRetryableTimeout) {
                     throw error;
                 }
-                console.warn(`Servo ${i + 1}: quick status timed out, retrying once`);
-                await new Promise(resolve => setTimeout(resolve, 10));
-                status = await servo.readQuickStatus();
+                console.warn(`Servo ${i + 1}: quick status timed out, falling back to smaller reads`);
+                status = await servo.readStatus();
             }
             statuses.push({
                 joint: i + 1,
@@ -1725,7 +1724,6 @@ async function main() {
 
 // Run the main function
 main();
-
 
 
 
