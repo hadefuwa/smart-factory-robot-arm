@@ -505,7 +505,18 @@ async function getAllServoStatus() {
         const startServo = Date.now();
         try {
             // Fast path: one bulk read per servo (angle, speed, load, voltage, temp, moving, torque)
-            const status = await servo.readQuickStatus();
+            let status;
+            try {
+                status = await servo.readQuickStatus();
+            } catch (error) {
+                const isRetryableTimeout = error && typeof error.message === 'string' && error.message.toLowerCase().includes('timeout');
+                if (!isRetryableTimeout) {
+                    throw error;
+                }
+                console.warn(`Servo ${i + 1}: quick status timed out, retrying once`);
+                await new Promise(resolve => setTimeout(resolve, 10));
+                status = await servo.readQuickStatus();
+            }
             statuses.push({
                 joint: i + 1,
                 available: true,
@@ -1636,6 +1647,10 @@ async function cleanup() {
 // Handle process termination
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
+process.on('unhandledRejection', (reason) => {
+    const message = reason && reason.stack ? reason.stack : reason;
+    console.error('[UNHANDLED REJECTION]', message);
+});
 
 
 // Keep-alive: SC-B1 goes idle after ~3s of silence. Ping servo 1 every 1.5s.
@@ -1710,8 +1725,6 @@ async function main() {
 
 // Run the main function
 main();
-
-
 
 
 

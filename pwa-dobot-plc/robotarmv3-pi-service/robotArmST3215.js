@@ -459,33 +459,38 @@ setTimeout(resolve, 1);
             this.responseTimeout = null;
         }
         this.responseResolve = null;
+        this.responseReject = null;
+
+        const cleanupPendingRead = () => {
+            if (this.responseTimeout) {
+                clearTimeout(this.responseTimeout);
+                this.responseTimeout = null;
+            }
+            this.responseResolve = null;
+            this.responseReject = null;
+            this.pendingResponse = null;
+        };
 
         // Set up response handler BEFORE sending packet to avoid race condition
+        let rejectRead = null;
         const readPromise = new Promise((resolve, reject) => {
+            rejectRead = reject;
             // Store reject callback for timeout/error handling
             this.responseReject = reject;
             this.responseResolve = (result) => {
-                if (this.responseTimeout) {
-                    clearTimeout(this.responseTimeout);
-                    this.responseTimeout = null;
-                }
-                
                 // Check communication result and error
                 if (result.commResult !== COMM_SUCCESS) {
-                    this.responseResolve = null;
-                    this.pendingResponse = null;
+                    cleanupPendingRead();
                     reject(new Error(`Communication error: ${result.commResult}`));
                 } else if (result.error !== 0) {
-                    this.responseResolve = null;
-                    this.pendingResponse = null;
+                    cleanupPendingRead();
                     reject(new Error(`Servo error: ${result.error}`));
                 } else {
                     // Return the parameter data (which contains the register values)
                     // For read commands, parameters should be a Buffer with the register data
                     if (!result.parameters) {
                         if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] No parameters in read response, result:`, result);
-                        this.responseResolve = null;
-                        this.pendingResponse = null;
+                        cleanupPendingRead();
                         reject(new Error('No data in read response'));
                         return;
                     }
@@ -501,14 +506,12 @@ setTimeout(resolve, 1);
                         } else {
                             // This is a read response but with no data - error
                             if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Read response has no data, responseLength=${result.responseLength}`);
-                            this.responseResolve = null;
-                            this.pendingResponse = null;
+                            cleanupPendingRead();
                             reject(new Error('Empty read response data'));
                             return;
                         }
                     }
-                    this.responseResolve = null;
-                    this.pendingResponse = null;
+                    cleanupPendingRead();
                     resolve(data);
                 }
             };
@@ -517,15 +520,22 @@ setTimeout(resolve, 1);
             const _readStart = Date.now();
             this.responseTimeout = setTimeout(() => {
                 console.log('[READ TIMEOUT s'+this.servoIdNumber+'] fired after ' + (Date.now()-_readStart) + 'ms, responseResolve was: ' + (this.responseResolve ? 'SET' : 'NULL'));
-                this.responseResolve = null;
-                this.pendingResponse = null;
+                cleanupPendingRead();
                 reject(new Error('Read timeout'));
             }, 50);
         });
 
         // Now send read instruction
         console.log("[SEND READ s"+this.servoIdNumber+"] addr=" + address + " len=" + length);
-        await this.sendPacket(INST_READ, parameters);
+        try {
+            await this.sendPacket(INST_READ, parameters);
+        } catch (error) {
+            cleanupPendingRead();
+            if (rejectRead) {
+                rejectRead(error);
+            }
+            throw error;
+        }
 
         // Wait for response
         return await readPromise;
@@ -1084,4 +1094,3 @@ module.exports = {
     MIN_ANGLE: MIN_ANGLE,
     MAX_ANGLE: MAX_ANGLE
 };
-
