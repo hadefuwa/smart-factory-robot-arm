@@ -349,7 +349,16 @@ async function tryInitializeServo(slotIndex, quiet = false) {
             return null;
         }
 
-        logInfo(`${servoLabel} ready with torque limit ${TORQUE_LIMIT_PERCENT}%`);
+        // Enable torque immediately so the arm holds position from startup.
+        // Without this, servos boot limp and fall under gravity until the first
+        // move command arrives and calls startServo().
+        try {
+            await servo.holdCurrentPosition();
+            logInfo(`${servoLabel} ready, torque ON, holding at startup position`);
+        } catch (e) {
+            try { await servo.startServo(); } catch (_) {}
+            logInfo(`${servoLabel} ready with torque limit ${TORQUE_LIMIT_PERCENT}% (hold failed, torque ON)`);
+        }
         ready = true;
         return servo;
     } catch (error) {
