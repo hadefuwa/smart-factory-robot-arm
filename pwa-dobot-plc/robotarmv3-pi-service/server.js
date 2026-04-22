@@ -39,9 +39,9 @@ const PERF_DEBUG = false;
 // Range 0-100 (%). Can be changed at runtime via setTorqueLimit command.
 // Raised from 50 to 70: J2 (shoulder) was consistently stalling 24 steps short of
 // pallet position due to insufficient torque in the extended/rotated arm configuration.
-// Raised from 80 to 85: J2 (shoulder) was stopping 21-28 steps short of target at 80%,
-// triggering false stalls even though the arm was at an acceptable position.
-let TORQUE_LIMIT_PERCENT = 85;
+// Raised from 80→85→95: J2 (shoulder) was stopping 21-28 steps short at 80%, causing
+// 15mm+ Z error. Temperatures at 40°C with plenty of headroom to 70°C thermal limit.
+let TORQUE_LIMIT_PERCENT = 95;
 
 // Stall detection parameters — adjustable at runtime via setStallConfig command.
 let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
@@ -1389,9 +1389,7 @@ async function handleCommand(ws, data) {
             // Stall monitor — blocks until completion, stall, or timeout, then sends ONE response.
             // This ensures the bridge's single ws.recv() always gets the final outcome.
             {
-                const POS_TOLERANCE = 30; // steps (~2.6°) — close enough counts as "at target"
-                // Raised from 20: J2 (shoulder) consistently stops 21-28 steps short due to torque
-                // limit, which is within acceptable mechanical accuracy for this arm.
+                const POS_TOLERANCE = 20; // steps (~1.75°) — close enough counts as "at target"
 
                 // Pre-compute target positions in steps (same formula as angleToSteps)
                 const targetSteps = xyzAngles.map(a =>
