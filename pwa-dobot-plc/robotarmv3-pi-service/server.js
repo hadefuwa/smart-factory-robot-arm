@@ -39,7 +39,7 @@ const PERF_DEBUG = false;
 // Range 0-100 (%). Can be changed at runtime via setTorqueLimit command.
 // Raised from 50 to 70: J2 (shoulder) was consistently stalling 24 steps short of
 // pallet position due to insufficient torque in the extended/rotated arm configuration.
-let TORQUE_LIMIT_PERCENT = 70;
+let TORQUE_LIMIT_PERCENT = 80;
 
 // Stall detection parameters — adjustable at runtime via setStallConfig command.
 let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
@@ -1587,7 +1587,11 @@ process.on('SIGTERM', cleanup);
 // Keep-alive: SC-B1 goes idle after ~3s of silence. Ping servo 1 every 1.5s.
 let lastSerialActivity = Date.now();
 let portOpenedAt = Date.now();
-const PORT_SESSION_MS = 5200;
+// Raised from 5200 to 300000: the 5.2s renewal was closing/reopening the serial port
+// every ~5-6 seconds, causing all-servo read timeouts on every cycle. The keep-alive
+// ping (every 900ms idle) already prevents SC-B1 idle disconnect, so frequent renewal
+// is unnecessary. 5-minute interval is a safety fallback only.
+const PORT_SESSION_MS = 300000;
 async function maybeReopenPort() {
     if (!sharedSerialPort || !sharedSerialPort.isOpen) return;
     const age = Date.now() - portOpenedAt;
