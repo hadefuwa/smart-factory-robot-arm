@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, send_from_directory, Response, abort,
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import logging
+import math
 import os
 import time
 import threading
@@ -217,6 +218,13 @@ robot_arm_ui_last_poll_time = 0.0   # updated by /api/robot-arm/status handler
 plc_auto_backend_state = {
     'last_sent_target_key': None,   # "x|y|z|speed" of the last move we sent
     'move_in_flight': False,        # True while we are waiting for a move reply
+    'last_sent_at': 0.0,            # time.time() of the last PLC target send attempt
+}
+PLC_AUTO_TARGET_TOLERANCE_MM = 8
+PLC_AUTO_RESEND_INTERVAL_S = 2.0
+plc_manual_override_state = {
+    'until': 0.0,
+    'source': None,
 }
 
 # Safety interlock state: tracks whether we have already sent torque-off for the
@@ -251,6 +259,36 @@ def _send_safety_torque_off(reason: str):
         logger.warning('Safety torque-off send failed (bridge may be down): %s', e)
 
 
+def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
+                             tolerance_mm: int = PLC_AUTO_TARGET_TOLERANCE_MM) -> bool:
+    """Return True when cached DB125 XYZ feedback is already near the requested target."""
+    try:
+        current_x = float(cache.get('db125_x_position'))
+        current_y = float(cache.get('db125_y_position'))
+        current_z = float(cache.get('db125_z_position'))
+        target_x = float(x)
+        target_y = float(y)
+        target_z = float(z)
+    except (TypeError, ValueError):
+        return False
+
+    return (
+        abs(current_x - target_x) <= tolerance_mm
+        and abs(current_y - target_y) <= tolerance_mm
+        and abs(current_z - target_z) <= tolerance_mm
+    )
+
+
+def _manual_override_remaining_seconds() -> int:
+    """Return remaining backend manual-override time in whole seconds."""
+    return max(0, int(math.ceil(float(plc_manual_override_state.get('until') or 0.0) - time.time())))
+
+
+def _manual_override_active() -> bool:
+    """Return True while backend PLC auto-move is paused for manual control."""
+    return _manual_override_remaining_seconds() > 0
+
+
 def plc_auto_backend_tick():
     """
     Reads PLC DB125 target coordinates from the cache and sends a moveToXYZ
@@ -259,10 +297,6 @@ def plc_auto_backend_tick():
     """
     # If the browser page is open (polled status within the last 3 seconds),
     # let the JavaScript handle the PLC auto-move — nothing to do here.
-    seconds_since_ui_poll = time.time() - robot_arm_ui_last_poll_time
-    if seconds_since_ui_poll < 3.0:
-        return
-
     # Skip if we are already waiting for a previous move to finish.
     if plc_auto_backend_state['move_in_flight']:
         return
@@ -276,6 +310,9 @@ def plc_auto_backend_tick():
     # The raw cache uses the key 'connected', not 'plc_connected' (that name
     # only appears in the HTTP response built by /api/plc/db125/read).
     if not cache.get('connected', False):
+        return
+
+    if _manual_override_active():
         return
 
     # ── Safety interlock ─────────────────────────────────────────────────────
@@ -364,6 +401,115 @@ def plc_auto_backend_tick():
                     logger.info(
                         'PLC auto-move backend: moved to x=%s y=%s z=%s → %s',
                         x, y, z, response.get('type', '?')
+                    )
+                except Exception as e:
+                    logger.warning('PLC auto-move backend: move failed: %s', e)
+                finally:
+                    try:
+                        ws.settimeout(old_timeout)
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning('PLC auto-move backend: unexpected error: %s', e)
+    finally:
+        plc_auto_backend_state['move_in_flight'] = False
+
+
+def plc_auto_backend_tick():
+    """
+    Backend-owned PLC auto-move loop.
+
+    The browser page no longer owns PLC target dispatch. This keeps PLC motion
+    working even while `robot-arm.html` is open and lets backend manual override
+    pause PLC motion centrally for every client.
+    """
+    if plc_auto_backend_state['move_in_flight']:
+        return
+
+    cache = get_plc_cache()
+    if not cache or not cache.get('connected', False):
+        return
+
+    if _manual_override_active():
+        return
+
+    safety_ok = bool(cache.get('system_safety_ok', False))
+    arm_connected = bool(robot_arm_bridge_state.get('connected', False))
+    interlock_active = not safety_ok or not arm_connected
+
+    if interlock_active:
+        if not safety_ok:
+            _send_safety_torque_off('DB123.DBX40.0 (system_safety_ok) is FALSE')
+        elif not arm_connected:
+            _send_safety_torque_off('DB125.DBX0.0 (robot arm bridge connected) is FALSE')
+        if not arm_connected:
+            try:
+                ensure_robot_arm_bridge_connected()
+                if not safety_ok and robot_arm_bridge_state.get('connected'):
+                    _safety_interlock['torque_killed'] = False
+                    _send_safety_torque_off('DB123.DBX40.0 still FALSE after bridge reconnect')
+            except Exception:
+                pass
+        return
+
+    if _safety_interlock['torque_killed']:
+        logger.info('SAFETY INTERLOCK cleared (safety_ok=%s, arm_connected=%s)', safety_ok, arm_connected)
+        _safety_interlock['torque_killed'] = False
+        _safety_interlock['last_reason'] = None
+
+    if not robot_arm_bridge_state.get('connected'):
+        try:
+            ensure_robot_arm_bridge_connected()
+        except Exception:
+            pass
+        return
+
+    x = cache.get('db125_target_x')
+    y = cache.get('db125_target_y')
+    z = cache.get('db125_target_z')
+    speed = cache.get('db125_speed') or 1500
+
+    if x is None or y is None or z is None:
+        return
+
+    target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
+    if plc_auto_backend_state['last_sent_target_key'] == target_key:
+        if _target_position_reached(cache, x, y, z):
+            return
+        if (time.time() - float(plc_auto_backend_state.get('last_sent_at') or 0.0)) < PLC_AUTO_RESEND_INTERVAL_S:
+            return
+
+    plc_auto_backend_state['move_in_flight'] = True
+    plc_auto_backend_state['last_sent_at'] = time.time()
+    try:
+        payload = {
+            'command': 'moveToXYZ',
+            'x': float(x),
+            'y': float(y),
+            'z': float(z),
+            'speed': int(speed),
+            'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
+        }
+        with robot_arm_bridge_lock:
+            ws = robot_arm_bridge_state.get('ws')
+            if ws and robot_arm_bridge_state.get('connected'):
+                old_timeout = 3
+                ws.settimeout(15)
+                try:
+                    response = send_robot_arm_command(payload)
+                    plc_auto_backend_state['last_sent_target_key'] = target_key
+                    ik_failed = (
+                        response.get('type') == 'ikFailed'
+                        or 'unreachable' in str(response).lower()
+                        or str(response.get('failureReason', '') or '') == 'orientation_constrained_unreachable'
+                    )
+                    try:
+                        queue_invalid_target(ik_failed)
+                    except Exception:
+                        pass
+                    logger.info(
+                        'PLC auto-move backend: sent target x=%s y=%s z=%s speed=%s -> %s',
+                        x, y, z, speed, response.get('type', '?')
                     )
                 except Exception as e:
                     logger.warning('PLC auto-move backend: move failed: %s', e)
@@ -1651,14 +1797,28 @@ def robot_arm_stop():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/robot-arm/manual-override', methods=['GET', 'POST'])
+def robot_arm_manual_override():
+    """Get or set backend manual override for PLC auto-move."""
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get('enabled', False))
+        duration_sec = int(data.get('duration_sec') or 600)
+        duration_sec = max(1, min(3600, duration_sec))
+        plc_manual_override_state['until'] = (time.time() + duration_sec) if enabled else 0.0
+        plc_manual_override_state['source'] = 'web' if enabled else None
+
+    return jsonify({
+        'success': True,
+        'enabled': _manual_override_active(),
+        'remaining_seconds': _manual_override_remaining_seconds(),
+        'source': plc_manual_override_state.get('source'),
+    })
+
+
 @app.route('/api/robot-arm/status', methods=['GET'])
 def robot_arm_status():
     """Get latest robot arm status from Pi service."""
-    # Record the time so the background PLC auto-move thread knows the page is
-    # open and can stand aside while the JavaScript handles PLC moves.
-    global robot_arm_ui_last_poll_time
-    robot_arm_ui_last_poll_time = time.time()
-
     with robot_arm_bridge_lock:
         if not robot_arm_bridge_state.get('connected'):
             try:
@@ -1670,7 +1830,9 @@ def robot_arm_status():
                     'connected': False,
                     'host': robot_arm_bridge_state.get('host') or ROBOT_ARM_BRIDGE_DEFAULT_HOST,
                     'port': robot_arm_bridge_state.get('port') or ROBOT_ARM_BRIDGE_DEFAULT_PORT,
-                    'error': robot_arm_bridge_state.get('last_error') or 'Robot arm bridge not connected'
+                    'error': robot_arm_bridge_state.get('last_error') or 'Robot arm bridge not connected',
+                    'manual_override_active': _manual_override_active(),
+                    'manual_override_remaining_seconds': _manual_override_remaining_seconds(),
                 }), 503
 
         try:
@@ -1732,14 +1894,18 @@ def robot_arm_status():
                 'connected': True,
                 'host': robot_arm_bridge_state.get('host'),
                 'port': robot_arm_bridge_state.get('port'),
-                'status': response
+                'status': response,
+                'manual_override_active': _manual_override_active(),
+                'manual_override_remaining_seconds': _manual_override_remaining_seconds(),
             })
         except Exception as e:
             robot_arm_bridge_state['last_error'] = str(e)
             return jsonify({
                 'success': False,
                 'connected': False,
-                'error': str(e)
+                'error': str(e),
+                'manual_override_active': _manual_override_active(),
+                'manual_override_remaining_seconds': _manual_override_remaining_seconds(),
             }), 500
 
 @app.route('/api/robot-arm/command', methods=['POST'])

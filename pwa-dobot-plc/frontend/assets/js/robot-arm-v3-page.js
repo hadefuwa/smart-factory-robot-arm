@@ -30,16 +30,15 @@
     canvas: null
   };
 
-  // PLC auto-move: continuously sends PLC target XYZ to the arm every intervalMs
+  // PLC auto-move is owned by the backend. The page only reflects status and
+  // can request a temporary backend manual override for manual jogging.
   var plcAuto = {
     intervalMs: 300,
     timer: null,
     manualOverride: false,
     overrideSecsLeft: 0,
     overrideCountdownTimer: null,
-    latestPlcData: null,    // cache updated by every status poll
-    moveRequestInFlight: false,
-    lastSentTargetKey: null
+    latestPlcData: null
   };
 
   // Groups: 'Robot State' = robot→PLC status flags, 'Position' = live XYZ readback,
@@ -1864,24 +1863,35 @@
     // PLC auto-move — interval input (apply on change, no button needed)
     var intervalInput = el('plcMoveInterval');
     if (intervalInput) {
+      intervalInput.disabled = true;
+      intervalInput.title = 'PLC auto-move is now handled by the backend';
       intervalInput.addEventListener('change', function () {
         var v = Math.max(50, Math.min(5000, Number(intervalInput.value) || 300));
         intervalInput.value = v;
         plcAuto.intervalMs = v;
-        startPlcAutoMove();           // restart timer with new interval
         updatePlcAutoBadge();
-        showMsg('PLC auto-move interval set to ' + v + 'ms');
+        showMsg('PLC auto-move timing is handled by the backend');
       });
     }
 
     // Manual override toggle
     var tog = el('manualOverrideToggle');
     if (tog) {
-      tog.addEventListener('change', function () {
+      tog.addEventListener('change', async function () {
         if (tog.checked) {
-          enableManualOverride();
+          try {
+            await enableManualOverride();
+          } catch (e) {
+            tog.checked = false;
+            showMsg('Manual override error: ' + e.message, true);
+          }
         } else {
-          disableManualOverride();
+          try {
+            await disableManualOverride();
+          } catch (e) {
+            tog.checked = true;
+            showMsg('Manual override error: ' + e.message, true);
+          }
         }
       });
     }
@@ -1920,6 +1930,74 @@
     if ((b = el('commsDetailClose'))) b.addEventListener('click', function () {
       var d = el('commsDetail'); if (d) d.style.display = 'none';
     });
+  }
+
+  async function setBackendManualOverride(enabled) {
+    var resp = await apiRequest('/api/robot-arm/manual-override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled, duration_sec: 600 })
+    });
+    plcAuto.manualOverride = !!resp.enabled;
+    plcAuto.overrideSecsLeft = Number(resp.remaining_seconds || 0);
+    return resp;
+  }
+
+  function updatePlcAutoBadge() {
+    var badge = el('plcAutoBadge');
+    if (!badge) return;
+    var plcData = plcAuto.latestPlcData;
+    var plcConn = !!(plcData && plcData.plc_connected);
+    if (!plcConn) {
+      badge.textContent = 'PLC Offline';
+      badge.className = 'plc-auto-badge offline';
+    } else if (plcAuto.manualOverride) {
+      badge.textContent = 'Paused - Manual Override';
+      badge.className = 'plc-auto-badge paused';
+    } else if (!state.bridgeConnected) {
+      badge.textContent = 'Bridge Offline';
+      badge.className = 'plc-auto-badge offline';
+    } else {
+      badge.textContent = 'Backend Auto';
+      badge.className = 'plc-auto-badge active';
+    }
+  }
+
+  async function plcAutoTick() {
+    updatePlcAutoBadge();
+  }
+
+  function startPlcAutoMove() {
+    stopPlcAutoMove();
+    updatePlcAutoBadge();
+  }
+
+  function stopPlcAutoMove() {
+    if (plcAuto.timer) { window.clearInterval(plcAuto.timer); plcAuto.timer = null; }
+  }
+
+  async function enableManualOverride() {
+    await setBackendManualOverride(true);
+    if (plcAuto.overrideCountdownTimer) window.clearInterval(plcAuto.overrideCountdownTimer);
+    plcAuto.overrideCountdownTimer = window.setInterval(tickOverrideCountdown, 1000);
+    var cdEl = el('overrideCountdown');
+    if (cdEl) { cdEl.textContent = '10:00'; cdEl.style.display = ''; }
+    setManualMoveEnabled(true);
+    updatePlcAutoBadge();
+    showMsg('Manual override ON - PLC auto-move paused for 10 min');
+  }
+
+  async function disableManualOverride() {
+    await setBackendManualOverride(false);
+    if (plcAuto.overrideCountdownTimer) { window.clearInterval(plcAuto.overrideCountdownTimer); plcAuto.overrideCountdownTimer = null; }
+    plcAuto.overrideSecsLeft = 0;
+    var cdEl = el('overrideCountdown');
+    if (cdEl) cdEl.style.display = 'none';
+    var tog = el('manualOverrideToggle');
+    if (tog) tog.checked = false;
+    setManualMoveEnabled(false);
+    updatePlcAutoBadge();
+    showMsg('Manual override OFF - PLC auto-move resumed');
   }
 
   function init() {
