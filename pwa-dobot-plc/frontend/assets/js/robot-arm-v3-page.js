@@ -1385,6 +1385,18 @@
     plcAuto.latestPlcData = plcDb125;
     var plcConnected = !!(plcDb125 && plcDb125.plc_connected);
     var db125Tags = plcDb125 ? plcDb125.tags : null;
+
+    // Seed lastSentTargetKey on the first poll so we don't immediately re-move
+    // to the current PLC target just because the page was opened or navigated back to.
+    // Only fire a move when the PLC *changes* the target after page load.
+    if (plcAuto.lastSentTargetKey === null && plcConnected && db125Tags) {
+      var _ix = db125Tags.target_x, _iy = db125Tags.target_y, _iz = db125Tags.target_z;
+      var _ispd = db125Tags.speed || 1500;
+      if (_ix !== undefined && _iy !== undefined && _iz !== undefined) {
+        plcAuto.lastSentTargetKey = [_ix, _iy, _iz, _ispd].join('|');
+      }
+    }
+
     renderPlcDb125(plcDb125);
     renderPlcTargetXYZ(db125Tags, plcConnected);
 
