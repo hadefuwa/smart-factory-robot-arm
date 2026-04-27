@@ -3,7 +3,7 @@ you can ssh onto the pi using pi@rpi but do not make changes to the pi, make cha
 cd C:\Users\HamedA\Documents\sf2
 git status
 git add .
-git commit -m "comms logs"
+git commit -m "bridge issues"
 git push origin main
 ssh pi@rpi "cd ~/sf2 && git pull"
 ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service"

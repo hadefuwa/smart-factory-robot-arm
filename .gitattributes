@@ -1,0 +1,2 @@
+scripts/install_power_diagnostics.sh text eol=lf
+scripts/power_diagnostics/* text eol=lf

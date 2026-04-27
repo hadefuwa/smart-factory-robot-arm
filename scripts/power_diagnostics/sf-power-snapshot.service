@@ -1,0 +1,6 @@
+[Unit]
+Description=Smart Factory periodic power diagnostics snapshot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sf-power-diagnostics snapshot

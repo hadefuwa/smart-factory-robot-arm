@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Smart Factory power diagnostics periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
