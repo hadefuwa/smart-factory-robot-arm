@@ -460,7 +460,7 @@ async function initializeServos() {
                 res();
             });
         });
-        await new Promise((res) => setTimeout(res, 300));
+        await new Promise((res) => setTimeout(res, 1500));
         console.log('Serial port flushed — starting servo initialization');
 
     } catch (error) {
