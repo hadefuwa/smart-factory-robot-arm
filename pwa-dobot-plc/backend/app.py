@@ -749,7 +749,7 @@ def _plc_telemetry_writer_loop():
     """Background thread: write edge device stats (DB126) and IO-Link (DB127) to PLC every 10s."""
     while True:
         time.sleep(_PLC_TELEMETRY_INTERVAL)
-        worker = plc_worker
+        worker = getattr(plc_integration, 'plc_worker', None)
         if worker is None or not worker.get_cache_value('connected', False):
             continue
         _write_edge_device_stats_to_plc(worker)
