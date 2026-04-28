@@ -460,12 +460,32 @@ async function initializeServos() {
                 res();
             });
         });
-        await new Promise((res) => setTimeout(res, 1500));
+        await new Promise((res) => setTimeout(res, 500));
         console.log('Serial port flushed — starting servo initialization');
 
     } catch (error) {
         console.error('Failed to initialize shared serial port:', error.message);
         process.exit(1);
+    }
+
+    // Bus wake-up: the SC-B1 goes idle after ~3s of silence and stops forwarding data.
+    // After a service restart the board needs a stream of pings before it becomes
+    // responsive again. Send up to 20 pings to servo 1 with 200ms gaps (4s max).
+    // If one gets a response the bus is awake and we proceed to full init immediately.
+    {
+        console.log('Bus wake-up: sending pings until SC-B1 responds (up to 4s)...');
+        const wakeServo = new RobotArm.ServoController(1, sharedSerialPort, 1, SERIAL_BAUDRATE);
+        allServoControllers.push(wakeServo);
+        let busAwake = false;
+        for (let w = 0; w < 20; w++) {
+            try {
+                const r = await wakeServo.ping();
+                if (r) { busAwake = true; break; }
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 200));
+        }
+        removeServoController(wakeServo);
+        console.log(busAwake ? 'Bus wake-up: SC-B1 responded — proceeding' : 'Bus wake-up: no response after 4s — will rely on revive');
     }
 
     // Create servo controllers, all sharing the same serial port
