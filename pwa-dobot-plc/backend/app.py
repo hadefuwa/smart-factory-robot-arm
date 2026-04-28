@@ -203,6 +203,62 @@ robot_arm_bridge_state = {
 ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
 ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
 DEFAULT_TCP_DOWN_ORIENTATION = {'x': 0.0, 'y': 0.0, 'z': -1.0}
+DEFAULT_ROBOT_ARM_DIMENSIONS = {
+    'joints': [
+        {
+            'joint': 1, 'name': 'joint1_base_yaw',
+            'originMm': {'x': 0.0, 'y': 0.0, 'z': 122.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 0.0, 'y': 0.0, 'z': 1.0},
+            'zeroOffsetDegrees': 0.0,
+            'limits': {'lowerDegrees': -180.0, 'upperDegrees': 180.0, 'effort': 10.0, 'velocity': 2.0}
+        },
+        {
+            'joint': 2, 'name': 'joint2_shoulder_pitch',
+            'originMm': {'x': 0.0, 'y': 0.0, 'z': 0.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 0.0, 'y': 1.0, 'z': 0.0},
+            'zeroOffsetDegrees': -90.0,
+            'limits': {'lowerDegrees': -90.0, 'upperDegrees': 90.0, 'effort': 10.0, 'velocity': 2.0}
+        },
+        {
+            'joint': 3, 'name': 'joint3_elbow_pitch',
+            'originMm': {'x': 161.78, 'y': 0.0, 'z': 0.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 0.0, 'y': -1.0, 'z': 0.0},
+            'zeroOffsetDegrees': 0.0,
+            'limits': {'lowerDegrees': -100.0, 'upperDegrees': 100.0, 'effort': 10.0, 'velocity': 2.0}
+        },
+        {
+            'joint': 4, 'name': 'joint4_wrist_roll',
+            'originMm': {'x': 148.2, 'y': 0.0, 'z': 0.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 1.0, 'y': 0.0, 'z': 0.0},
+            'zeroOffsetDegrees': 0.0,
+            'limits': {'lowerDegrees': -180.0, 'upperDegrees': 180.0, 'effort': 5.0, 'velocity': 3.0}
+        },
+        {
+            'joint': 5, 'name': 'joint5_wrist_pitch',
+            'originMm': {'x': 30.0, 'y': 0.0, 'z': 0.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 0.0, 'y': 1.0, 'z': 0.0},
+            'zeroOffsetDegrees': 0.0,
+            'limits': {'lowerDegrees': -90.0, 'upperDegrees': 90.0, 'effort': 5.0, 'velocity': 3.0}
+        },
+        {
+            'joint': 6, 'name': 'joint6_wrist_yaw',
+            'originMm': {'x': 30.0, 'y': 0.0, 'z': 0.0},
+            'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
+            'axis': {'x': 0.0, 'y': 0.0, 'z': 1.0},
+            'zeroOffsetDegrees': 0.0,
+            'limits': {'lowerDegrees': -180.0, 'upperDegrees': 180.0, 'effort': 5.0, 'velocity': 3.0}
+        }
+    ],
+    'tcp': {
+        'offsetMm': {'x': 42.0, 'y': 0.0, 'z': 0.0},
+        'toolAxisLocal': {'x': 1.0, 'y': 0.0, 'z': 0.0}
+    }
+}
 
 # ── PLC Auto-Move Background Thread ──────────────────────────────────────────
 # This mirrors the plcAutoTick() JavaScript function in robot-arm-v3-page.js.
@@ -1738,6 +1794,23 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError(f'Robot arm bridge connection lost: {e}')
 
 
+def _robot_arm_dimensions_config() -> Dict[str, Any]:
+    cfg = load_config().get('robot_arm_dimensions')
+    return cfg if isinstance(cfg, dict) else DEFAULT_ROBOT_ARM_DIMENSIONS
+
+
+def apply_saved_robot_arm_dimensions_to_bridge() -> Dict[str, Any]:
+    """Send persisted runtime dimensions to the Pi service if the bridge is open."""
+    config = _robot_arm_dimensions_config()
+    response = send_robot_arm_command({
+        'command': 'setKinematicsConfig',
+        'config': config
+    })
+    if response.get('type') == 'error':
+        raise RuntimeError(response.get('message') or 'Pi service rejected kinematics config')
+    return response
+
+
 @app.route('/api/robot-arm/connect', methods=['POST'])
 def robot_arm_connect():
     """
@@ -1751,6 +1824,10 @@ def robot_arm_connect():
     with robot_arm_bridge_lock:
         try:
             open_robot_arm_bridge(host, port)
+            try:
+                apply_saved_robot_arm_dimensions_to_bridge()
+            except Exception as dim_err:
+                logger.warning(f"Could not apply saved robot arm dimensions on connect: {dim_err}")
 
             return jsonify({
                 'success': True,
@@ -4149,6 +4226,53 @@ def set_fault_config():
         if 'load_max_pct'  in data: faults['load_max_pct']  = float(data['load_max_pct'])
         save_config(config)
         return jsonify({'success': True, 'config': faults})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/robot-arm/dimensions-config', methods=['GET'])
+def get_robot_arm_dimensions_config():
+    """Return persisted robot arm joint dimension and kinematics settings."""
+    cfg = _robot_arm_dimensions_config()
+    return jsonify({
+        'success': True,
+        'config': cfg,
+        'connected': bool(robot_arm_bridge_state.get('connected')),
+    })
+
+
+@app.route('/api/robot-arm/dimensions-config', methods=['POST'])
+def set_robot_arm_dimensions_config():
+    """Persist robot arm dimensions and push them to the Pi service when connected."""
+    data = request.get_json(silent=True) or {}
+    cfg = data.get('config') if isinstance(data.get('config'), dict) else data
+
+    try:
+        joints = cfg.get('joints', [])
+        if not isinstance(joints, list) or len(joints) < 1:
+            return jsonify({'success': False, 'error': 'config.joints must contain at least one joint'}), 400
+
+        config = load_config()
+        config['robot_arm_dimensions'] = cfg
+        save_config(config)
+
+        bridge_response = None
+        applied_to_bridge = False
+        if robot_arm_bridge_state.get('connected'):
+            with robot_arm_bridge_lock:
+                try:
+                    bridge_response = apply_saved_robot_arm_dimensions_to_bridge()
+                    applied_to_bridge = True
+                except Exception as bridge_err:
+                    robot_arm_bridge_state['last_error'] = str(bridge_err)
+                    bridge_response = {'type': 'error', 'message': str(bridge_err)}
+
+        return jsonify({
+            'success': True,
+            'config': cfg,
+            'applied_to_bridge': applied_to_bridge,
+            'bridge_response': bridge_response
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

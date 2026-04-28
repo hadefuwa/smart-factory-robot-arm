@@ -78,6 +78,24 @@
     .settings-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; }
     .settings-card h4 { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
 
+    /* Joint dimension configuration */
+    .dimension-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem; }
+    .dimension-note { margin:0; color:var(--text-secondary); font-size:0.8rem; line-height:1.45; max-width:68ch; }
+    .dimension-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:0.85rem; }
+    .dimension-card { background:var(--bg-card); border:1px solid var(--border); border-radius:0.75rem; padding:0.95rem 1rem; }
+    .dimension-card h4 { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin:0 0 0.75rem; font-size:0.86rem; color:var(--text-primary); }
+    .dimension-joint-name { color:var(--text-secondary); font-size:0.72rem; font-weight:600; text-align:right; }
+    .dimension-fields { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0.55rem; }
+    .dimension-fields.dimension-wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .dimension-field label { display:block; font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:0.2rem; }
+    .dimension-field input { width:100%; min-width:0; background:var(--bg-input); border:1px solid var(--border-input); border-radius:6px; color:var(--text-primary); padding:0.32rem 0.42rem; font-size:0.78rem; }
+    .dimension-subtitle { margin:0.75rem 0 0.35rem; color:var(--text-muted); font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; }
+    .dimension-tcp { margin-top:0.9rem; }
+    @media (max-width: 560px) {
+      .dimension-grid { grid-template-columns:1fr; }
+      .dimension-fields, .dimension-fields.dimension-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     /* ── PLC auto-move ── */
     .plc-auto-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
     .plc-auto-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.18rem 0.55rem; border-radius: 1rem; font-size: 0.7rem; font-weight: 700; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); margin-left: 0.45rem; vertical-align: middle; }
@@ -357,6 +375,9 @@
           </button>
           <button class="ra-tab" data-tab="settings">
             <i class="material-icons" style="font-size:16px">settings</i> Settings
+          </button>
+          <button class="ra-tab" data-tab="dimensions">
+            <i class="material-icons" style="font-size:16px">straighten</i> Joint Dimensions
           </button>
           <button class="ra-tab" data-tab="positions">
             <i class="material-icons" style="font-size:16px">place</i> Positions
@@ -707,7 +728,46 @@
         </div>
 
         <!-- ═══════════════════════════════════════════════════════ -->
-        <!-- TAB 4 — Positions                                       -->
+        <!-- TAB 4 - Joint Dimensions -->
+        <div class="ra-panel" id="tab-dimensions">
+          <div class="ra-section">
+            <div class="dimension-toolbar">
+              <p class="dimension-note">
+                Configure the physical geometry used by forward and inverse kinematics. Origins are measured from the previous joint frame in millimetres; RPY and limits are in degrees.
+              </p>
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dimsReloadBtn">
+                  <i class="material-icons" style="font-size:14px">refresh</i> Reload
+                </button>
+                <button class="ra-btn ra-btn-ghost ra-btn-sm" id="dimsDefaultsBtn">
+                  <i class="material-icons" style="font-size:14px">restart_alt</i> Defaults
+                </button>
+                <button class="ra-btn ra-btn-primary ra-btn-sm" id="dimsSaveBtn">
+                  <i class="material-icons" style="font-size:14px">save</i> Save Dimensions
+                </button>
+              </div>
+            </div>
+            <div class="dimension-grid" id="jointDimensionsGrid"></div>
+            <div class="dimension-card dimension-tcp">
+              <h4><span><i class="material-icons" style="font-size:16px;vertical-align:-3px">build</i> Tool Centre Point</span><span class="dimension-joint-name">TCP offset and tool axis</span></h4>
+              <div class="dimension-subtitle">TCP offset (mm)</div>
+              <div class="dimension-fields">
+                <div class="dimension-field"><label>X</label><input type="number" step="0.1" id="dimTcpOffsetX"></div>
+                <div class="dimension-field"><label>Y</label><input type="number" step="0.1" id="dimTcpOffsetY"></div>
+                <div class="dimension-field"><label>Z</label><input type="number" step="0.1" id="dimTcpOffsetZ"></div>
+              </div>
+              <div class="dimension-subtitle">Tool axis (local)</div>
+              <div class="dimension-fields">
+                <div class="dimension-field"><label>X</label><input type="number" step="0.01" id="dimTcpAxisX"></div>
+                <div class="dimension-field"><label>Y</label><input type="number" step="0.01" id="dimTcpAxisY"></div>
+                <div class="dimension-field"><label>Z</label><input type="number" step="0.01" id="dimTcpAxisZ"></div>
+              </div>
+            </div>
+            <div id="dimsConfigMsg" style="font-size:0.83rem;min-height:1.2em;margin-top:0.75rem;color:var(--status-success)"></div>
+          </div>
+        </div>
+
+        <!-- TAB 5 — Positions                                       -->
         <!-- ═══════════════════════════════════════════════════════ -->
         <div class="ra-panel" id="tab-positions">
 

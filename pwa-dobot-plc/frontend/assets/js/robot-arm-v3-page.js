@@ -75,6 +75,23 @@
     { key: 'target_z',              label: 'Target Z',        type: 'int',  unit: 'mm', group: 'PLC Commands' }
   ];
 
+  var DEFAULT_DIMENSIONS_CONFIG = {
+    joints: [
+      { joint: 1, name: 'joint1_base_yaw', originMm: { x: 0, y: 0, z: 122 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 0, z: 1 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 10, velocity: 2 } },
+      { joint: 2, name: 'joint2_shoulder_pitch', originMm: { x: 0, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 1, z: 0 }, zeroOffsetDegrees: -90, limits: { lowerDegrees: -90, upperDegrees: 90, effort: 10, velocity: 2 } },
+      { joint: 3, name: 'joint3_elbow_pitch', originMm: { x: 161.78, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: -1, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -100, upperDegrees: 100, effort: 10, velocity: 2 } },
+      { joint: 4, name: 'joint4_wrist_roll', originMm: { x: 148.2, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 1, y: 0, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 5, velocity: 3 } },
+      { joint: 5, name: 'joint5_wrist_pitch', originMm: { x: 30, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 1, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -90, upperDegrees: 90, effort: 5, velocity: 3 } },
+      { joint: 6, name: 'joint6_wrist_yaw', originMm: { x: 30, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 0, z: 1 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 5, velocity: 3 } }
+    ],
+    tcp: {
+      offsetMm: { x: 42, y: 0, z: 0 },
+      toolAxisLocal: { x: 1, y: 0, z: 0 }
+    }
+  };
+
+  var dimensionsConfig = null;
+
   // ── Comms log ─────────────────────────────────────────────────────────────
   var COMMS_LOG_MAX = 500;
   var commsEntries = [];
@@ -1611,6 +1628,131 @@
   }
 
   // ── fault thresholds (loaded once, updated on save) ──────────────────────
+  function cloneConfig(config) {
+    return JSON.parse(JSON.stringify(config || DEFAULT_DIMENSIONS_CONFIG));
+  }
+
+  function numberInputValue(id, fallback) {
+    var input = el(id);
+    var value = Number(input && input.value);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function setInputValue(id, value) {
+    var input = el(id);
+    if (input) input.value = Number.isFinite(Number(value)) ? value : 0;
+  }
+
+  function setDimsMsg(message, isError) {
+    var msg = el('dimsConfigMsg');
+    if (!msg) return;
+    msg.textContent = message || '';
+    msg.style.color = isError ? 'var(--status-danger)' : 'var(--status-success)';
+    clearTimeout(msg._t);
+    if (message) msg._t = setTimeout(function () { msg.textContent = ''; }, 4500);
+  }
+
+  function dimField(id, label, step) {
+    return '<div class="dimension-field"><label>' + label + '</label><input type="number" step="' + step + '" id="' + id + '"></div>';
+  }
+
+  function renderDimensionsConfig(config) {
+    dimensionsConfig = cloneConfig(config);
+    var grid = el('jointDimensionsGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    (dimensionsConfig.joints || []).forEach(function (joint) {
+      var n = joint.joint;
+      var card = document.createElement('div');
+      card.className = 'dimension-card';
+      card.innerHTML =
+        '<h4><span>Joint ' + n + '</span><span class="dimension-joint-name">' + (joint.name || '') + '</span></h4>' +
+        '<div class="dimension-subtitle">Origin (mm)</div><div class="dimension-fields">' +
+          dimField('dimJ' + n + 'OriginX', 'X', 0.1) + dimField('dimJ' + n + 'OriginY', 'Y', 0.1) + dimField('dimJ' + n + 'OriginZ', 'Z', 0.1) +
+        '</div><div class="dimension-subtitle">RPY (deg)</div><div class="dimension-fields">' +
+          dimField('dimJ' + n + 'Roll', 'Roll', 0.1) + dimField('dimJ' + n + 'Pitch', 'Pitch', 0.1) + dimField('dimJ' + n + 'Yaw', 'Yaw', 0.1) +
+        '</div><div class="dimension-subtitle">Rotation Axis</div><div class="dimension-fields">' +
+          dimField('dimJ' + n + 'AxisX', 'X', 0.01) + dimField('dimJ' + n + 'AxisY', 'Y', 0.01) + dimField('dimJ' + n + 'AxisZ', 'Z', 0.01) +
+        '</div><div class="dimension-subtitle">Calibration and Limits</div><div class="dimension-fields dimension-wide">' +
+          dimField('dimJ' + n + 'Zero', 'Zero', 0.1) + dimField('dimJ' + n + 'Lower', 'Min', 0.1) + dimField('dimJ' + n + 'Upper', 'Max', 0.1) + dimField('dimJ' + n + 'Effort', 'Effort', 0.1) +
+        '</div>';
+      grid.appendChild(card);
+
+      setInputValue('dimJ' + n + 'OriginX', joint.originMm && joint.originMm.x);
+      setInputValue('dimJ' + n + 'OriginY', joint.originMm && joint.originMm.y);
+      setInputValue('dimJ' + n + 'OriginZ', joint.originMm && joint.originMm.z);
+      setInputValue('dimJ' + n + 'Roll', joint.rpyDeg && joint.rpyDeg.roll);
+      setInputValue('dimJ' + n + 'Pitch', joint.rpyDeg && joint.rpyDeg.pitch);
+      setInputValue('dimJ' + n + 'Yaw', joint.rpyDeg && joint.rpyDeg.yaw);
+      setInputValue('dimJ' + n + 'AxisX', joint.axis && joint.axis.x);
+      setInputValue('dimJ' + n + 'AxisY', joint.axis && joint.axis.y);
+      setInputValue('dimJ' + n + 'AxisZ', joint.axis && joint.axis.z);
+      setInputValue('dimJ' + n + 'Zero', joint.zeroOffsetDegrees);
+      setInputValue('dimJ' + n + 'Lower', joint.limits && joint.limits.lowerDegrees);
+      setInputValue('dimJ' + n + 'Upper', joint.limits && joint.limits.upperDegrees);
+      setInputValue('dimJ' + n + 'Effort', joint.limits && joint.limits.effort);
+    });
+
+    var tcp = dimensionsConfig.tcp || {};
+    var offset = tcp.offsetMm || tcp.overrideOffsetMm || { x: 42, y: 0, z: 0 };
+    var axis = tcp.toolAxisLocal || { x: 1, y: 0, z: 0 };
+    setInputValue('dimTcpOffsetX', offset.x);
+    setInputValue('dimTcpOffsetY', offset.y);
+    setInputValue('dimTcpOffsetZ', offset.z);
+    setInputValue('dimTcpAxisX', axis.x);
+    setInputValue('dimTcpAxisY', axis.y);
+    setInputValue('dimTcpAxisZ', axis.z);
+  }
+
+  function collectDimensionsConfig() {
+    var base = cloneConfig(dimensionsConfig || DEFAULT_DIMENSIONS_CONFIG);
+    return {
+      joints: (base.joints || []).map(function (joint) {
+        var n = joint.joint;
+        return {
+          joint: n,
+          name: joint.name || ('Joint ' + n),
+          originMm: { x: numberInputValue('dimJ' + n + 'OriginX', 0), y: numberInputValue('dimJ' + n + 'OriginY', 0), z: numberInputValue('dimJ' + n + 'OriginZ', 0) },
+          rpyDeg: { roll: numberInputValue('dimJ' + n + 'Roll', 0), pitch: numberInputValue('dimJ' + n + 'Pitch', 0), yaw: numberInputValue('dimJ' + n + 'Yaw', 0) },
+          axis: { x: numberInputValue('dimJ' + n + 'AxisX', 0), y: numberInputValue('dimJ' + n + 'AxisY', 0), z: numberInputValue('dimJ' + n + 'AxisZ', 1) },
+          zeroOffsetDegrees: numberInputValue('dimJ' + n + 'Zero', 0),
+          limits: { lowerDegrees: numberInputValue('dimJ' + n + 'Lower', -180), upperDegrees: numberInputValue('dimJ' + n + 'Upper', 180), effort: numberInputValue('dimJ' + n + 'Effort', 5), velocity: joint.limits && Number.isFinite(Number(joint.limits.velocity)) ? Number(joint.limits.velocity) : 3 }
+        };
+      }),
+      tcp: {
+        offsetMm: { x: numberInputValue('dimTcpOffsetX', 42), y: numberInputValue('dimTcpOffsetY', 0), z: numberInputValue('dimTcpOffsetZ', 0) },
+        toolAxisLocal: { x: numberInputValue('dimTcpAxisX', 1), y: numberInputValue('dimTcpAxisY', 0), z: numberInputValue('dimTcpAxisZ', 0) }
+      }
+    };
+  }
+
+  async function loadDimensionsConfig() {
+    try {
+      var d = await apiRequest('/api/robot-arm/dimensions-config');
+      renderDimensionsConfig((d && d.config) || DEFAULT_DIMENSIONS_CONFIG);
+      setDimsMsg('Dimensions loaded');
+    } catch (e) {
+      renderDimensionsConfig(DEFAULT_DIMENSIONS_CONFIG);
+      setDimsMsg('Loaded defaults: ' + e.message, true);
+    }
+  }
+
+  async function saveDimensionsConfig() {
+    var config = collectDimensionsConfig();
+    try {
+      var d = await apiRequest('/api/robot-arm/dimensions-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: config })
+      });
+      dimensionsConfig = cloneConfig(config);
+      setDimsMsg('Dimensions saved' + (d.applied_to_bridge ? ' and applied to bridge' : ' (saved; bridge not connected)'));
+    } catch (e) {
+      setDimsMsg('Save error: ' + e.message, true);
+    }
+  }
+
   var faultThresholds = { temp_max_c: 60, voltage_min_v: 7.0, load_max_pct: 80 };
 
   async function loadFaultConfig() {
@@ -1811,6 +1953,14 @@
       });
     }
 
+    // Joint dimensions tab
+    if ((b = el('dimsReloadBtn'))) b.addEventListener('click', function () { withBtn(b, loadDimensionsConfig); });
+    if ((b = el('dimsDefaultsBtn'))) b.addEventListener('click', function () {
+      renderDimensionsConfig(DEFAULT_DIMENSIONS_CONFIG);
+      setDimsMsg('Defaults loaded into the form');
+    });
+    if ((b = el('dimsSaveBtn'))) b.addEventListener('click', function () { withBtn(b, saveDimensionsConfig); });
+
     // Joint control tab — quick actions
     if ((b = el('homeAllBtn')))   b.addEventListener('click', function () { withBtn(b, homeAll); });
     if ((b = el('torqueOnBtn')))  b.addEventListener('click', function () { withBtn(b, function () { return setTorqueAll(true); }); });
@@ -2008,6 +2158,7 @@
     startPlcAutoMove();
     loadPositions();
     loadFaultConfig();
+    loadDimensionsConfig();
     setCommsPaused(false);
   }
 

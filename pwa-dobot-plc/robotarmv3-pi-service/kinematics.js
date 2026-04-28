@@ -110,6 +110,19 @@ function angleBetweenVectorsDeg(a, b) {
     return (Math.acos(clampedDot) * 180) / Math.PI;
 }
 
+function degreesToRadians(degrees) {
+    return (degrees * Math.PI) / 180;
+}
+
+function radiansToDegreesLocal(radians) {
+    return (radians * 180) / Math.PI;
+}
+
+function finiteNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
 /**
  * Robot Arm Kinematics Class
  * Handles forward and inverse kinematics for a multi-joint robot arm using URDF
@@ -196,6 +209,138 @@ class RobotKinematics {
         this.maxReachMm = totalLengthMm * 1.05;
         console.log('Kinematics: approximate max reach =', this.maxReachMm.toFixed(1), 'mm');
         console.log('Kinematics: TCP default offset mm =', this.tcpConfig.defaultOffsetMm, 'toolAxisLocal =', this.tcpConfig.toolAxisLocal);
+    }
+
+    recalculateReach() {
+        let totalLengthMm = 0;
+        this.joints.forEach(function (joint) {
+            if (joint && joint.origin) {
+                const ox = joint.origin.x || 0;
+                const oy = joint.origin.y || 0;
+                const oz = joint.origin.z || 0;
+                totalLengthMm += Math.sqrt(ox * ox + oy * oy + oz * oz) * 1000;
+            }
+        });
+        if (this.fixedToolJoints && this.fixedToolJoints.length > 0) {
+            this.fixedToolJoints.forEach(function (joint) {
+                if (joint && joint.origin) {
+                    const ox = joint.origin.x || 0;
+                    const oy = joint.origin.y || 0;
+                    const oz = joint.origin.z || 0;
+                    totalLengthMm += Math.sqrt(ox * ox + oy * oy + oz * oz) * 1000;
+                }
+            });
+        }
+        this.maxReachMm = totalLengthMm * 1.05;
+    }
+
+    getKinematicsConfiguration() {
+        const joints = this.joints.map(function (joint, idx) {
+            const origin = joint.origin || {};
+            const axis = joint.axis || {};
+            const limits = joint.limits || {};
+            return {
+                joint: idx + 1,
+                name: joint.name || ('Joint ' + (idx + 1)),
+                originMm: {
+                    x: finiteNumber(origin.x, 0) * 1000,
+                    y: finiteNumber(origin.y, 0) * 1000,
+                    z: finiteNumber(origin.z, 0) * 1000
+                },
+                rpyDeg: {
+                    roll: radiansToDegreesLocal(finiteNumber(origin.roll, 0)),
+                    pitch: radiansToDegreesLocal(finiteNumber(origin.pitch, 0)),
+                    yaw: radiansToDegreesLocal(finiteNumber(origin.yaw, 0))
+                },
+                axis: {
+                    x: finiteNumber(axis.x, 0),
+                    y: finiteNumber(axis.y, 0),
+                    z: finiteNumber(axis.z, 1)
+                },
+                zeroOffsetDegrees: finiteNumber(joint.zeroOffsetDegrees, 0),
+                limits: {
+                    lowerDegrees: finiteNumber(limits.lowerDegrees, -180),
+                    upperDegrees: finiteNumber(limits.upperDegrees, 180),
+                    effort: finiteNumber(limits.effort, 5),
+                    velocity: finiteNumber(limits.velocity, 3)
+                }
+            };
+        });
+        return {
+            joints: joints,
+            tcp: {
+                offsetMm: this.tcpConfig.overrideOffsetMm || this.tcpConfig.defaultOffsetMm,
+                toolAxisLocal: this.tcpConfig.toolAxisLocal
+            },
+            maxReachMm: this.maxReachMm
+        };
+    }
+
+    applyKinematicsConfiguration(config) {
+        const nextConfig = config || {};
+        const nextJoints = Array.isArray(nextConfig.joints) ? nextConfig.joints : [];
+        nextJoints.forEach((cfg, idx) => {
+            const jointIndex = Number.isFinite(Number(cfg.joint)) ? Number(cfg.joint) - 1 : idx;
+            const joint = this.joints[jointIndex];
+            if (!joint) return;
+
+            const originMm = cfg.originMm || {};
+            const rpyDeg = cfg.rpyDeg || {};
+            const axis = cfg.axis || {};
+            const limits = cfg.limits || {};
+
+            joint.origin = joint.origin || {};
+            joint.origin.x = finiteNumber(originMm.x, finiteNumber(joint.origin.x, 0) * 1000) / 1000;
+            joint.origin.y = finiteNumber(originMm.y, finiteNumber(joint.origin.y, 0) * 1000) / 1000;
+            joint.origin.z = finiteNumber(originMm.z, finiteNumber(joint.origin.z, 0) * 1000) / 1000;
+            joint.origin.roll = degreesToRadians(finiteNumber(rpyDeg.roll, radiansToDegreesLocal(finiteNumber(joint.origin.roll, 0))));
+            joint.origin.pitch = degreesToRadians(finiteNumber(rpyDeg.pitch, radiansToDegreesLocal(finiteNumber(joint.origin.pitch, 0))));
+            joint.origin.yaw = degreesToRadians(finiteNumber(rpyDeg.yaw, radiansToDegreesLocal(finiteNumber(joint.origin.yaw, 0))));
+
+            joint.axis = {
+                x: finiteNumber(axis.x, joint.axis && typeof joint.axis.x === 'number' ? joint.axis.x : 0),
+                y: finiteNumber(axis.y, joint.axis && typeof joint.axis.y === 'number' ? joint.axis.y : 0),
+                z: finiteNumber(axis.z, joint.axis && typeof joint.axis.z === 'number' ? joint.axis.z : 1)
+            };
+
+            joint.zeroOffsetDegrees = finiteNumber(cfg.zeroOffsetDegrees, finiteNumber(joint.zeroOffsetDegrees, 0));
+            joint.limits = joint.limits || {};
+            joint.limits.lowerDegrees = finiteNumber(limits.lowerDegrees, finiteNumber(joint.limits.lowerDegrees, -180));
+            joint.limits.upperDegrees = finiteNumber(limits.upperDegrees, finiteNumber(joint.limits.upperDegrees, 180));
+            joint.limits.lowerRadians = degreesToRadians(joint.limits.lowerDegrees);
+            joint.limits.upperRadians = degreesToRadians(joint.limits.upperDegrees);
+            joint.limits.effort = finiteNumber(limits.effort, finiteNumber(joint.limits.effort, 5));
+            joint.limits.velocity = finiteNumber(limits.velocity, finiteNumber(joint.limits.velocity, 3));
+        });
+
+        if (nextConfig.tcp) {
+            if (nextConfig.tcp.offsetMm) {
+                const offsetMm = nextConfig.tcp.offsetMm;
+                const offsetMeters = {
+                    x: finiteNumber(offsetMm.x, this.tcpConfig.defaultOffsetMm.x) / 1000,
+                    y: finiteNumber(offsetMm.y, this.tcpConfig.defaultOffsetMm.y) / 1000,
+                    z: finiteNumber(offsetMm.z, this.tcpConfig.defaultOffsetMm.z) / 1000,
+                    roll: 0,
+                    pitch: 0,
+                    yaw: 0
+                };
+                if (this.fixedToolJoints && this.fixedToolJoints.length > 0) {
+                    this.fixedToolJoints[0].origin = Object.assign({}, this.fixedToolJoints[0].origin || {}, offsetMeters);
+                }
+                this.tcpConfig.defaultOffsetMm = {
+                    x: offsetMeters.x * 1000,
+                    y: offsetMeters.y * 1000,
+                    z: offsetMeters.z * 1000
+                };
+                this.tcpConfig.overrideOffsetMm = null;
+            }
+            if (nextConfig.tcp.toolAxisLocal) {
+                this.setTCPConfiguration({ toolAxisLocal: nextConfig.tcp.toolAxisLocal });
+            }
+        }
+        this.recalculateReach();
+        console.log('Kinematics: applied runtime joint dimension config. maxReachMm =', this.maxReachMm ? this.maxReachMm.toFixed(1) : 'n/a');
+        return this.getKinematicsConfiguration();
     }
 
     setTCPConfiguration(config) {
@@ -1089,5 +1234,3 @@ class RobotKinematics {
 const robotKinematics = new RobotKinematics();
 
 if (typeof module !== 'undefined') module.exports = { RobotKinematics };
-
-

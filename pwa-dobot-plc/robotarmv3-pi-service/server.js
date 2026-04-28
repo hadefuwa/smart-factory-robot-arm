@@ -24,8 +24,8 @@ const { RobotKinematics } = require('./kinematics');
 
 // Configuration
 const PORT = parseInt(process.env.ROBOT_ARM_PORT || "8080");
-const JOINT_COUNT = 5; // Number of robot arm joints (ST3215 servos)
-const SERVO_IDS = [1, 2, 3, 4, 5];
+const JOINT_COUNT = 6; // Number of robot arm joints (ST3215 servos)
+const SERVO_IDS = [1, 2, 3, 4, 5, 6];
 const SERIAL_PORT = '/dev/ttyACM0'; // ST3215 driver board (CDC-ACM device)
 const SERIAL_BAUDRATE = 1000000; // ST3215 bus baud rate for this Pi setup
 
@@ -740,6 +740,36 @@ async function handleCommand(ws, data) {
                 joints: jointConfigs
             }));
             break;
+
+        case 'getKinematicsConfig': {
+            const config = typeof robotKinematics.getKinematicsConfiguration === 'function'
+                ? robotKinematics.getKinematicsConfiguration()
+                : { joints: robotKinematics.getJointConfigs ? robotKinematics.getJointConfigs() : [] };
+            ws.send(JSON.stringify({
+                type: 'kinematicsConfig',
+                success: true,
+                config: config
+            }));
+            break;
+        }
+
+        case 'setKinematicsConfig': {
+            if (typeof robotKinematics.applyKinematicsConfiguration !== 'function') {
+                ws.send(JSON.stringify({ type: 'error', message: 'Kinematics configuration updates are not supported by this service version' }));
+                break;
+            }
+            try {
+                const applied = robotKinematics.applyKinematicsConfiguration(data.config || {});
+                ws.send(JSON.stringify({
+                    type: 'kinematicsConfigSaved',
+                    success: true,
+                    config: applied
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'error', message: e.message || String(e) }));
+            }
+            break;
+        }
             
         case 'getStatus': {
             // Send status of all servos, plus current XYZ position from FK
@@ -1730,6 +1760,5 @@ async function main() {
 
 // Run the main function
 main();
-
 
 
