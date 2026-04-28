@@ -671,7 +671,7 @@ def _write_edge_device_stats_to_plc(worker):
         worker.queue_write(DB126, 16, flags_byte, f'EdgeDevice flags overloaded={overloaded} overtemp={overtemp}')
 
     except Exception as e:
-        logger.debug(f'EdgeDevice PLC write error: {e}')
+        logger.warning(f'EdgeDevice PLC write error: {e}')
 
 
 def _write_iolink_to_plc(worker):
@@ -742,7 +742,7 @@ def _write_iolink_to_plc(worker):
             worker.queue_write(DB127, 16, count_buf, f'IOLink Active_Port_Count={active_count}')
 
     except Exception as e:
-        logger.debug(f'IOLink PLC write error: {e}')
+        logger.warning(f'IOLink PLC write error: {e}')
 
 
 def _plc_telemetry_writer_loop():
@@ -752,6 +752,7 @@ def _plc_telemetry_writer_loop():
         worker = getattr(plc_integration, 'plc_worker', None)
         if worker is None or not worker.get_cache_value('connected', False):
             continue
+        logger.info('PLC telemetry: queuing DB126/DB127 writes')
         _write_edge_device_stats_to_plc(worker)
         _write_iolink_to_plc(worker)
 
