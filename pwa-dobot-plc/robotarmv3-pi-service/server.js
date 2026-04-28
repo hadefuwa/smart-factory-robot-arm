@@ -450,12 +450,24 @@ async function initializeServos() {
         
         // Attach write queue function to shared port for servo controllers to use
         sharedSerialPort._writeQueue = queueWrite;
-        
+
+        // Flush any residual bytes left in the SC-B1 buffer from the previous session.
+        // Without this, stale response bytes can corrupt the first ping attempts and
+        // cause all servos to fail startup even though they are physically present.
+        await new Promise((res) => {
+            sharedSerialPort.flush((err) => {
+                if (err) console.warn('Port flush warning:', err.message);
+                res();
+            });
+        });
+        await new Promise((res) => setTimeout(res, 300));
+        console.log('Serial port flushed — starting servo initialization');
+
     } catch (error) {
         console.error('Failed to initialize shared serial port:', error.message);
         process.exit(1);
     }
-    
+
     // Create servo controllers, all sharing the same serial port
     for (let i = 0; i < JOINT_COUNT; i++) {
         if (i > 0) {
@@ -526,6 +538,9 @@ async function getAllServoStatus() {
             });
         } catch (error) {
             console.error(`Error reading status from servo ${i + 1}:`, error.message);
+            // Remove stale controller from the data router so it stops consuming
+            // response bytes meant for the next revive attempt of the same servo ID.
+            removeServoController(servo);
             servos[i] = null;
             statuses.push({
                 joint: i + 1,
