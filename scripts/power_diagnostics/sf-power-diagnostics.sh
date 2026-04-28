@@ -50,6 +50,7 @@ case "${1:-snapshot}" in
         new_run="$(run_token)"
         printf '%s' "$new_run" > "$STATE_DIR/current-run"
         printf '%s %s\n' "$(now_iso)" "$new_run" >> "$STATE_DIR/boot-history.log"
+        log_kernel_evidence
         ;;
     shutdown)
         if [ -f "$STATE_DIR/current-run" ]; then
@@ -89,5 +90,3 @@ fi
 if [ -d /sys/fs/pstore ] && find /sys/fs/pstore -type f | grep -q .; then
     log "ALERT: pstore contains kernel panic/crash records: $(find /sys/fs/pstore -type f -printf '%f ' 2>/dev/null)"
 fi
-
-log_kernel_evidence
