@@ -1931,7 +1931,14 @@ def robot_arm_status():
                 }), 503
 
         try:
-            response = send_robot_arm_command({'command': 'getStatus'})
+            ws = robot_arm_bridge_state.get('ws')
+            if ws:
+                ws.settimeout(10)
+            try:
+                response = send_robot_arm_command({'command': 'getStatus'})
+            finally:
+                if ws:
+                    ws.settimeout(3)
             robot_arm_bridge_state['last_status'] = response
 
             joints = response.get('joints', [])
