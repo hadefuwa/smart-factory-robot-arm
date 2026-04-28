@@ -696,6 +696,8 @@
             <button type="button" class="plc-page-tab" data-panel="main"><i class="material-icons">table_chart</i>DB123 Main</button>
             <button type="button" class="plc-page-tab" data-panel="camera"><i class="material-icons">videocam</i>DB124 Camera</button>
             <button type="button" class="plc-page-tab" data-panel="robot"><i class="material-icons">precision_manufacturing</i>DB125 Robot</button>
+            <button type="button" class="plc-page-tab" data-panel="edge"><i class="material-icons">memory</i>DB126 Edge Stats</button>
+            <button type="button" class="plc-page-tab" data-panel="iolink"><i class="material-icons">settings_input_component</i>DB127 IO-Link</button>
           </section>
 
           <section class="plc-panel active" data-panel="connection">
@@ -905,6 +907,83 @@
                   <tbody id="robotDbEditorBody"></tbody>
                 </table>
               </div>
+            </div>
+          </section>
+
+          <section class="plc-panel" data-panel="edge">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>DB126 edge device stats</h3>
+                <p>Raspberry Pi health metrics written to the PLC every 10 seconds by the backend telemetry thread. Offsets are fixed — no editor needed.</p>
+              </div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 30%;">Tag</th>
+                      <th style="width: 12%;">Type</th>
+                      <th style="width: 12%;">Byte</th>
+                      <th style="width: 12%;">Bit</th>
+                      <th style="width: 20%;">Address</th>
+                      <th style="width: 14%;">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Online</td><td>Bool</td><td>0</td><td>0</td><td>DB126.DBX0.0</td><td>Backend reachable</td></tr>
+                    <tr><td>CPU_Load</td><td>Real</td><td>2</td><td>—</td><td>DB126.DBD2</td><td>1-min load avg</td></tr>
+                    <tr><td>CPU_Temp</td><td>Real</td><td>6</td><td>—</td><td>DB126.DBD6</td><td>°C (vcgencmd)</td></tr>
+                    <tr><td>Memory_Used_MB</td><td>Int</td><td>10</td><td>—</td><td>DB126.DBW10</td><td>Used RAM in MB</td></tr>
+                    <tr><td>Uptime_Minutes</td><td>DInt</td><td>12</td><td>—</td><td>DB126.DBD12</td><td>System uptime</td></tr>
+                    <tr><td>Overloaded</td><td>Bool</td><td>16</td><td>0</td><td>DB126.DBX16.0</td><td>Load &gt; core count</td></tr>
+                    <tr><td>Overtemp</td><td>Bool</td><td>16</td><td>1</td><td>DB126.DBX16.1</td><td>Temp &gt; 80 °C</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="plc-sheet-toolbar" style="margin-top:0.75rem;">
+              <div class="plc-sheet-note">Writes are queued every 10 s via the <code>plc-telemetry-writer</code> background thread. No configuration required.</div>
+            </div>
+          </section>
+
+          <section class="plc-panel" data-panel="iolink">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>DB127 IO-Link master</h3>
+                <p>IFM AL1300 supervision data written to the PLC every 10 seconds. Offsets are fixed — no editor needed.</p>
+              </div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 30%;">Tag</th>
+                      <th style="width: 12%;">Type</th>
+                      <th style="width: 12%;">Byte</th>
+                      <th style="width: 12%;">Bit</th>
+                      <th style="width: 20%;">Address</th>
+                      <th style="width: 14%;">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Online</td><td>Bool</td><td>0</td><td>0</td><td>DB127.DBX0.0</td><td>Master reachable</td></tr>
+                    <tr><td>Current</td><td>Real</td><td>2</td><td>—</td><td>DB127.DBD2</td><td>Supply current (mA)</td></tr>
+                    <tr><td>Voltage</td><td>Real</td><td>6</td><td>—</td><td>DB127.DBD6</td><td>Supply voltage (V)</td></tr>
+                    <tr><td>Temperature</td><td>Real</td><td>10</td><td>—</td><td>DB127.DBD10</td><td>Module temp (°C)</td></tr>
+                    <tr><td>Alarm</td><td>Bool</td><td>14</td><td>0</td><td>DB127.DBX14.0</td><td>Supervision fault</td></tr>
+                    <tr><td>Active_Port_Count</td><td>Int</td><td>16</td><td>—</td><td>DB127.DBW16</td><td>IO-Link ports active</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="plc-sheet-toolbar" style="margin-top:0.75rem;">
+              <div class="plc-sheet-note">Writes are queued every 10 s via the <code>plc-telemetry-writer</code> background thread. No configuration required.</div>
             </div>
           </section>
 
@@ -1503,7 +1582,7 @@
     }
 
     function activatePanel(panelName, updateHash = true) {
-      const safePanel = ['connection', 'main', 'camera', 'robot'].includes(panelName) ? panelName : 'connection';
+      const safePanel = ['connection', 'main', 'camera', 'robot', 'edge', 'iolink'].includes(panelName) ? panelName : 'connection';
 
       document.querySelectorAll('.plc-page-tab').forEach((tab) => {
         tab.classList.toggle('active', tab.dataset.panel === safePanel);

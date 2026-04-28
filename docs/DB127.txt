@@ -1,0 +1,6 @@
+Online	Bool	0
+Current	Real	2
+Voltage	Real	6
+Temperature	Real	10
+Alarm	Bool	14
+Active_Port_Count	Int	16

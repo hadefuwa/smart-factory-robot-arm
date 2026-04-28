@@ -23,6 +23,7 @@ import websocket
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+import struct
 import snap7.util
 import plc_integration
 from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position
@@ -620,6 +621,152 @@ def start_plc_auto_move_thread():
     )
     t.start()
     logger.info('PLC auto-move background thread started')
+
+
+_PLC_TELEMETRY_INTERVAL = 10  # seconds
+
+
+def _write_edge_device_stats_to_plc(worker):
+    """Write edge device stats to DB126."""
+    from snap7.util import set_bool, set_real, set_int as snap7_set_int
+
+    DB126 = 126
+    try:
+        load1 = 0.0
+        try:
+            load1 = float(os.getloadavg()[0])
+        except Exception:
+            pass
+        cpu_count = int(os.cpu_count() or 1)
+        mem = _get_memory_mb()
+        uptime_secs = _get_uptime_seconds()
+        temp_c = _get_cpu_temperature_celsius()
+        overloaded = load1 > cpu_count
+        overtemp = temp_c is not None and temp_c > 80.0
+
+        online_byte = bytearray(1)
+        set_bool(online_byte, 0, 0, True)
+        worker.queue_write(DB126, 0, online_byte, 'EdgeDevice Online=True')
+
+        cpu_load_buf = bytearray(4)
+        set_real(cpu_load_buf, 0, load1)
+        worker.queue_write(DB126, 2, cpu_load_buf, f'EdgeDevice CPU_Load={load1:.2f}')
+
+        temp_buf = bytearray(4)
+        set_real(temp_buf, 0, float(temp_c) if temp_c is not None else 0.0)
+        worker.queue_write(DB126, 6, temp_buf, f'EdgeDevice CPU_Temp={temp_c}')
+
+        mem_buf = bytearray(2)
+        snap7_set_int(mem_buf, 0, int(mem.get('usedMB', 0)))
+        worker.queue_write(DB126, 10, mem_buf, f'EdgeDevice Memory_Used_MB={mem.get("usedMB")}')
+
+        uptime_min = int(uptime_secs) // 60
+        uptime_buf = bytearray(4)
+        struct.pack_into('>i', uptime_buf, 0, uptime_min)
+        worker.queue_write(DB126, 12, uptime_buf, f'EdgeDevice Uptime_Minutes={uptime_min}')
+
+        flags_byte = bytearray(1)
+        set_bool(flags_byte, 0, 0, overloaded)
+        set_bool(flags_byte, 0, 1, overtemp)
+        worker.queue_write(DB126, 16, flags_byte, f'EdgeDevice flags overloaded={overloaded} overtemp={overtemp}')
+
+    except Exception as e:
+        logger.debug(f'EdgeDevice PLC write error: {e}')
+
+
+def _write_iolink_to_plc(worker):
+    """Write IO-Link master supervision data to DB127."""
+    from snap7.util import set_bool, set_real, set_int as snap7_set_int
+
+    DB127 = 127
+    try:
+        config = load_config()
+        io_config = config.get('io_link', {})
+        ip = io_config.get('master_ip', '192.168.7.4')
+        port = io_config.get('port', 80)
+        timeout = io_config.get('timeout_sec', 3)
+        scheme = 'https' if io_config.get('use_https', False) else 'http'
+        default_port = 443 if scheme == 'https' else 80
+        base_url = f'{scheme}://{ip}' if port == default_port else f'{scheme}://{ip}:{port}'
+
+        result = _fetch_io_link_via_web_scrape(base_url, timeout)
+        if result is None:
+            result = _fetch_io_link_via_iot_core(base_url, timeout)
+
+        online = result is not None
+        online_byte = bytearray(1)
+        set_bool(online_byte, 0, 0, online)
+        worker.queue_write(DB127, 0, online_byte, f'IOLink Online={online}')
+
+        if online:
+            _append_supervision_history(result.get('supervision', {}))
+            sup = result.get('supervision', {})
+            current_ma = 0.0
+            voltage_v = 0.0
+            temp_c = 0.0
+            alarm = False
+            for k, v in sup.items():
+                low = k.lower().replace('-', '').replace(' ', '')
+                if 'current' in low:
+                    current_ma = float(_parse_supervision_number(v, 0.0))
+                elif 'voltage' in low:
+                    voltage_v = float(_parse_supervision_number(v, 0.0))
+                elif 'temp' in low:
+                    temp_c = float(_parse_supervision_number(v, 0.0))
+                elif 'status' in low and 'version' not in low:
+                    status_val = _parse_supervision_number(v, 0)
+                    alarm = bool(status_val) and status_val != 0
+
+            current_buf = bytearray(4)
+            set_real(current_buf, 0, current_ma)
+            worker.queue_write(DB127, 2, current_buf, f'IOLink Current={current_ma}mA')
+
+            voltage_buf = bytearray(4)
+            set_real(voltage_buf, 0, voltage_v)
+            worker.queue_write(DB127, 6, voltage_buf, f'IOLink Voltage={voltage_v}V')
+
+            temp_buf = bytearray(4)
+            set_real(temp_buf, 0, temp_c)
+            worker.queue_write(DB127, 10, temp_buf, f'IOLink Temp={temp_c}C')
+
+            alarm_byte = bytearray(1)
+            set_bool(alarm_byte, 0, 0, alarm)
+            worker.queue_write(DB127, 14, alarm_byte, f'IOLink Alarm={alarm}')
+
+            ports = result.get('ports', [])
+            active_count = sum(
+                1 for p in ports if p.get('mode', 'INACTIVE').upper() != 'INACTIVE'
+            )
+            count_buf = bytearray(2)
+            snap7_set_int(count_buf, 0, active_count)
+            worker.queue_write(DB127, 16, count_buf, f'IOLink Active_Port_Count={active_count}')
+
+    except Exception as e:
+        logger.debug(f'IOLink PLC write error: {e}')
+
+
+def _plc_telemetry_writer_loop():
+    """Background thread: write edge device stats (DB126) and IO-Link (DB127) to PLC every 10s."""
+    while True:
+        time.sleep(_PLC_TELEMETRY_INTERVAL)
+        worker = plc_worker
+        if worker is None or not worker.get_cache_value('connected', False):
+            continue
+        _write_edge_device_stats_to_plc(worker)
+        _write_iolink_to_plc(worker)
+
+
+def start_plc_telemetry_writer():
+    """Start the background thread that writes DB126/DB127 telemetry to the PLC."""
+    t = threading.Thread(
+        target=_plc_telemetry_writer_loop,
+        daemon=True,
+        name='plc-telemetry-writer',
+    )
+    t.start()
+    logger.info('PLC telemetry writer started (DB126 edge stats, DB127 IO-Link, 10s interval)')
+
+
 digital_twin_stream_service = None  # Renders 3D on Pi, streams as MJPEG for HMI
 latest_annotated_image = None  # Stores the latest annotated voting result (base64)
 latest_annotated_mime = 'image/jpeg'
@@ -1417,6 +1564,7 @@ def init_clients():
         # Start the background thread that forwards PLC commands to the robot
         # arm even when nobody has robot-arm.html open in a browser.
         start_plc_auto_move_thread()
+        start_plc_telemetry_writer()
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
         logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")

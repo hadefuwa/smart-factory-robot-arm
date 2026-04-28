@@ -1,0 +1,7 @@
+Online	Bool	0
+CPU_Load	Real	2
+CPU_Temp	Real	6
+Memory_Used_MB	Int	10
+Uptime_Minutes	DInt	12
+Overloaded	Bool	16
+Overtemp	Bool	16.1
