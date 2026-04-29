@@ -248,7 +248,7 @@ DEFAULT_ROBOT_ARM_DIMENSIONS = {
         },
         {
             'joint': 6, 'name': 'joint6_wrist_yaw',
-            'originMm': {'x': 30.0, 'y': 0.0, 'z': 0.0},
+            'originMm': {'x': 42.0, 'y': 0.0, 'z': 0.0},
             'rpyDeg': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0},
             'axis': {'x': 0.0, 'y': 0.0, 'z': 1.0},
             'zeroOffsetDegrees': 0.0,
@@ -256,7 +256,7 @@ DEFAULT_ROBOT_ARM_DIMENSIONS = {
         }
     ],
     'tcp': {
-        'offsetMm': {'x': 42.0, 'y': 0.0, 'z': 0.0},
+        'offsetMm': {'x': 83.0, 'y': 0.0, 'z': 0.0},
         'toolAxisLocal': {'x': 1.0, 'y': 0.0, 'z': 0.0}
     }
 }

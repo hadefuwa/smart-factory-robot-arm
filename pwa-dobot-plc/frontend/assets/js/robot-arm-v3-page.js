@@ -82,10 +82,10 @@
       { joint: 3, name: 'joint3_elbow_pitch', originMm: { x: 161.78, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: -1, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -100, upperDegrees: 100, effort: 10, velocity: 2 } },
       { joint: 4, name: 'joint4_wrist_roll', originMm: { x: 148.2, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 1, y: 0, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 5, velocity: 3 } },
       { joint: 5, name: 'joint5_wrist_pitch', originMm: { x: 30, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 1, z: 0 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -90, upperDegrees: 90, effort: 5, velocity: 3 } },
-      { joint: 6, name: 'joint6_wrist_yaw', originMm: { x: 30, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 0, z: 1 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 5, velocity: 3 } }
+      { joint: 6, name: 'joint6_wrist_yaw', originMm: { x: 42, y: 0, z: 0 }, rpyDeg: { roll: 0, pitch: 0, yaw: 0 }, axis: { x: 0, y: 0, z: 1 }, zeroOffsetDegrees: 0, limits: { lowerDegrees: -180, upperDegrees: 180, effort: 5, velocity: 3 } }
     ],
     tcp: {
-      offsetMm: { x: 42, y: 0, z: 0 },
+      offsetMm: { x: 83, y: 0, z: 0 },
       toolAxisLocal: { x: 1, y: 0, z: 0 }
     }
   };
@@ -1695,7 +1695,7 @@
     });
 
     var tcp = dimensionsConfig.tcp || {};
-    var offset = tcp.offsetMm || tcp.overrideOffsetMm || { x: 42, y: 0, z: 0 };
+    var offset = tcp.offsetMm || tcp.overrideOffsetMm || { x: 83, y: 0, z: 0 };
     var axis = tcp.toolAxisLocal || { x: 1, y: 0, z: 0 };
     setInputValue('dimTcpOffsetX', offset.x);
     setInputValue('dimTcpOffsetY', offset.y);

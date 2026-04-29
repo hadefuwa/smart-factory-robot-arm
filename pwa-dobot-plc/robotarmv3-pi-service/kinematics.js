@@ -67,7 +67,7 @@ function positionFromMatrix(T) {
 
 /**
  * Extracts the tool pointing direction from a 4x4 transform matrix.
- * In our URDF the tool is at origin xyz="0.042 0 0" (along link5 +X), so the
+ * In our URDF the tool is at origin xyz="0.083 0 0" (along link6 +X), so the
  * tool direction is the frame's X-axis (first column), not Z. Using Z would
  * put joint 4 (wrist roll) 90° out of alignment.
  * @param {Array} T - 4x4 matrix (row-major, upper-left 3x3 = rotation)
