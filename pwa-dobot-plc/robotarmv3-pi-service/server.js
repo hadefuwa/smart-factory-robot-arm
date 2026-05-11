@@ -171,6 +171,10 @@ let isWriting = false;
  */
 let commandQueue = [];
 let isProcessingCommand = false;
+let inFlightCommandType = null;
+// WebSocket clients that arrived while a getStatus was already pending. They ride on
+// the in-flight bus scan rather than enqueueing their own — see queueCommand below.
+let pendingGetStatusWaiters = [];
 const MAX_COMMAND_QUEUE_SIZE = 100; // Maximum queue size (status polls + moves)
 const commandStats = {
     totalProcessed: 0,
@@ -234,13 +238,36 @@ async function processWriteQueue() {
  */
 async function queueCommand(commandFn, meta) {
     return new Promise((resolve, reject) => {
-        // Prevent queue from growing too large (could indicate a problem)
+        const commandType = (meta && meta.type) ? String(meta.type) : 'unknown';
+        const callerWs = meta && meta.ws;
+
+        // Coalesce idempotent getStatus polls: every getStatus runs a full serial-bus
+        // scan, so under a bus slowdown they pile up faster than they drain and the
+        // queue fills to MAX_COMMAND_QUEUE_SIZE (the "Command queue is full" failure).
+        // Instead, if a getStatus is already running or queued, ride on it — the
+        // primary handler will broadcast its result to every waiter.
+        if (commandType === 'getStatus' && callerWs) {
+            const alreadyPending =
+                inFlightCommandType === 'getStatus' ||
+                commandQueue.some(c => c.commandType === 'getStatus');
+            if (alreadyPending) {
+                pendingGetStatusWaiters.push(callerWs);
+                resolve();
+                return;
+            }
+        }
+
         if (commandQueue.length >= MAX_COMMAND_QUEUE_SIZE) {
-            console.warn(`Command queue full (${commandQueue.length} items), rejecting new command`);
+            const histogram = {};
+            for (const c of commandQueue) {
+                histogram[c.commandType] = (histogram[c.commandType] || 0) + 1;
+            }
+            const contents = Object.entries(histogram)
+                .map(([t, n]) => `${t}=${n}`).join(' ');
+            console.warn(`Command queue full (${commandQueue.length} items, in-flight=${inFlightCommandType}, contents: ${contents}), rejecting new ${commandType}`);
             reject(new Error('Command queue is full, server may be overloaded'));
             return;
         }
-        const commandType = (meta && meta.type) ? String(meta.type) : 'unknown';
         commandQueue.push({ commandFn, resolve, reject, enqueuedAt: Date.now(), commandType });
         if (commandQueue.length > commandStats.maxQueueLengthSeen) {
             commandStats.maxQueueLengthSeen = commandQueue.length;
@@ -259,7 +286,8 @@ async function processCommandQueue() {
     
     isProcessingCommand = true;
     const { commandFn, resolve, reject, enqueuedAt, commandType } = commandQueue.shift();
-    
+    inFlightCommandType = commandType;
+
     try {
         const waitMs = Math.max(0, Date.now() - (enqueuedAt || Date.now()));
         const startedAt = Date.now();
@@ -281,6 +309,7 @@ async function processCommandQueue() {
         reject(error);
     } finally {
         isProcessingCommand = false;
+        inFlightCommandType = null;
         // Process next command in queue
         processCommandQueue();
     }
@@ -620,10 +649,11 @@ function startServer() {
         ws.on('message', async function incoming(message) {
             try {
                 const data = JSON.parse(message);
-                // Queue the command to ensure only one command is processed at a time
+                // Queue the command to ensure only one command is processed at a time.
+                // ws is passed in meta so queueCommand can coalesce idempotent reads.
                 await queueCommand(async () => {
                     await handleCommand(ws, data);
-                }, { type: data && data.command ? data.command : 'unknown' });
+                }, { type: data && data.command ? data.command : 'unknown', ws });
             } catch (error) {
                 console.error('Error handling message:', error);
                 ws.send(JSON.stringify({
@@ -846,14 +876,25 @@ async function handleCommand(ws, data) {
                     }
                 } catch (_) {}
             }
-            ws.send(JSON.stringify({
+            const statusMessage = JSON.stringify({
                 type: 'status',
                 joints: statuses,
                 currentXYZ: currentXYZ
-            }));
+            });
+            ws.send(statusMessage);
+
+            // Send the same fresh read to any polls that coalesced onto this one
+            // while we were on the serial bus. Drains pendingGetStatusWaiters so
+            // they don't sit waiting for a queue slot that never opens.
+            if (pendingGetStatusWaiters.length > 0) {
+                const waiters = pendingGetStatusWaiters.splice(0);
+                for (const waiterWs of waiters) {
+                    try { waiterWs.send(statusMessage); } catch (_) {}
+                }
+            }
             break;
         }
-            
+
         case 'moveJoint':
             // Move a servo to a specific angle
             const jointNumber = data.joint - 1; // Convert to 0-based index
