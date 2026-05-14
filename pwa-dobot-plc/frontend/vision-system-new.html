@@ -488,7 +488,7 @@
           <i class="material-icons">menu</i>
         </button>
         <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
-          <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <img src="/assets/img/matrix2.png" alt="Matrix Logo" class="h-8 w-auto" />
           <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
           <span class="sf-brand-text">Smart Factory</span>
         </a>
@@ -677,7 +677,7 @@
               </div>
 
               <div class="sf-vision-media-shell">
-                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed">
+                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="transform: rotate(180deg);">
                 <canvas id="cropOverlay" class="sf-vision-overlay"></canvas>
                 <canvas id="roiOverlay" class="sf-vision-overlay"></canvas>
                 <div id="cameraPlaceholder" class="sf-vision-placeholder">
@@ -882,6 +882,7 @@
     const API_BASE = window.location.origin;
     let streamInterval = null;
     let streamReconnectTimer = null;
+    let lastFrameTime = 0;  // epoch ms of last received MJPEG frame
     let statusInterval = null;
     let detectionInterval = null;
     let detectionActive = false;
@@ -1405,6 +1406,7 @@
       }
 
       frame.onload = () => {
+        lastFrameTime = Date.now();
         if (frame.naturalWidth > 0 && frame.naturalHeight > 0) {
           frame.width = frame.naturalWidth;
           frame.height = frame.naturalHeight;
@@ -1440,13 +1442,20 @@
       if (streamInterval) return;
       updateCameraFrame(true); // Initial stream connect
       streamInterval = setInterval(() => {
-        // Lightweight watchdog: reconnect only if stream src is unexpectedly missing.
         const frame = document.getElementById('cameraFrame');
         const streamPath = getActiveCameraStreamPath();
+        // Reconnect if src is missing
         if (!frame || !frame.src || !frame.src.includes(streamPath)) {
           updateCameraFrame(true);
+          return;
         }
-      }, 10000);
+        // Reconnect if no frame received for 8 seconds (frozen stream)
+        if (lastFrameTime > 0 && (Date.now() - lastFrameTime) > 8000) {
+          addDebugLog('camera stream stall', 'No frames for 8s — reconnecting...', 'warn');
+          lastFrameTime = 0;
+          updateCameraFrame(true);
+        }
+      }, 4000);
     }
 
     // Stop camera stream

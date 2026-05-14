@@ -271,6 +271,10 @@
     document.querySelectorAll('[data-sf-theme-select]').forEach((select) => {
       select.value = normalized;
     });
+    const logoSrc = normalized === 'dark' ? '/assets/img/matrix.png' : '/assets/img/matrix2.png';
+    document.querySelectorAll('.sf-template-logo-link img').forEach((img) => {
+      img.src = logoSrc;
+    });
   }
 
   function initThemeControls() {
@@ -372,6 +376,8 @@
         : 'Operations workspace';
 
     const innerContent = content.innerHTML;
+    const initialTheme = localStorage.getItem('sf-template-theme') || document.documentElement.getAttribute('data-theme') || 'light';
+    const initialLogo = initialTheme === 'dark' ? '/assets/img/matrix.png' : '/assets/img/matrix2.png';
     const shellMarkup = `
       <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
         <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
@@ -380,7 +386,7 @@
               <i class="material-icons">menu</i>
             </button>
             <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
-              <img src="/assets/img/matrix.png" alt="Matrix Logo" class="h-8 w-auto" />
+              <img src="${initialLogo}" alt="Matrix Logo" class="h-8 w-auto" />
               <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
               <span class="sf-brand-text">Smart Factory</span>
             </a>
