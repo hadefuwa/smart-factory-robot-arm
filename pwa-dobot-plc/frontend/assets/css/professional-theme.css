@@ -2962,6 +2962,24 @@ body.dashboard-v2.sf-subpage-v2 .sf-page-content .badge-info {
    ================================================================ */
 
 html[data-theme='light'] {
+  /* ── Override dark-theme sidebar/dashboard variables ─────────────
+     body.dashboard-v2 sets these for the dark cinematic theme and they
+     are never reset for light mode, causing grey/blue text on white.  */
+  --sf-text-strong:    #111827;
+  --sf-text-soft:      #374151;
+  --sf-text-muted:     #6b7280;
+  --sf-accent-steel-1: #2563eb;
+  --sf-accent-steel-2: #1d4ed8;
+  --sf-accent-steel-3: #1e40af;
+  --sf-surface-0:      #f8fafc;
+  --sf-surface-1:      #f1f5f9;
+  --sf-surface-2:      #e2e8f0;
+  --sf-surface-3:      #cbd5e1;
+  --sf-surface-4:      #94a3b8;
+  --sf-border-soft:    rgba(31, 41, 55, 0.10);
+  --sf-border-strong:  rgba(31, 41, 55, 0.20);
+  /* ─────────────────────────────────────────────────────────────── */
+
   --bg-page: #f4f6fb;
   --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
