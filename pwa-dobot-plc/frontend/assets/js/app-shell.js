@@ -264,6 +264,42 @@
     });
   }
 
+  function _applyThemeStyles(theme) {
+    let el = document.getElementById('sf-runtime-theme-styles');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'sf-runtime-theme-styles';
+      document.head.appendChild(el);
+    }
+    if (theme === 'light') {
+      el.textContent = `
+        /* Sidebar nav items */
+        .sf-template-sidebar .sf-nav-item,
+        .sf-template-sidebar .sf-nav-item span { color: #1f2937 !important; }
+        .sf-template-sidebar .sf-nav-item i { color: #6b7280 !important; }
+        .sf-template-sidebar .sf-nav-item:hover { background: #f1f5f9 !important; }
+        .sf-template-sidebar .sf-nav-item:hover span { color: #111827 !important; }
+        .sf-template-sidebar .sf-nav-item:hover i { color: #2563eb !important; }
+        .sf-template-sidebar .sf-nav-item.active,
+        .sf-template-sidebar .sf-nav-item.active span { color: #1d4ed8 !important; }
+        .sf-template-sidebar .sf-nav-item.active { background: #eff6ff !important; }
+        .sf-template-sidebar .sf-nav-item.active i { color: #2563eb !important; }
+        /* Section labels and sidebar head */
+        .sf-menu-title span { color: #9ca3af !important; }
+        .sf-template-sidebar-kicker { color: #9ca3af !important; }
+        .sf-template-sidebar-head strong { color: #111827 !important; font-weight: 700; }
+        /* Topbar title */
+        .sf-template-shell-title { color: #111827 !important; }
+        /* Page eyebrow / kicker */
+        .sf-eyebrow { color: #6b7280 !important; }
+        /* Panel head description text */
+        .sf-panel-head p { color: #4b5563 !important; }
+      `;
+    } else {
+      el.textContent = '';
+    }
+  }
+
   function applyTheme(theme) {
     const normalized = theme === 'dark' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', normalized);
@@ -275,6 +311,7 @@
     document.querySelectorAll('.sf-template-logo-link img').forEach((img) => {
       img.src = logoSrc;
     });
+    _applyThemeStyles(normalized);
   }
 
   function initThemeControls() {
