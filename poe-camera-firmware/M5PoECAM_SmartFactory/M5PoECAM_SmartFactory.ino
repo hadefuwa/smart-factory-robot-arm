@@ -1,31 +1,34 @@
 /**
- * M5Stack PoE CAM-W - Smart Factory Vision System Firmware
+ * M5Stack PoE CAM-W - Smart Factory Vision System Firmware v1.1.0
  *
  * Connects via PoE Ethernet (W5500). Serves MJPEG stream on port 80.
  *
- * Endpoints used by the Pi backend:
- *   GET /        -> status page (IP, uptime, firmware version)
+ * Endpoints:
+ *   GET /        -> HTML status page (IP, uptime, firmware version)
  *   GET /stream  -> MJPEG continuous stream
  *   GET /capture -> single JPEG frame
  *   GET /status  -> JSON status (for backend health check)
  *
- * Hardware: M5Stack PoE CAM-W v1.1 (ESP32 + OV3660 + W5500)
- * Arduino Board: M5Stack (install from Board Manager with URL below)
- * Required libraries: M5PoECAM, M5_Ethernet (install via Library Manager)
+ * Hardware: M5Stack PoE CAM-W v1.1 (ESP32-D0WDQ6-V3 + OV3660 + W5500)
+ * Board FQBN: esp32:esp32:m5stack_poe_cam (arduino-esp32 3.3.7)
  *
- * Board Manager URL:
- *   https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/arduino/package_m5stack_index.json
+ * v1.1.0 change: replaced M5_Ethernet with arduino-esp32 built-in ETH.h.
+ * Root cause of the v1.0.0 0.0.0.0 IP bug: W5500 RST pin is not wired on
+ * this board, so M5_Ethernet's W5100.init() returned 0 silently.
+ * ETH.h uses W5500 in polling mode (IRQ/RST = -1) and handles the
+ * unconnected RST pin correctly via the esp_eth driver.
  */
 
 #include "M5PoECAM.h"
-#include <M5_Ethernet.h>
+#include <ETH.h>
 #include <SPI.h>
+#include <WiFi.h>   // provides WiFiServer / WiFiClient (unified lwIP stack in v3.x)
 
 // ── Firmware metadata ─────────────────────────────────────────────────────────
-#define FW_VERSION "1.0.0"
+#define FW_VERSION  "1.1.0"
 #define DEVICE_NAME "SmartFactory-PoECAM"
 
-// ── MJPEG stream boundary (must match backend proxy) ─────────────────────────
+// ── MJPEG stream boundary ─────────────────────────────────────────────────────
 #define PART_BOUNDARY "123456789000000000000987654321"
 static const char* STREAM_CONTENT_TYPE =
     "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
@@ -33,20 +36,68 @@ static const char* STREAM_BOUNDARY = "--" PART_BOUNDARY "\r\n";
 static const char* STREAM_PART     =
     "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
-// ── Ethernet MAC (use camera's hardware MAC if known, else keep this default) ─
-byte mac[] = {0x18, 0x7F, 0x88, 0x06, 0xA6, 0x26};  // matches 192.168.0.58
+// ── W5500 config (RST and IRQ are not wired on PoE CAM-W) ────────────────────
+#define ETH_PHY_IRQ  -1
+#define ETH_PHY_RST  -1
 
-EthernetServer server(80);
+// ── Static IP (192.168.7.x industrial network) ────────────────────────────────
+IPAddress staticIP(192, 168, 7,   6);
+IPAddress gw      (192, 168, 7,   1);
+IPAddress sn      (255, 255, 255, 0);
+IPAddress dnsIP   (192, 168, 7,   1);
+
+// ── Use VSPI bus for W5500 ────────────────────────────────────────────────────
+SPIClass ethSPI(VSPI);
+
+// WiFiServer works with ETH.h in arduino-esp32 v3.x (shared lwIP stack)
+WiFiServer    server(80);
 unsigned long bootMs = 0;
+bool          ethUp  = false;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Forward declarations
+void serveStream (WiFiClient* client);
+void serveCapture(WiFiClient* client);
+void serveStatus (WiFiClient* client);
+void serveRoot   (WiFiClient* client);
+
+// ── Ethernet event handler ────────────────────────────────────────────────────
+void onEthEvent(arduino_event_id_t event, arduino_event_info_t info) {
+    switch (event) {
+        case ARDUINO_EVENT_ETH_START:
+            Serial.println("[ETH] Started");
+            ETH.setHostname("poe-cam");
+            break;
+        case ARDUINO_EVENT_ETH_CONNECTED:
+            Serial.println("[ETH] Link UP");
+            break;
+        case ARDUINO_EVENT_ETH_GOT_IP:
+            ethUp = true;
+            Serial.printf("[ETH] IP: %s  MAC: %s\n",
+                ETH.localIP().toString().c_str(),
+                ETH.macAddress().c_str());
+            break;
+        case ARDUINO_EVENT_ETH_DISCONNECTED:
+            Serial.println("[ETH] Link DOWN");
+            ethUp = false;
+            break;
+        case ARDUINO_EVENT_ETH_STOP:
+            Serial.println("[ETH] Stopped");
+            ethUp = false;
+            break;
+        default: break;
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 void setup() {
+    delay(2000);  // Allow PoE/USB power rail to stabilise before touching SPI
+
     Serial.begin(115200);
     Serial.println("\n[PoECAM] Booting " DEVICE_NAME " v" FW_VERSION);
 
-    PoECAM.begin();
-
     // Camera init
+    PoECAM.begin();
     if (!PoECAM.Camera.begin()) {
         Serial.println("[PoECAM] Camera init FAILED");
         while (true) {
@@ -62,30 +113,32 @@ void setup() {
     PoECAM.Camera.sensor->set_vflip(PoECAM.Camera.sensor, 1);
     PoECAM.Camera.sensor->set_hmirror(PoECAM.Camera.sensor, 0);
 
-    // Ethernet init (W5500 via SPI)
-    SPI.begin(M5_POE_CAM_ETH_CLK_PIN, M5_POE_CAM_ETH_MISO_PIN,
-              M5_POE_CAM_ETH_MOSI_PIN, -1);
-    Ethernet.init(M5_POE_CAM_ETH_CS_PIN);
+    // Ethernet: ETH.h W5500 driver — polling mode, RST/IRQ both -1
+    // Must register event handler BEFORE ETH.begin()
+    ethSPI.begin(M5_POE_CAM_ETH_CLK_PIN, M5_POE_CAM_ETH_MISO_PIN,
+                 M5_POE_CAM_ETH_MOSI_PIN, M5_POE_CAM_ETH_CS_PIN);
+    Network.onEvent(onEthEvent);
+    ETH.begin(ETH_PHY_W5500, 1, M5_POE_CAM_ETH_CS_PIN,
+              ETH_PHY_IRQ, ETH_PHY_RST, ethSPI);
+    ETH.config(staticIP, gw, sn, dnsIP);
 
-    Serial.println("[PoECAM] Waiting for DHCP...");
-    int dhcpAttempts = 0;
-    while (Ethernet.begin(mac) != 1) {
-        dhcpAttempts++;
-        Serial.printf("[PoECAM] DHCP attempt %d failed, retrying...\n", dhcpAttempts);
-        delay(2000);
-        if (dhcpAttempts > 10) {
-            Serial.println("[PoECAM] DHCP failed after 10 attempts. Check PoE cable.");
-        }
+    // Wait up to 8 s for link + IP
+    Serial.println("[ETH] Waiting for link (8s max)...");
+    uint32_t t = millis();
+    while (!ethUp && (millis() - t) < 8000) delay(100);
+
+    if (!ethUp) {
+        Serial.println("[ETH] WARNING: no link after 8s — starting server anyway");
     }
 
     server.begin();
     bootMs = millis();
 
     Serial.println("[PoECAM] ========================================");
-    Serial.printf( "[PoECAM]  IP       : %s\n", Ethernet.localIP().toString().c_str());
-    Serial.printf( "[PoECAM]  Stream   : http://%s/stream\n", Ethernet.localIP().toString().c_str());
-    Serial.printf( "[PoECAM]  Capture  : http://%s/capture\n", Ethernet.localIP().toString().c_str());
-    Serial.printf( "[PoECAM]  Status   : http://%s/status\n", Ethernet.localIP().toString().c_str());
+    Serial.printf( "[PoECAM]  IP      : %s\n",  ETH.localIP().toString().c_str());
+    Serial.printf( "[PoECAM]  Stream  : http://%s/stream\n",  ETH.localIP().toString().c_str());
+    Serial.printf( "[PoECAM]  Capture : http://%s/capture\n", ETH.localIP().toString().c_str());
+    Serial.printf( "[PoECAM]  Status  : http://%s/status\n",  ETH.localIP().toString().c_str());
     Serial.println("[PoECAM] ========================================");
 
     PoECAM.setLed(true); delay(500); PoECAM.setLed(false);  // ready signal
@@ -93,9 +146,7 @@ void setup() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 void loop() {
-    Ethernet.maintain();  // renew DHCP lease if needed
-
-    EthernetClient client = server.available();
+    WiFiClient client = server.available();
     if (!client) return;
 
     Serial.println("[PoECAM] Client connected");
@@ -118,22 +169,17 @@ void loop() {
 
     Serial.printf("[PoECAM] Request: %s", requestLine.c_str());
 
-    if (requestLine.startsWith("GET /stream")) {
-        serveStream(&client);
-    } else if (requestLine.startsWith("GET /capture")) {
-        serveCapture(&client);
-    } else if (requestLine.startsWith("GET /status")) {
-        serveStatus(&client);
-    } else {
-        serveRoot(&client);
-    }
+    if      (requestLine.startsWith("GET /stream"))   serveStream(&client);
+    else if (requestLine.startsWith("GET /capture"))  serveCapture(&client);
+    else if (requestLine.startsWith("GET /status"))   serveStatus(&client);
+    else                                               serveRoot(&client);
 
     client.stop();
     Serial.println("[PoECAM] Client disconnected");
 }
 
 // ── Serve MJPEG stream ────────────────────────────────────────────────────────
-void serveStream(EthernetClient* client) {
+void serveStream(WiFiClient* client) {
     client->println("HTTP/1.1 200 OK");
     client->printf("Content-Type: %s\r\n", STREAM_CONTENT_TYPE);
     client->println("Access-Control-Allow-Origin: *");
@@ -165,7 +211,7 @@ void serveStream(EthernetClient* client) {
                 remain -= chunk;
             }
 
-            int64_t now = esp_timer_get_time();
+            int64_t now        = esp_timer_get_time();
             int64_t elapsed_ms = (now - last_frame) / 1000;
             last_frame = now;
             frameCount++;
@@ -185,7 +231,7 @@ void serveStream(EthernetClient* client) {
 }
 
 // ── Serve single JPEG capture ─────────────────────────────────────────────────
-void serveCapture(EthernetClient* client) {
+void serveCapture(WiFiClient* client) {
     if (!PoECAM.Camera.get()) {
         client->println("HTTP/1.1 503 Service Unavailable\r\n\r\nCamera not ready");
         return;
@@ -213,9 +259,9 @@ void serveCapture(EthernetClient* client) {
 }
 
 // ── Serve JSON status ─────────────────────────────────────────────────────────
-void serveStatus(EthernetClient* client) {
+void serveStatus(WiFiClient* client) {
     unsigned long uptimeSec = (millis() - bootMs) / 1000;
-    IPAddress ip = Ethernet.localIP();
+    IPAddress ip = ETH.localIP();
 
     char body[512];
     snprintf(body, sizeof(body),
@@ -245,8 +291,8 @@ void serveStatus(EthernetClient* client) {
 }
 
 // ── Serve HTML status page ────────────────────────────────────────────────────
-void serveRoot(EthernetClient* client) {
-    IPAddress ip = Ethernet.localIP();
+void serveRoot(WiFiClient* client) {
+    IPAddress ip = ETH.localIP();
     unsigned long uptimeSec = (millis() - bootMs) / 1000;
 
     char body[1024];
