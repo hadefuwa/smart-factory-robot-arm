@@ -3061,6 +3061,32 @@ html[data-theme='dark'] body.dashboard-v2 {
   color: var(--sf-base-content) !important;
 }
 
+/* ── Re-root all dark CSS variables for light mode on body.dashboard-v2.
+   body.dashboard-v2 defines --sf-text-soft:#c9d6ec etc. (for the dark
+   cinematic theme). Child rules that use var(--sf-text-soft) with
+   !important resolve these at the body level — overriding them here
+   fixes every sf-subpage-v2 heading, label, and muted-text rule at once. */
+html[data-theme='light'] body.dashboard-v2 {
+  --sf-text-strong:    #111827;
+  --sf-text-soft:      #374151;
+  --sf-text-muted:     #6b7280;
+  --sf-success:        #16a34a;
+  --sf-warning:        #d97706;
+  --sf-danger:         #dc2626;
+  --sf-info:           #0284c7;
+  --sf-surface-0:      #f8fafc;
+  --sf-surface-1:      #f1f5f9;
+  --sf-surface-2:      #e2e8f0;
+  --sf-surface-3:      #cbd5e1;
+  --sf-surface-4:      #94a3b8;
+  --sf-border-soft:    rgba(31, 41, 55, 0.10);
+  --sf-border-strong:  rgba(31, 41, 55, 0.20);
+  --sf-accent-steel-1: #2563eb;
+  --sf-accent-steel-2: #1d4ed8;
+  --sf-accent-steel-3: #1e40af;
+  --sf-glow-steel:     0 0 0 1px rgba(37, 99, 235, 0.18), 0 4px 16px rgba(37, 99, 235, 0.10);
+}
+
 html[data-theme='light'] body.dashboard-v2 .sf-shell,
 html[data-theme='dark'] body.dashboard-v2 .sf-shell {
   background: var(--sf-base-100);
