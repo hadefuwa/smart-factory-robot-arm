@@ -168,6 +168,10 @@
     "poll_interval_sec": 5,
     "timeout_sec": 3
   },
+  "poe_camera": {
+    "ip": "192.168.0.58",
+    "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.0.58/stream"
+  },
   "enable_digital_twin_stream": false,
   "digital_twin_width": 320,
   "digital_twin_height": 240,

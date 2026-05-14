@@ -646,6 +646,36 @@
                 <h3>Camera Feed</h3>
                 <p>Live stream with crop and detection overlays.</p>
               </header>
+
+              <!-- Camera source switcher -->
+              <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Source</span>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <span class="text-xs text-base-content/80">USB</span>
+                    <input type="checkbox" class="toggle toggle-sm toggle-info" id="cameraSourceToggle" onchange="switchCameraSource()">
+                    <span class="text-xs text-base-content/80">PoE Cam</span>
+                  </label>
+                </div>
+                <span id="poeCamStatusBadge" class="sf-title-conn-badge offline" style="display:none">
+                  <span class="sf-title-conn-dot"></span>
+                  <span id="poeCamStatusText">Disconnected</span>
+                </span>
+              </div>
+              <div id="poeCamControls" class="mb-3 p-3 rounded-box border border-info/40 bg-info/10 space-y-2" style="display:none">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
+                  <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
+                  <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
+                  </button>
+                </div>
+                <div class="text-xs text-base-content/60">Enter the IP of your M5Stack PoE CAM-W. Find it from the camera serial output or your router DHCP table.</div>
+              </div>
+
               <div class="sf-vision-media-shell">
                 <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed">
                 <canvas id="cropOverlay" class="sf-vision-overlay"></canvas>
@@ -857,6 +887,7 @@
     let detectionActive = false;
     let objectParamsSaveTimer = null;
     let pagePrefsSaveTimer = null;
+    let activeCameraSource = 'usb'; // 'usb' | 'poe'
     let lastCycleTimestampSeen = 0;
     let lastAnnotatedRefreshMs = 0;
     let lastAnnotatedRefreshWhileStartMs = 0;
@@ -897,6 +928,113 @@
       if (logEl) logEl.textContent = '(cleared)';
       const summaryEl = document.getElementById('debugSummary');
       if (summaryEl) summaryEl.textContent = 'No debug events yet.';
+    }
+
+    function getActiveCameraStreamPath() {
+      return activeCameraSource === 'poe' ? '/api/poe-camera/stream' : '/api/camera/stream';
+    }
+
+    function getActiveCameraStreamUrl() {
+      return `${API_BASE}${getActiveCameraStreamPath()}?_=${Date.now()}`;
+    }
+
+    function _setPoeCamBadge(connected) {
+      const badge = document.getElementById('poeCamStatusBadge');
+      const dot = badge && badge.querySelector('.sf-title-conn-dot');
+      const text = document.getElementById('poeCamStatusText');
+      if (!badge) return;
+      badge.classList.toggle('online', connected);
+      badge.classList.toggle('offline', !connected);
+      if (dot) dot.classList.toggle('pulse', connected);
+      if (text) text.textContent = connected ? 'Connected' : 'Unreachable';
+    }
+
+    function switchCameraSource() {
+      const toggle = document.getElementById('cameraSourceToggle');
+      const controls = document.getElementById('poeCamControls');
+      const badge = document.getElementById('poeCamStatusBadge');
+      activeCameraSource = toggle && toggle.checked ? 'poe' : 'usb';
+      if (activeCameraSource === 'poe') {
+        if (controls) controls.style.display = 'block';
+        if (badge) badge.style.display = 'inline-flex';
+        loadPoeCameraConfig();
+      } else {
+        if (controls) controls.style.display = 'none';
+        if (badge) badge.style.display = 'none';
+      }
+      stopStream();
+      setTimeout(() => updateCameraFrame(true), 50);
+      addDebugLog('camera source switched', activeCameraSource);
+    }
+
+    async function loadPoeCameraConfig() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ip) {
+            const inp = document.getElementById('poeCameraIp');
+            if (inp) inp.value = data.ip;
+          }
+          _setPoeCamBadge(data.connected);
+        }
+      } catch (e) {
+        addDebugLog('PoE camera config load failed', e.message, 'warn');
+      }
+    }
+
+    async function applyPoeCameraIp() {
+      const inp = document.getElementById('poeCameraIp');
+      const ip = (inp ? inp.value : '').trim();
+      if (!ip) { alert('Please enter the camera IP address.'); return; }
+      addDebugLog('PoE camera IP applying', ip);
+      try {
+        await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ poe_camera: { ip } })
+        });
+        await checkPoeCameraStatus();
+        stopStream();
+        setTimeout(() => updateCameraFrame(true), 100);
+      } catch (e) {
+        addDebugLog('PoE camera apply error', e.message, 'error');
+      }
+    }
+
+    async function checkPoeCameraStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(8000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          _setPoeCamBadge(data.connected);
+          addDebugLog('PoE camera status', data);
+          return data.connected;
+        }
+      } catch (e) {
+        _setPoeCamBadge(false);
+        addDebugLog('PoE camera status check failed', e.message, 'warn');
+      }
+      return false;
+    }
+
+    async function loadCameraSourcePreference() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(5000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ip) {
+            const inp = document.getElementById('poeCameraIp');
+            if (inp) inp.value = data.ip;
+          }
+        }
+      } catch (e) { /* non-fatal */ }
     }
 
     async function runDebugChecks() {
@@ -1259,9 +1397,10 @@
       const placeholder = document.getElementById('cameraPlaceholder');
       if (!frame) return;
 
-      const streamUrl = `${API_BASE}/api/camera/stream?_=${Date.now()}`;
+      const streamPath = getActiveCameraStreamPath();
+      const streamUrl = getActiveCameraStreamUrl();
 
-      if (!forceReconnect && frame.src && frame.src.includes('/api/camera/stream')) {
+      if (!forceReconnect && frame.src && frame.src.includes(streamPath)) {
         return;
       }
 
@@ -1276,14 +1415,15 @@
       };
 
       frame.onerror = () => {
-        addDebugLog('camera stream error', 'MJPEG stream disconnected, reconnecting...', 'warn');
+        const sourceLabel = activeCameraSource === 'poe' ? 'PoE camera' : 'USB camera';
+        addDebugLog('camera stream error', `${sourceLabel} MJPEG disconnected, reconnecting...`, 'warn');
         frame.style.display = 'none';
         if (placeholder) {
           placeholder.style.display = 'flex';
           placeholder.innerHTML = `
             <div class="sf-vision-camera-error">
               <i class="material-icons sf-vision-inline-icon is-large">videocam_off</i>
-              <p class="sf-vision-placeholder-title">Camera Stream Unavailable</p>
+              <p class="sf-vision-placeholder-title">${sourceLabel.charAt(0).toUpperCase() + sourceLabel.slice(1)} Stream Unavailable</p>
               <p class="sf-vision-placeholder-copy">Retrying automatically...</p>
             </div>
           `;
@@ -1292,7 +1432,7 @@
       };
 
       frame.src = streamUrl;
-      addDebugLog('camera stream connected', '/api/camera/stream');
+      addDebugLog('camera stream connected', streamPath);
     }
 
     // Start camera stream
@@ -1302,7 +1442,8 @@
       streamInterval = setInterval(() => {
         // Lightweight watchdog: reconnect only if stream src is unexpectedly missing.
         const frame = document.getElementById('cameraFrame');
-        if (!frame || !frame.src || !frame.src.includes('/api/camera/stream')) {
+        const streamPath = getActiveCameraStreamPath();
+        if (!frame || !frame.src || !frame.src.includes(streamPath)) {
           updateCameraFrame(true);
         }
       }, 10000);
@@ -2467,6 +2608,7 @@
       loadPagePrefs();
       loadCropSettings(); // Load crop settings on page load
       loadDetectionRoi(); // Load detection ROI on page load
+      loadCameraSourcePreference(); // Pre-fill PoE camera IP if previously configured
 
       // Start live status and camera feed
       startLiveStatusPolling(); // Start live status polling

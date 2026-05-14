@@ -3129,6 +3129,64 @@ def camera_stream():
     return response
 
 
+@app.route('/api/poe-camera/status')
+def poe_camera_status():
+    """Check M5Stack PoE CAM-W connectivity and return saved config."""
+    config = load_config()
+    poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
+    if not poe_ip:
+        return jsonify({'configured': False, 'connected': False, 'ip': ''})
+    connected = False
+    try:
+        r = requests.get(f'http://{poe_ip}/capture', timeout=3)
+        connected = r.status_code < 500
+    except Exception:
+        pass
+    return jsonify({'configured': True, 'connected': connected, 'ip': poe_ip})
+
+
+@app.route('/api/poe-camera/stream')
+def poe_camera_stream():
+    """Proxy MJPEG stream from M5Stack PoE CAM-W (OV3660) to the browser.
+
+    The camera serves multipart/x-mixed-replace at http://<ip>/stream.
+    We open that connection and pipe the raw bytes through so the browser
+    receives valid MJPEG regardless of mixed-content restrictions.
+    """
+    config = load_config()
+    poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
+    if not poe_ip:
+        return jsonify({'error': 'PoE camera IP not configured. Set it on the Vision System page.'}), 503
+    stream_url = f'http://{poe_ip}/stream'
+    try:
+        upstream = requests.get(stream_url, stream=True, timeout=(5, None))
+        content_type = upstream.headers.get('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+
+        def _relay():
+            try:
+                for chunk in upstream.iter_content(chunk_size=4096):
+                    if chunk:
+                        yield chunk
+            except Exception as exc:
+                logger.warning(f"PoE camera proxy stream ended: {exc}")
+            finally:
+                upstream.close()
+
+        response = Response(_relay(), mimetype=content_type)
+        response.headers['X-Frame-Options'] = 'ALLOWALL'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['X-Accel-Buffering'] = 'no'
+        return response
+    except requests.exceptions.ConnectionError:
+        return jsonify({'error': f'Cannot connect to PoE camera at {poe_ip}. Check IP and network.'}), 503
+    except Exception as exc:
+        logger.error(f"PoE camera stream error: {exc}")
+        return jsonify({'error': str(exc)}), 503
+
+
 # DISABLED: Digital twin routes commented out to reduce CPU usage
 # def generate_digital_twin_frames():
 #     """Generator for digital twin MJPEG stream - same format as camera."""
