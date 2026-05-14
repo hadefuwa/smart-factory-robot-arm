@@ -185,6 +185,19 @@ Then use `https://192.168.7.5:8080/api/camera/stream` in WinCC. Accept the certi
 
 ---
 
+## 🌐 Network Topology
+
+All devices run on the `192.168.7.x` industrial subnet. No Windows PC is required in production.
+
+| Device | IP | Role |
+|--------|-----|------|
+| Raspberry Pi 5 | 192.168.7.5 | Backend, web UI, all control logic |
+| Siemens S7-1200 PLC | 192.168.7.2 | Main automation controller |
+| IO-Link Master | 192.168.7.4 | Sensor data, HTTP polling |
+| M5Stack PoE CAM-W | 192.168.7.6 | MJPEG vision stream |
+
+---
+
 ## 🎯 What This Project Does
 
 This project allows you to:
@@ -195,31 +208,41 @@ This project allows you to:
 - **Clear robot alarms automatically** (this was a key fix!)
 - **Control robot movements** manually or via PLC commands
 - **Use as a Progressive Web App (PWA)** - install it on your phone or desktop
+- **Stream live vision** from a USB camera or M5Stack PoE CAM-W (toggleable in UI)
 
 ---
 
 ## 📁 Project Structure
 
 ```
-sf2/
-├── pwa-dobot-plc/              # Main application (robot, PLC, vision, camera)
-│   ├── backend/                # Flask server
-│   │   ├── app.py              # Main Flask app (HTTP/HTTPS)
-│   │   ├── dobot_client.py     # Dobot robot control
-│   │   ├── plc_client.py       # PLC communication
-│   │   ├── camera_service.py   # Camera & vision
-│   │   ├── vision_service.py   # YOLO detection (separate process)
-│   │   ├── config.json         # Configuration
-│   │   └── ssl/                # HTTPS certs (generated, not in git)
-│   ├── frontend/               # Web UI (HTML, vision-system, etc.)
+smart-factory-robot-arm/
+├── pwa-dobot-plc/                  # Main application (robot, PLC, vision, camera)
+│   ├── backend/
+│   │   ├── app.py                  # Flask entry point (HTTPS, port 8080)
+│   │   ├── config.json             # All hardware config — edit here for IP/port changes
+│   │   ├── plc_integration.py      # PLC polling thread, DB read/write
+│   │   ├── plc_client.py           # snap7 wrapper
+│   │   ├── dobot_client.py         # Dobot Magician USB control
+│   │   ├── camera_service.py       # USB camera + PoE CAM proxy routes
+│   │   ├── vision_service.py       # YOLO + HSV cube detection
+│   │   └── ssl/                    # Self-signed certs (generated, not in git)
+│   ├── frontend/
+│   │   ├── vision-system-new.html  # Active vision page (USB ↔ PoE CAM toggle)
+│   │   ├── robot-arm.html
+│   │   ├── plc-setup.html
+│   │   ├── io-link.html
+│   │   └── ...
 │   └── deploy/
-│       ├── ecosystem.config.js # PM2 config (points to sf2)
-│       └── generate_ssl_cert.sh # HTTPS certificate for WinCC
-├── docs/                       # Documentation
-├── scripts/                    # Scripts
-├── lib/                        # External libraries
-├── tests/                      # Test files
-└── README.md                   # This file
+│       ├── ecosystem.config.js     # PM2 config
+│       └── generate_ssl_cert.sh    # HTTPS certificate generator
+├── poe-camera-firmware/            # M5Stack PoE CAM-W Arduino firmware
+│   ├── M5PoECAM_SmartFactory/
+│   │   └── M5PoECAM_SmartFactory.ino  # v1.1.0 — ETH.h, static 192.168.7.6
+│   └── FIRMWARE_CHANGELOG.md       # Root cause analysis + flash procedure
+├── raspberry-pi-control-st3215/    # Robot arm servo/joint control
+├── docs/                           # Guides, API docs, solution notes
+├── Documentation/                  # Deployment and troubleshooting docs
+└── CLAUDE.md                       # Claude Code context (AI assistant instructions)
 ```
 
 ---
@@ -928,7 +951,8 @@ A: Pull latest changes with `git pull origin main` and restart the application.
 ✅ **TESTED** - All core functionality verified  
 ✅ **DEPLOYED** - Production-ready on Raspberry Pi  
 ✅ **ORGANIZED** - Clean project structure for maintainability  
-✅ **DOCUMENTED** - Comprehensive documentation available
+✅ **DOCUMENTED** - Comprehensive documentation available  
+✅ **PoE CAMERA** - M5Stack PoE CAM-W on 192.168.7.6, firmware v1.1.0 (ETH.h)
 
 ---
 
@@ -947,6 +971,6 @@ MIT License - Feel free to use and modify!
 
 ---
 
-**Last Updated:** 2026-03-04
-**Version:** v4.6
+**Last Updated:** 2026-05-14
+**Version:** v4.7
 **Status:** Production Ready ✅
