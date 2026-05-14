@@ -4594,3 +4594,66 @@ html[data-theme='dark'] body.sf-page-plc #cameraDbEditorBody select {
     margin-bottom: 0.65rem;
   }
 }
+
+/* ================================================================
+   LIGHT MODE — TEXT READABILITY FIXES
+   DaisyUI opacity variants (text-base-content/60 etc.) use CSS alpha
+   on --bc which is a dark-navy in light mode. On a white background
+   this produces flat grey text with poor contrast. Override them with
+   proper slate colours that stay readable on light backgrounds.
+   ================================================================ */
+
+html[data-theme='light'] .text-base-content\/50 {
+  color: #9ca3af !important; /* slate-400 — timestamps, ultra-muted */
+}
+html[data-theme='light'] .text-base-content\/60 {
+  color: #6b7280 !important; /* slate-500 — secondary labels */
+}
+html[data-theme='light'] .text-base-content\/70 {
+  color: #4b5563 !important; /* slate-600 — supporting text */
+}
+html[data-theme='light'] .text-base-content\/80 {
+  color: #374151 !important; /* slate-700 — body / description text */
+}
+
+/* Ensure primary body text is near-black, not grey */
+html[data-theme='light'] body,
+html[data-theme='light'] .text-base-content {
+  color: #111827;
+}
+
+/* Fix any elements still pulling --text-primary/secondary from the dark :root defaults */
+html[data-theme='light'] {
+  --text-primary:   #111827;
+  --text-secondary: #374151;
+  --text-muted:     #6b7280;
+}
+
+/* Sidebar nav text in light mode */
+html[data-theme='light'] .sf-nav-label,
+html[data-theme='light'] .sf-nav-item span,
+html[data-theme='light'] .sf-utility-link span {
+  color: #1f2937 !important;
+}
+
+/* Topbar text */
+html[data-theme='light'] .sf-topbar,
+html[data-theme='light'] .sf-topbar * {
+  color: #111827;
+}
+
+/* Panel / card headings and body copy */
+html[data-theme='light'] .sf-panel h3,
+html[data-theme='light'] .sf-panel h4,
+html[data-theme='light'] .sf-panel p,
+html[data-theme='light'] .sf-panel label,
+html[data-theme='light'] .sf-panel span {
+  color: inherit;
+}
+
+/* Status and value text — keep full contrast */
+html[data-theme='light'] .sf-kpi-value,
+html[data-theme='light'] .sf-kpi-label,
+html[data-theme='light'] .sf-result-value {
+  color: #111827 !important;
+}
