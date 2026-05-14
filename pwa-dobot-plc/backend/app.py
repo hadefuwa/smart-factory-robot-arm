@@ -29,6 +29,7 @@ import plc_integration
 from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position
 from dobot_client import DobotClient
 from camera_service import CameraService
+import poe_vision_service
 # DISABLED: Digital twin import commented out to reduce CPU usage
 # from digital_twin_stream_service import DigitalTwinStreamService, PLAYWRIGHT_AVAILABLE
 
@@ -193,6 +194,10 @@ camera_service = None
 
 # When False, all colour-detection vision cycles are suppressed (e.g. PoE CAM mode active)
 vision_detection_enabled = True
+
+# Latest PoE YOLO detection result (held in memory for the annotated-image endpoint)
+_poe_latest_result = None
+_poe_latest_lock   = threading.Lock()
 
 # RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
 robot_arm_bridge_lock = threading.Lock()
@@ -4131,6 +4136,55 @@ def vision_detection_enabled_endpoint():
     return jsonify({'detection_enabled': vision_detection_enabled})
 
 
+@app.route('/api/poe-vision/status', methods=['GET'])
+def poe_vision_status():
+    """Return cube detector model status."""
+    return jsonify(poe_vision_service.status())
+
+
+@app.route('/api/poe-vision/detect', methods=['POST'])
+def poe_vision_detect():
+    """
+    Fetch a frame from the PoE CAM and run YOLO cube detection.
+    Body (optional JSON): { "ip": "192.168.7.6", "conf": 0.30 }
+    Returns JSON with detections list and dominant class.
+    Also caches the annotated frame for GET /api/poe-vision/annotated.
+    """
+    global _poe_latest_result
+    data     = request.get_json(silent=True) or {}
+    poe_ip   = data.get('ip', config.get('poe_camera', {}).get('ip', '192.168.7.6'))
+    conf     = float(data.get('conf', 0.30))
+
+    if not poe_vision_service.is_ready():
+        if not poe_vision_service.load_model():
+            return jsonify({'ok': False, 'error': 'model_not_loaded',
+                            'hint': 'Train the cube detector first — see cube-training/CUBE_TRAINING_GUIDE.md'}), 503
+
+    result = poe_vision_service.run_on_poe_cam(poe_ip, conf=conf)
+
+    # Cache annotated frame (numpy BGR → JPEG bytes)
+    if result.get('ok') and result.get('annotated') is not None:
+        _, buf = cv2.imencode('.jpg', result['annotated'], [cv2.IMWRITE_JPEG_QUALITY, 88])
+        with _poe_latest_lock:
+            _poe_latest_result = bytes(buf)
+
+    # Don't serialise numpy array in the JSON response
+    result.pop('annotated', None)
+    result.pop('timestamp', None)
+    return jsonify(result)
+
+
+@app.route('/api/poe-vision/annotated', methods=['GET'])
+def poe_vision_annotated():
+    """Return the most-recent annotated frame as a JPEG image."""
+    with _poe_latest_lock:
+        jpeg = _poe_latest_result
+    if jpeg is None:
+        abort(404)
+    return Response(jpeg, mimetype='image/jpeg',
+                    headers={'Cache-Control': 'no-store'})
+
+
 @app.route('/api/vision/latest-cycle', methods=['GET'])
 def get_latest_vision_cycle():
     """Return latest PLC-triggered cycle summary for UI/debug."""
@@ -5715,6 +5769,10 @@ def serve_pwa(path):
 
 if __name__ == '__main__':
     init_clients()
+
+    # Pre-load the cube detector model in a background thread so the first
+    # /api/poe-vision/detect call doesn't block the request.
+    threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
 
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:

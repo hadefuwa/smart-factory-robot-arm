@@ -1,0 +1,13 @@
+# YOLOv11 Dataset Configuration - Cube Detection
+# Smart Factory: yellow, white, and metal cube classification
+
+path: dataset
+
+train: images/train
+val:   images/val
+
+# Class IDs must match the labels used during annotation
+names:
+  0: yellow_cube
+  1: white_cube
+  2: metal_cube

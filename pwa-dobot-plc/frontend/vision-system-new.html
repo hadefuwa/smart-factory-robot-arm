@@ -642,14 +642,65 @@
 
           <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2" style="display:none">
             <header class="sf-panel-head">
-              <h3>PoE CAM — AI Detection</h3>
-              <p>YOLO-based object detection via M5Stack PoE CAM-W stream.</p>
+              <h3>PoE CAM — AI Cube Detection</h3>
+              <p>YOLO-based cube detection via M5Stack PoE CAM-W.</p>
             </header>
-            <div class="rounded-box border border-info/40 bg-info/10 p-4 text-sm text-base-content/80 flex items-start gap-3">
-              <i class="material-icons text-info mt-0.5">info</i>
-              <div>
-                <div class="font-semibold text-base-content mb-1">AI Object Detection Mode</div>
-                <div>USB colour detection is paused. The PoE CAM stream is active. YOLO-based AI detection pipeline coming soon — this will replace HSV colour voting when the ESP32 CAM is selected.</div>
+
+            <!-- Controls row -->
+            <div class="flex items-center gap-3 flex-wrap mb-4">
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-base-content/60 whitespace-nowrap">Confidence</label>
+                <input type="range" id="poeConfSlider" min="10" max="90" value="30" step="5"
+                       class="range range-xs range-info w-28" oninput="document.getElementById('poeConfVal').textContent=this.value+'%'">
+                <span id="poeConfVal" class="text-xs text-info font-mono w-8">30%</span>
+              </div>
+              <button class="btn btn-sm btn-info gap-1" onclick="runPoeDetection()">
+                <i class="material-icons" style="font-size:1rem;line-height:1">search</i> Detect Cubes
+              </button>
+              <button class="btn btn-sm btn-ghost gap-1" onclick="startPoeLoop()" id="poeLoopBtn">
+                <i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto
+              </button>
+              <span id="poeModelStatus" class="text-xs text-base-content/50 ml-auto"></span>
+            </div>
+
+            <!-- Two-column: annotated image + results -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Annotated image -->
+              <div class="sf-vision-media-shell" style="min-height:220px">
+                <img id="poeAnnotatedImg" class="sf-vision-frame is-centered" src="" alt="Annotated Detection" style="display:none">
+                <div id="poeAnnotatedPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">AI</div>
+                  <div class="sf-vision-placeholder-title">Press Detect Cubes</div>
+                  <div class="sf-vision-placeholder-copy">YOLO will annotate detected cubes here</div>
+                </div>
+              </div>
+
+              <!-- Detection results panel -->
+              <div class="space-y-3">
+                <!-- Dominant result badge -->
+                <div id="poeDominantBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3" style="display:none">
+                  <div id="poeDominantDot" class="w-4 h-4 rounded-full flex-shrink-0"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Dominant</div>
+                    <div id="poeDominantLabel" class="font-bold text-base-content text-base"></div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">Detections</div>
+                    <div id="poeDetCount" class="font-mono text-lg font-bold text-info">0</div>
+                  </div>
+                </div>
+
+                <!-- Detections list -->
+                <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
+
+                <!-- Model not loaded warning -->
+                <div id="poeModelMissingWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">warning</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">Model not trained yet</div>
+                    <div>Follow the <strong>CUBE_TRAINING_GUIDE.md</strong> in cube-training/ to capture images, annotate, and train the detector. Then SCP <code>cube_detector.pt</code> to the Pi.</div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -981,6 +1032,7 @@
         if (poeSection) poeSection.style.display = '';
         usbOnly.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         loadPoeCameraConfig();
+        checkPoeModelStatus();
         // Pause backend colour detection
         fetch(`${API_BASE}/api/vision/detection-enabled`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -991,6 +1043,8 @@
         if (badge) badge.style.display = 'none';
         if (poeSection) poeSection.style.display = 'none';
         usbOnly.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
+        // Stop PoE auto-loop if running
+        if (_poeLoopTimer) { clearInterval(_poeLoopTimer); _poeLoopTimer = null; }
         // Resume backend colour detection
         fetch(`${API_BASE}/api/vision/detection-enabled`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1056,6 +1110,120 @@
       }
       return false;
     }
+
+    // ── PoE YOLO cube detection ───────────────────────────────────────────────
+    let _poeLoopTimer = null;
+
+    const POE_CUBE_COLOURS = {
+      yellow_cube: '#f59e0b',
+      white_cube:  '#e5e7eb',
+      metal_cube:  '#6b7280',
+    };
+
+    async function runPoeDetection() {
+      const confSlider = document.getElementById('poeConfSlider');
+      const conf = confSlider ? (parseInt(confSlider.value, 10) / 100) : 0.30;
+      const ip = (document.getElementById('poeCameraIp') || {}).value || '192.168.7.6';
+
+      document.getElementById('poeModelMissingWarning').style.display = 'none';
+
+      let result;
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/detect`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ip, conf}),
+          signal: AbortSignal.timeout(10000),
+        });
+        result = await res.json();
+        if (res.status === 503) {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+          return;
+        }
+      } catch (e) {
+        addDebugLog('PoE detect request failed', e.message, 'warn');
+        return;
+      }
+
+      if (!result.ok) {
+        if (result.error === 'model_not_loaded') {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        }
+        addDebugLog('PoE detect error', result.error, 'warn');
+        return;
+      }
+
+      // Show annotated image
+      const img    = document.getElementById('poeAnnotatedImg');
+      const ph     = document.getElementById('poeAnnotatedPlaceholder');
+      img.src      = `${API_BASE}/api/poe-vision/annotated?_=${Date.now()}`;
+      img.style.display = '';
+      if (ph) ph.style.display = 'none';
+
+      // Dominant badge
+      const badge  = document.getElementById('poeDominantBadge');
+      const dot    = document.getElementById('poeDominantDot');
+      const label  = document.getElementById('poeDominantLabel');
+      const count  = document.getElementById('poeDetCount');
+      if (result.dominant) {
+        badge.style.display = '';
+        dot.style.backgroundColor = POE_CUBE_COLOURS[result.dominant] || '#888';
+        label.textContent = result.dominant.replace('_', ' ');
+        count.textContent = result.count;
+      } else {
+        badge.style.display = '';
+        dot.style.backgroundColor = '#374151';
+        label.textContent = 'Nothing detected';
+        count.textContent = '0';
+      }
+
+      // Detections list
+      const list = document.getElementById('poeDetectionsList');
+      list.innerHTML = '';
+      (result.detections || []).forEach(d => {
+        const colour = POE_CUBE_COLOURS[d.class] || '#888';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-2 py-1 rounded bg-base-200 text-xs';
+        row.innerHTML = `
+          <span style="width:10px;height:10px;border-radius:50%;background:${colour};flex-shrink:0;display:inline-block"></span>
+          <span class="font-medium flex-1">${d.class.replace('_', ' ')}</span>
+          <span class="font-mono text-base-content/60">${(d.confidence*100).toFixed(0)}%</span>
+          <span class="font-mono text-base-content/40">${d.width}×${d.height}px</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function checkPoeModelStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/status`, {signal: AbortSignal.timeout(4000)});
+        const data = await res.json();
+        const el = document.getElementById('poeModelStatus');
+        if (el) {
+          el.textContent = data.model_ready
+            ? `Model ready (${(data.model_path||'').split('/').pop().split('\\').pop()})`
+            : 'Model not loaded — train first';
+          el.className = `text-xs ml-auto ${data.model_ready ? 'text-success' : 'text-warning'}`;
+        }
+        if (!data.model_ready) {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        }
+      } catch (e) { /* non-fatal */ }
+    }
+
+    function startPoeLoop() {
+      const btn = document.getElementById('poeLoopBtn');
+      if (_poeLoopTimer) {
+        clearInterval(_poeLoopTimer);
+        _poeLoopTimer = null;
+        if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto'; }
+      } else {
+        runPoeDetection();
+        _poeLoopTimer = setInterval(runPoeDetection, 2000);
+        if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Stop'; }
+      }
+    }
+    // ── End PoE detection ──────────────────────────────────────────────────────
 
     async function loadCameraSourcePreference() {
       try {
