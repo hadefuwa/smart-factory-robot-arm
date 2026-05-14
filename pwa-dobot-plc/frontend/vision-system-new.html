@@ -625,7 +625,7 @@
             </div>
           </section>
 
-          <section class="sf-panel sf-stage sf-stage-2">
+          <section id="usb-actions-section" class="sf-panel sf-stage sf-stage-2">
             <header class="sf-panel-head">
               <h3>Primary Actions</h3>
               <p>Kick off the production analysis cycle or run a quick test.</p>
@@ -637,6 +637,20 @@
               <button class="btn btn-info" onclick="detectObjects()">
                 <i class="material-icons">search</i> Quick Test
               </button>
+            </div>
+          </section>
+
+          <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2" style="display:none">
+            <header class="sf-panel-head">
+              <h3>PoE CAM — AI Detection</h3>
+              <p>YOLO-based object detection via M5Stack PoE CAM-W stream.</p>
+            </header>
+            <div class="rounded-box border border-info/40 bg-info/10 p-4 text-sm text-base-content/80 flex items-start gap-3">
+              <i class="material-icons text-info mt-0.5">info</i>
+              <div>
+                <div class="font-semibold text-base-content mb-1">AI Object Detection Mode</div>
+                <div>USB colour detection is paused. The PoE CAM stream is active. YOLO-based AI detection pipeline coming soon — this will replace HSV colour voting when the ESP32 CAM is selected.</div>
+              </div>
             </div>
           </section>
 
@@ -687,7 +701,7 @@
               </div>
             </article>
 
-            <article class="sf-panel">
+            <article id="final-result-section" class="sf-panel">
               <header class="sf-panel-head">
                 <h3>Final Result</h3>
                 <p>Annotated voting output for the current cycle.</p>
@@ -726,7 +740,7 @@
             </article>
           </section>
 
-          <section class="sf-panel sf-stage sf-stage-3">
+          <section id="detection-settings-section" class="sf-panel sf-stage sf-stage-3">
             <header class="sf-panel-head">
               <button
                 type="button"
@@ -955,13 +969,33 @@
       const controls = document.getElementById('poeCamControls');
       const badge = document.getElementById('poeCamStatusBadge');
       activeCameraSource = toggle && toggle.checked ? 'poe' : 'usb';
+
+      // Sections only relevant to USB colour detection
+      const usbOnly = ['usb-actions-section', 'final-result-section', 'detection-settings-section', 'results'];
+      // PoE AI info banner
+      const poeSection = document.getElementById('poe-ai-section');
+
       if (activeCameraSource === 'poe') {
         if (controls) controls.style.display = 'block';
         if (badge) badge.style.display = 'inline-flex';
+        if (poeSection) poeSection.style.display = '';
+        usbOnly.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
         loadPoeCameraConfig();
+        // Pause backend colour detection
+        fetch(`${API_BASE}/api/vision/detection-enabled`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({enabled: false})
+        }).catch(() => {});
       } else {
         if (controls) controls.style.display = 'none';
         if (badge) badge.style.display = 'none';
+        if (poeSection) poeSection.style.display = 'none';
+        usbOnly.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
+        // Resume backend colour detection
+        fetch(`${API_BASE}/api/vision/detection-enabled`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({enabled: true})
+        }).catch(() => {});
       }
       stopStream();
       setTimeout(() => updateCameraFrame(true), 50);

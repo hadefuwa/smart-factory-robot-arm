@@ -191,6 +191,9 @@ plc_client = None  # Will be None if snap7 fails
 dobot_client = None
 camera_service = None
 
+# When False, all colour-detection vision cycles are suppressed (e.g. PoE CAM mode active)
+vision_detection_enabled = True
+
 # RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
 robot_arm_bridge_lock = threading.Lock()
 robot_arm_bridge_state = {
@@ -2812,7 +2815,10 @@ def process_vision_cycle_new(cache_snapshot: dict, worker):
         cache_snapshot: Snapshot of PLC cache at trigger time
         worker: PLCWorker instance
     """
-    global vision_handshake_processing, latest_annotated_image, latest_annotated_mime, latest_plc_cycle_result
+    global vision_handshake_processing, latest_annotated_image, latest_annotated_mime, latest_plc_cycle_result, vision_detection_enabled
+    if not vision_detection_enabled:
+        logger.info("Vision cycle skipped — detection disabled (PoE CAM mode)")
+        return
 
     if camera_service is None:
         logger.warning("Camera service not available for vision processing")
@@ -4112,6 +4118,18 @@ def get_annotated_result():
     except Exception as e:
         logger.error(f"Error serving annotated result: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/vision/detection-enabled', methods=['GET', 'POST'])
+def vision_detection_enabled_endpoint():
+    """Enable or disable the colour-detection vision cycle (e.g. when switching to PoE CAM mode)."""
+    global vision_detection_enabled
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        vision_detection_enabled = bool(data.get('enabled', True))
+        logger.info(f"Vision detection {'enabled' if vision_detection_enabled else 'disabled'} via API")
+        return jsonify({'success': True, 'detection_enabled': vision_detection_enabled})
+    return jsonify({'detection_enabled': vision_detection_enabled})
+
 
 @app.route('/api/vision/latest-cycle', methods=['GET'])
 def get_latest_vision_cycle():
