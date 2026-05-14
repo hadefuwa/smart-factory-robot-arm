@@ -4629,11 +4629,43 @@ html[data-theme='light'] {
   --text-muted:     #6b7280;
 }
 
-/* Sidebar nav text in light mode */
-html[data-theme='light'] .sf-nav-label,
-html[data-theme='light'] .sf-nav-item span,
-html[data-theme='light'] .sf-utility-link span {
+/* ── Sidebar nav — force dark text over DaisyUI .menu specificity ── */
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item {
   color: #1f2937 !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item span {
+  color: #1f2937 !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item i {
+  color: #6b7280 !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item:hover {
+  background: #f1f5f9 !important;
+  color: #111827 !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item:hover i {
+  color: #2563eb !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item.active {
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar .sf-nav-item.active i {
+  color: #2563eb !important;
+}
+
+/* Sidebar section labels (Production / Utilities) */
+html[data-theme='light'] body.dashboard-v2 .sf-menu-title span {
+  color: #94a3b8 !important;
+}
+
+/* Sidebar head — Workspace kicker + page-kind title */
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar-kicker {
+  color: #94a3b8 !important;
+}
+html[data-theme='light'] body.dashboard-v2 .sf-template-sidebar-head strong {
+  color: #111827 !important;
+  font-weight: 700;
 }
 
 /* Topbar text */
