@@ -640,6 +640,69 @@
             </div>
           </section>
 
+          <section class="sf-row sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Camera Feed</h3>
+                <p>Live stream with crop and detection overlays.</p>
+              </header>
+
+              <!-- Camera source switcher -->
+              <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Source</span>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <span class="text-xs text-base-content/80">USB</span>
+                    <input type="checkbox" class="toggle toggle-sm toggle-info" id="cameraSourceToggle" onchange="switchCameraSource()">
+                    <span class="text-xs text-base-content/80">PoE Cam</span>
+                  </label>
+                </div>
+                <span id="poeCamStatusBadge" class="sf-title-conn-badge offline" style="display:none">
+                  <span class="sf-title-conn-dot"></span>
+                  <span id="poeCamStatusText">Disconnected</span>
+                </span>
+              </div>
+              <div id="poeCamControls" class="mb-3 p-3 rounded-box border border-info/40 bg-info/10 space-y-2" style="display:none">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
+                  <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
+                  <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
+                  </button>
+                </div>
+                <div class="text-xs text-base-content/60">Enter the IP of your M5Stack PoE CAM-W. Find it from the camera serial output or your router DHCP table.</div>
+              </div>
+
+              <div class="sf-vision-media-shell">
+                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="transform: rotate(270deg);">
+                <canvas id="cropOverlay" class="sf-vision-overlay"></canvas>
+                <canvas id="roiOverlay" class="sf-vision-overlay"></canvas>
+                <div id="cameraPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">CAM</div>
+                  <div class="sf-vision-placeholder-title">Loading camera feed...</div>
+                </div>
+              </div>
+            </article>
+
+            <article id="final-result-section" class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Final Result</h3>
+                <p>Annotated voting output for the current cycle.</p>
+              </header>
+              <div class="sf-vision-media-shell">
+                <img id="annotatedImage" class="sf-vision-frame is-centered" src="" alt="Annotated Result">
+                <div id="annotatedPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">RESULT</div>
+                  <div class="sf-vision-placeholder-title">Voting result will appear here</div>
+                  <div class="sf-vision-placeholder-copy">Run "START ANALYSIS" to see the final result</div>
+                </div>
+              </div>
+            </article>
+          </section>
+
           <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2" style="display:none">
             <header class="sf-panel-head">
               <h3>PoE CAM — AI Cube Detection</h3>
@@ -703,69 +766,6 @@
                 </div>
               </div>
             </div>
-          </section>
-
-          <section class="sf-row sf-stage sf-stage-3">
-            <article class="sf-panel">
-              <header class="sf-panel-head">
-                <h3>Camera Feed</h3>
-                <p>Live stream with crop and detection overlays.</p>
-              </header>
-
-              <!-- Camera source switcher -->
-              <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <div class="flex items-center gap-3">
-                  <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Source</span>
-                  <label class="flex items-center gap-2 cursor-pointer">
-                    <span class="text-xs text-base-content/80">USB</span>
-                    <input type="checkbox" class="toggle toggle-sm toggle-info" id="cameraSourceToggle" onchange="switchCameraSource()">
-                    <span class="text-xs text-base-content/80">PoE Cam</span>
-                  </label>
-                </div>
-                <span id="poeCamStatusBadge" class="sf-title-conn-badge offline" style="display:none">
-                  <span class="sf-title-conn-dot"></span>
-                  <span id="poeCamStatusText">Disconnected</span>
-                </span>
-              </div>
-              <div id="poeCamControls" class="mb-3 p-3 rounded-box border border-info/40 bg-info/10 space-y-2" style="display:none">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
-                  <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
-                  <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
-                    <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
-                  </button>
-                  <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
-                    <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
-                  </button>
-                </div>
-                <div class="text-xs text-base-content/60">Enter the IP of your M5Stack PoE CAM-W. Find it from the camera serial output or your router DHCP table.</div>
-              </div>
-
-              <div class="sf-vision-media-shell">
-                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="transform: rotate(180deg);">
-                <canvas id="cropOverlay" class="sf-vision-overlay"></canvas>
-                <canvas id="roiOverlay" class="sf-vision-overlay"></canvas>
-                <div id="cameraPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">CAM</div>
-                  <div class="sf-vision-placeholder-title">Loading camera feed...</div>
-                </div>
-              </div>
-            </article>
-
-            <article id="final-result-section" class="sf-panel">
-              <header class="sf-panel-head">
-                <h3>Final Result</h3>
-                <p>Annotated voting output for the current cycle.</p>
-              </header>
-              <div class="sf-vision-media-shell">
-                <img id="annotatedImage" class="sf-vision-frame is-centered" src="" alt="Annotated Result">
-                <div id="annotatedPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">RESULT</div>
-                  <div class="sf-vision-placeholder-title">Voting result will appear here</div>
-                  <div class="sf-vision-placeholder-copy">Run "START ANALYSIS" to see the final result</div>
-                </div>
-              </div>
-            </article>
           </section>
 
           <section class="sf-row sf-stage sf-stage-3">

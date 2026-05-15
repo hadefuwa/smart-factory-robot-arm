@@ -48,7 +48,14 @@ let TORQUE_LIMIT_PERCENT = 100;
 let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
 let STALL_POLL_MS    = 200;  // how often to sample positions during a move
 let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
-let STALL_POLLS      = 4;    // consecutive "not progressing" polls before declaring stall
+let STALL_POLLS      = 8;    // consecutive "not progressing" polls before declaring stall — 1.6s grace at 200ms poll
+// Hard upper bound on how long a single queued command may occupy the in-flight
+// slot. Must exceed STALL_TIMEOUT_MS + finite IK/poll overhead so a healthy
+// stalled move resolves itself before this fires. When this watchdog trips it
+// is treated as a bug: the queue is freed so other clients can recover, the
+// offending command is logged loudly, and its underlying promise's late
+// settlement is swallowed so we don't see unhandled rejections.
+const COMMAND_WATCHDOG_MS = 20000;
 
 // Serial bus watchdog:
 // - We always track repeated all-fail status polls for diagnostics.
@@ -151,6 +158,10 @@ const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
  * Shared serial port instance (all servos use the same port)
  */
 let sharedSerialPort = null;
+// Set to true while maybeReopenPort() is intentionally cycling the port so the
+// USB-disconnect watchdog (below) doesn't mistake the planned close for a
+// physical unplug and exit the process.
+let intentionalSerialClose = false;
 
 /**
  * Array to store all servo controllers for data routing
@@ -176,6 +187,12 @@ let inFlightCommandType = null;
 // the in-flight bus scan rather than enqueueing their own — see queueCommand below.
 let pendingGetStatusWaiters = [];
 const MAX_COMMAND_QUEUE_SIZE = 100; // Maximum queue size (status polls + moves)
+// Latest-wins command types: when a new one of these is queued, any earlier queued
+// commands of the same type are dropped and resolved with a `superseded` response.
+// Only safe for commands where intermediate values are throwaway (e.g. a streamed
+// target position from the PLC). Discrete/safety commands like stopAllJoints, homeAll,
+// setTorqueAll must NOT be coalesced — losing one of them could be unsafe.
+const COALESCABLE_COMMAND_TYPES = new Set(['moveToXYZ']);
 const commandStats = {
     totalProcessed: 0,
     maxQueueLengthSeen: 0,
@@ -257,6 +274,27 @@ async function queueCommand(commandFn, meta) {
             }
         }
 
+        // Coalesce latest-wins commands: when a new moveToXYZ (or other coalescable
+        // type) arrives, supersede any earlier queued ones of the same type. The arm
+        // only needs to act on the most recent target — older queued targets are
+        // throwaway. This prevents the queue saturating when the PLC streams the same
+        // target every cycle and an in-flight move stalls.
+        if (COALESCABLE_COMMAND_TYPES.has(commandType)) {
+            let droppedCount = 0;
+            for (let i = commandQueue.length - 1; i >= 0; i--) {
+                if (commandQueue[i].commandType === commandType) {
+                    const dropped = commandQueue.splice(i, 1)[0];
+                    try {
+                        dropped.resolve({ type: 'superseded', message: `Superseded by a newer ${commandType}` });
+                    } catch (_) {}
+                    droppedCount++;
+                }
+            }
+            if (droppedCount > 0) {
+                console.log(`Coalesced ${droppedCount} pending ${commandType}(s) — superseded by newer command`);
+            }
+        }
+
         if (commandQueue.length >= MAX_COMMAND_QUEUE_SIZE) {
             const histogram = {};
             for (const c of commandQueue) {
@@ -292,7 +330,33 @@ async function processCommandQueue() {
         const waitMs = Math.max(0, Date.now() - (enqueuedAt || Date.now()));
         const startedAt = Date.now();
         await maybeReopenPort();
-        const result = await commandFn();
+        // Race the actual work against a hard watchdog. If the watchdog wins
+        // the original commandPromise is still pending — we attach a no-op
+        // .catch so its eventual rejection is not "unhandled". Its eventual
+        // resolution is silently discarded; we have already moved on.
+        let watchdogFired = false;
+        let watchdogTimer = null;
+        const commandPromise = Promise.resolve()
+            .then(() => commandFn())
+            .catch((err) => {
+                if (watchdogFired) {
+                    console.warn(`Late rejection from "${commandType}" after watchdog fired: ${err && err.message}`);
+                    return undefined;
+                }
+                throw err;
+            });
+        const watchdog = new Promise((_, rej) => {
+            watchdogTimer = setTimeout(() => {
+                watchdogFired = true;
+                rej(new Error(`Command "${commandType}" exceeded ${COMMAND_WATCHDOG_MS}ms watchdog — queue freed, underlying work dangling`));
+            }, COMMAND_WATCHDOG_MS);
+        });
+        let result;
+        try {
+            result = await Promise.race([commandPromise, watchdog]);
+        } finally {
+            if (watchdogTimer) clearTimeout(watchdogTimer);
+        }
         const execMs = Math.max(0, Date.now() - startedAt);
         const stat = ensureCommandStat(commandType);
         stat.count += 1;
@@ -475,6 +539,27 @@ async function initializeServos() {
         
         sharedSerialPort.on('error', (error) => {
             console.error('Shared serial port error:', error.message);
+        });
+
+        // Auto-recover from USB disconnect. The OS emits a 'close' on the
+        // serialport stream when the underlying tty disappears (e.g. the
+        // USB-to-RS485 adapter is unplugged, momentarily loses power, or the
+        // CH343 chip re-enumerates). Once that happens our file handle is dead
+        // — every read/write will silently fail, all servos appear unavailable,
+        // and Flask sees "bridge connected but all servos unavailable" until
+        // someone restarts the service. By exiting on this event we let
+        // systemd restart us, which re-runs the full bus wake-up + servo
+        // ping init and brings everything back without manual intervention.
+        // Intentional close cycles from maybeReopenPort() set the flag so they
+        // don't trigger an exit.
+        sharedSerialPort.on('close', () => {
+            if (intentionalSerialClose) {
+                console.log('[USB] Serial port closed intentionally (port-session refresh) — staying alive');
+                return;
+            }
+            console.error('[USB] Serial port closed unexpectedly — likely USB disconnect of ' + SERIAL_PORT + '. Exiting so systemd restarts and re-initialises servos.');
+            // Small delay so the log line flushes before the process dies.
+            setTimeout(() => process.exit(1), 100);
         });
         
         // Attach write queue function to shared port for servo controllers to use
@@ -1471,12 +1556,20 @@ async function handleCommand(ws, data) {
                     xyzInitialAngles = xyzCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
+            // Orientation is opt-in. If the caller doesn't supply one we solve
+            // position-only and let the seed (current joint angles) carry the
+            // wrist pose. Imposing a default "down" direction here used to flip
+            // J4 by ~70° on the 6-joint arm to chase the orientation cost
+            // (weight 10× position), which dragged the TCP sideways even when
+            // the seed was already correctly down-pointing.
             const xyzPose = {
                 x: Number(mX),
                 y: Number(mY),
                 z: Number(mZ),
-                orientation: normalizeDirection(mOri || DEFAULT_TCP_DOWN_ORIENTATION)
             };
+            if (mOri) {
+                xyzPose.orientation = normalizeDirection(mOri);
+            }
             const xyzAngles = robotKinematics.inverseKinematics(xyzPose, xyzInitialAngles, { availableJointCount: xyzAvailableJointCount });
             const xyzIkDetails = typeof robotKinematics.getLastInverseKinematicsResult === 'function'
                 ? robotKinematics.getLastInverseKinematicsResult()
@@ -1677,12 +1770,15 @@ async function handleCommand(ws, data) {
                     ikInitialAngles = ikCurrentAngles;
                 }
             } catch (e) { /* fall back to null seed */ }
+            // Orientation is opt-in — see moveToXYZ for rationale.
             const targetPose = {
                 x: Number(ikX),
                 y: Number(ikY),
                 z: Number(ikZ),
-                orientation: normalizeDirection(ikOri || DEFAULT_TCP_DOWN_ORIENTATION)
             };
+            if (ikOri) {
+                targetPose.orientation = normalizeDirection(ikOri);
+            }
             const angles = robotKinematics.inverseKinematics(targetPose, ikInitialAngles, { availableJointCount: ikAvailableJointCount });
             const ikDetails = typeof robotKinematics.getLastInverseKinematicsResult === 'function'
                 ? robotKinematics.getLastInverseKinematicsResult()
@@ -1740,6 +1836,7 @@ async function cleanup() {
     
     // Close shared serial port
     if (sharedSerialPort && sharedSerialPort.isOpen) {
+        intentionalSerialClose = true;  // Shutdown path — don't trip the disconnect watchdog
         await new Promise((resolve) => {
             sharedSerialPort.close((error) => {
                 if (error) {
@@ -1777,18 +1874,23 @@ async function maybeReopenPort() {
     const age = Date.now() - portOpenedAt;
     if (age < PORT_SESSION_MS) return;
     console.log("[PORT SESSION] Renewing after " + age + "ms...");
-    await new Promise((res) => { sharedSerialPort.close((err) => { if(err) console.error("Close err:", err.message); res(); }); });
-    await new Promise((res, rej) => {
-        const openTimeout = setTimeout(() => {
-            console.error("[PORT SESSION] open() hung for 6s — exiting for systemd restart");
-            process.exit(1);
-        }, 6000);
-        sharedSerialPort.open((err) => {
-            clearTimeout(openTimeout);
-            if (err) { console.error("Reopen err:", err.message); rej(err); }
-            else { portOpenedAt = Date.now(); lastSerialActivity = Date.now(); console.log("[PORT SESSION] Renewed"); res(); }
+    intentionalSerialClose = true;
+    try {
+        await new Promise((res) => { sharedSerialPort.close((err) => { if(err) console.error("Close err:", err.message); res(); }); });
+        await new Promise((res, rej) => {
+            const openTimeout = setTimeout(() => {
+                console.error("[PORT SESSION] open() hung for 6s — exiting for systemd restart");
+                process.exit(1);
+            }, 6000);
+            sharedSerialPort.open((err) => {
+                clearTimeout(openTimeout);
+                if (err) { console.error("Reopen err:", err.message); rej(err); }
+                else { portOpenedAt = Date.now(); lastSerialActivity = Date.now(); console.log("[PORT SESSION] Renewed"); res(); }
+            });
         });
-    });
+    } finally {
+        intentionalSerialClose = false;
+    }
 }
 const origQueueWrite = queueWrite;
 // Track last activity by wrapping queueWrite

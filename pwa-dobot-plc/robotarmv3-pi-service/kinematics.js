@@ -663,6 +663,28 @@ class RobotKinematics {
             }
         }
 
+        // Identify joints that should not move during moveToXYZ IK, and pin
+        // them to a known neutral angle. For the 6-DOF arm "wrist roll = 0°"
+        // is the configuration that keeps the TCP pointing down — locking it
+        // there means every moveToXYZ both reaches the target XYZ and leaves
+        // the wrist down, regardless of where J4 happened to be before.
+        // Manual joint commands still drive the locked joints; only XYZ IK
+        // forces them back to the lock angle.
+        const LOCKED_JOINT_NAME_PATTERNS = [
+            { match: 'wrist_roll', angleDeg: 0 }
+        ];
+        const lockedJointIndices = [];
+        for (let i = 0; i < numJoints; i++) {
+            const jointName = ((this.joints[i] && this.joints[i].name) || '').toLowerCase();
+            for (const lock of LOCKED_JOINT_NAME_PATTERNS) {
+                if (jointName.indexOf(lock.match) !== -1) {
+                    lockedJointIndices.push(i);
+                    angles[i] = lock.angleDeg;  // override the seed for this joint
+                    break;
+                }
+            }
+        }
+
         // --- Analytical base-yaw pre-computation ---
         // If joint 0 rotates around the world Z axis (axis ≈ {0,0,1}) it is a pure base
         // yaw. For any target (X, Y) there are two valid base angles 180° apart:
@@ -809,6 +831,9 @@ class RobotKinematics {
                     // Skip the analytically-pinned base yaw — the solver must not
                     // drift it away from atan2(target_y, target_x).
                     if (j === analyticalBaseYawIndex) continue;
+                    // Skip joints we are deliberately holding at their seed value
+                    // (e.g. wrist roll, so the down-pointing orientation is preserved).
+                    if (lockedJointIndices.indexOf(j) !== -1) continue;
 
                     let grad =
                         Jpos[0][j] * errX +

@@ -206,6 +206,23 @@ PORT=8081
 - ✅ Emoji indicators for status
 - ✅ Emergency stop with confirmation
 
+## 🔁 PLC ↔ Robot-arm bridge behaviour
+
+The Flask backend continuously streams the PLC's DB125 target XYZ to the
+Node.js robot-arm service over WebSocket. Two coupled mechanisms keep that
+flow safe when the arm stalls or commands fail:
+
+- **Node-side coalescing** — see `robotarmv3-pi-service/README.md`. New
+  `moveToXYZ` commands supersede older queued ones; safety/discrete
+  commands (stop, home, torque) are never dropped.
+- **Flask-side exponential backoff** — the auto-move loop in
+  `backend/app.py` (`plc_auto_backend_loop`) holds off retries for 2s → 30s
+  after each failure, and resets when the PLC changes target or a send
+  succeeds.
+
+Read the linked README before tuning `PLC_AUTO_RESEND_INTERVAL_S`,
+`PLC_AUTO_ERROR_BACKOFF_*_S`, or `COALESCABLE_COMMAND_TYPES`.
+
 ## 📝 License
 
 MIT - Feel free to use and modify!

@@ -37,7 +37,7 @@
     "rack": 0,
     "slot": 1,
     "cycle_time_ms": 100,
-    "comment": "DB123 holds main line state. DB124 holds camera and vision tags. DB125 holds robot arm bridge data.",
+    "comment": "DB123 holds main line state. DB124 holds camera and vision tags. DB125 holds robot arm bridge data. DB126 holds edge device (Pi) telemetry. DB127 holds IO-Link master supervision data.",
     "db123": {
       "enabled": true,
       "db_number": 123,
@@ -146,6 +146,35 @@
         "target_x":               { "byte": 26 },
         "target_y":               { "byte": 28 },
         "target_z":               { "byte": 30 }
+      }
+    },
+    "db126": {
+      "enabled": true,
+      "db_number": 126,
+      "total_size": 17,
+      "comment": "Edge device (Pi) telemetry: online flag, CPU load/temp, memory used, uptime, fault flags",
+      "tags": {
+        "online":          { "byte": 0,  "bit": 0 },
+        "cpu_load":        { "byte": 2 },
+        "cpu_temp":        { "byte": 6 },
+        "memory_used_mb":  { "byte": 10 },
+        "uptime_minutes":  { "byte": 12 },
+        "overloaded":      { "byte": 16, "bit": 0 },
+        "overtemp":        { "byte": 16, "bit": 1 }
+      }
+    },
+    "db127": {
+      "enabled": true,
+      "db_number": 127,
+      "total_size": 18,
+      "comment": "IO-Link master supervision: online flag, port current/voltage/temperature, alarm, active port count",
+      "tags": {
+        "online":             { "byte": 0,  "bit": 0 },
+        "current":            { "byte": 2 },
+        "voltage":            { "byte": 6 },
+        "temperature":        { "byte": 10 },
+        "alarm":              { "byte": 14, "bit": 0 },
+        "active_port_count":  { "byte": 16 }
       }
     }
   },

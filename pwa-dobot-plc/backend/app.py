@@ -211,7 +211,7 @@ robot_arm_bridge_state = {
 }
 ROBOT_ARM_BRIDGE_DEFAULT_HOST = os.getenv('ROBOT_ARM_BRIDGE_HOST', '127.0.0.1')
 ROBOT_ARM_BRIDGE_DEFAULT_PORT = int(os.getenv('ROBOT_ARM_BRIDGE_PORT', '8090'))
-DEFAULT_TCP_DOWN_ORIENTATION = {'x': 0.0, 'y': 0.0, 'z': -1.0}
+DEFAULT_TCP_DOWN_ORIENTATION = {'x': 0.0, 'y': 0.0, 'z': -1.0}  # Available for explicit opt-in only — no longer applied by default (see kinematics opt-in change).
 DEFAULT_ROBOT_ARM_DIMENSIONS = {
     'joints': [
         {
@@ -285,9 +285,18 @@ plc_auto_backend_state = {
     'move_in_flight': False,        # True while we are waiting for a move reply
     'last_sent_at': 0.0,            # time.time() of the last PLC target send attempt
     'active_target_key': None,      # Same-key motion currently in progress
+    'active_target_set_at': 0.0,    # When active_target_key was set (for stale-target timeout)
+    'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
+    'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
 }
 PLC_AUTO_TARGET_TOLERANCE_MM = 8
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
+PLC_AUTO_ERROR_BACKOFF_BASE_S = 2.0      # First-failure backoff
+PLC_AUTO_ERROR_BACKOFF_MAX_S = 30.0      # Cap so we still recover when the arm comes back
+# How long we wait for an in-progress move to reach its target before declaring it stale.
+# Must exceed the Node bridge's STALL_TIMEOUT_MS (default 8s) plus some slack, so a
+# normal stall response from the bridge reaches us before this timer fires.
+PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S = 15.0
 plc_manual_override_state = {
     'until': 0.0,
     'source': None,
@@ -439,13 +448,17 @@ def _legacy_plc_auto_backend_tick_unused():
     # Send the move command.
     plc_auto_backend_state['move_in_flight'] = True
     try:
+        # Position-only payload — orientation is omitted so the IK on the Pi
+        # solves XYZ alone, seeded with the arm's current joint angles. The
+        # default down-orientation used to be sent here, but with the 6-joint
+        # arm the IK swung J4 ~70° off the seed to chase the orientation cost
+        # and dragged the TCP sideways.
         payload = {
             'command': 'moveToXYZ',
             'x': float(x),
             'y': float(y),
             'z': float(z),
             'speed': int(speed),
-            'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
         }
         with robot_arm_bridge_lock:
             ws = robot_arm_bridge_state.get('ws')
@@ -544,31 +557,66 @@ def plc_auto_backend_tick():
     if active_target_key and active_target_key != target_key:
         logger.info('PLC auto-move backend: target changed from %s to %s', active_target_key, target_key)
         plc_auto_backend_state['active_target_key'] = None
+        plc_auto_backend_state['active_target_set_at'] = 0.0
+        # Operator (PLC HMI) commanded a new target — reset error backoff so we attempt it promptly.
+        plc_auto_backend_state['consecutive_errors'] = 0
+        plc_auto_backend_state['error_backoff_until'] = 0.0
 
     if active_target_key == target_key:
         if _target_position_reached(cache, x, y, z):
             logger.info('PLC auto-move backend: target reached x=%s y=%s z=%s', x, y, z)
             plc_auto_backend_state['active_target_key'] = None
+            plc_auto_backend_state['active_target_set_at'] = 0.0
         else:
+            # Stale-target watchdog: if a move was accepted ("moving"/"success") but
+            # the arm never gets within tolerance — IK best-effort landed off-target,
+            # joint stalled, mechanical interference — break out and treat it as a
+            # failure rather than waiting forever. Surfaces invalid_target to the PLC
+            # and applies exponential backoff so we don't busy-loop on it.
+            set_at = float(plc_auto_backend_state.get('active_target_set_at') or 0.0)
+            if set_at and (time.time() - set_at) > PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S:
+                logger.warning(
+                    'PLC auto-move backend: target x=%s y=%s z=%s did not reach tolerance '
+                    '(%.1fs > %.1fs timeout) — marking invalid_target',
+                    x, y, z, time.time() - set_at, PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S
+                )
+                plc_auto_backend_state['active_target_key'] = None
+                plc_auto_backend_state['active_target_set_at'] = 0.0
+                try:
+                    queue_invalid_target(True)
+                except Exception:
+                    pass
+                _trigger_auto_move_backoff('stale active_target (arm did not reach tolerance)')
             return
 
     if plc_auto_backend_state['last_sent_target_key'] == target_key:
         if _target_position_reached(cache, x, y, z):
             plc_auto_backend_state['active_target_key'] = None
+            plc_auto_backend_state['active_target_set_at'] = 0.0
             return
         if (time.time() - float(plc_auto_backend_state.get('last_sent_at') or 0.0)) < PLC_AUTO_RESEND_INTERVAL_S:
             return
 
+    # Hold off retries when the arm keeps failing the same target (hardware fault,
+    # IK unreachable, wedged bridge). Without this the loop would re-send every
+    # PLC_AUTO_RESEND_INTERVAL_S and saturate the bridge command queue.
+    if time.time() < float(plc_auto_backend_state.get('error_backoff_until') or 0.0):
+        return
+
     plc_auto_backend_state['move_in_flight'] = True
     plc_auto_backend_state['last_sent_at'] = time.time()
     try:
+        # Position-only payload — orientation is omitted so the IK on the Pi
+        # solves XYZ alone, seeded with the arm's current joint angles. The
+        # default down-orientation used to be sent here, but with the 6-joint
+        # arm the IK swung J4 ~70° off the seed to chase the orientation cost
+        # and dragged the TCP sideways.
         payload = {
             'command': 'moveToXYZ',
             'x': float(x),
             'y': float(y),
             'z': float(z),
             'speed': int(speed),
-            'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
         }
         with robot_arm_bridge_lock:
             ws = robot_arm_bridge_state.get('ws')
@@ -579,7 +627,16 @@ def plc_auto_backend_tick():
                     response = send_robot_arm_command(payload)
                     resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
-                    plc_auto_backend_state['active_target_key'] = target_key if resp_type in ('success', 'moving', 'ikResult') else None
+                    succeeded = resp_type in ('success', 'moving', 'ikResult')
+                    if succeeded:
+                        plc_auto_backend_state['active_target_key'] = target_key
+                        plc_auto_backend_state['active_target_set_at'] = time.time()
+                        plc_auto_backend_state['consecutive_errors'] = 0
+                        plc_auto_backend_state['error_backoff_until'] = 0.0
+                    else:
+                        plc_auto_backend_state['active_target_key'] = None
+                        plc_auto_backend_state['active_target_set_at'] = 0.0
+                        _trigger_auto_move_backoff(f'response type={resp_type}')
                     ik_failed = (
                         response.get('type') == 'ikFailed'
                         or 'unreachable' in str(response).lower()
@@ -595,6 +652,8 @@ def plc_auto_backend_tick():
                     )
                 except Exception as e:
                     plc_auto_backend_state['active_target_key'] = None
+                    plc_auto_backend_state['active_target_set_at'] = 0.0
+                    _trigger_auto_move_backoff(f'exception: {e}')
                     logger.warning('PLC auto-move backend: move failed: %s', e)
                 finally:
                     try:
@@ -602,9 +661,22 @@ def plc_auto_backend_tick():
                     except Exception:
                         pass
     except Exception as e:
+        _trigger_auto_move_backoff(f'outer exception: {e}')
         logger.warning('PLC auto-move backend: unexpected error: %s', e)
     finally:
         plc_auto_backend_state['move_in_flight'] = False
+
+
+def _trigger_auto_move_backoff(reason):
+    """Apply exponential backoff after a failed PLC auto-move send."""
+    consecutive = int(plc_auto_backend_state.get('consecutive_errors') or 0) + 1
+    backoff = min(
+        PLC_AUTO_ERROR_BACKOFF_BASE_S * (2 ** (consecutive - 1)),
+        PLC_AUTO_ERROR_BACKOFF_MAX_S,
+    )
+    plc_auto_backend_state['consecutive_errors'] = consecutive
+    plc_auto_backend_state['error_backoff_until'] = time.time() + backoff
+    logger.warning('PLC auto-move backend: failure #%d (%s) — backing off %.1fs', consecutive, reason, backoff)
 
 
 def plc_auto_backend_loop():
@@ -634,11 +706,37 @@ def start_plc_auto_move_thread():
 _PLC_TELEMETRY_INTERVAL = 10  # seconds
 
 
+def _resolve_db_layout(db_key, defaults):
+    """Resolve a DB's number and per-tag byte offsets from config, falling back to defaults."""
+    plc_cfg = load_config().get('plc', {})
+    db_cfg = plc_cfg.get(db_key, {}) or {}
+    tags = db_cfg.get('tags', {}) or {}
+    resolved = {'db_number': int(db_cfg.get('db_number', defaults['db_number']))}
+    for name, default_byte in defaults.items():
+        if name == 'db_number':
+            continue
+        tag = tags.get(name)
+        if isinstance(tag, dict) and 'byte' in tag:
+            resolved[name] = int(tag['byte'])
+        else:
+            resolved[name] = default_byte
+    return resolved
+
+
 def _write_edge_device_stats_to_plc(worker):
     """Write edge device stats to DB126."""
     from snap7.util import set_bool, set_real, set_int as snap7_set_int
 
-    DB126 = 126
+    layout = _resolve_db_layout('db126', {
+        'db_number': 126,
+        'online': 0,
+        'cpu_load': 2,
+        'cpu_temp': 6,
+        'memory_used_mb': 10,
+        'uptime_minutes': 12,
+        'overloaded': 16,
+    })
+    DB126 = layout['db_number']
     try:
         load1 = 0.0
         try:
@@ -654,29 +752,29 @@ def _write_edge_device_stats_to_plc(worker):
 
         online_byte = bytearray(1)
         set_bool(online_byte, 0, 0, True)
-        worker.queue_write(DB126, 0, online_byte, 'EdgeDevice Online=True')
+        worker.queue_write(DB126, layout['online'], online_byte, 'EdgeDevice Online=True')
 
         cpu_load_buf = bytearray(4)
         set_real(cpu_load_buf, 0, load1)
-        worker.queue_write(DB126, 2, cpu_load_buf, f'EdgeDevice CPU_Load={load1:.2f}')
+        worker.queue_write(DB126, layout['cpu_load'], cpu_load_buf, f'EdgeDevice CPU_Load={load1:.2f}')
 
         temp_buf = bytearray(4)
         set_real(temp_buf, 0, float(temp_c) if temp_c is not None else 0.0)
-        worker.queue_write(DB126, 6, temp_buf, f'EdgeDevice CPU_Temp={temp_c}')
+        worker.queue_write(DB126, layout['cpu_temp'], temp_buf, f'EdgeDevice CPU_Temp={temp_c}')
 
         mem_buf = bytearray(2)
         snap7_set_int(mem_buf, 0, int(mem.get('usedMB', 0)))
-        worker.queue_write(DB126, 10, mem_buf, f'EdgeDevice Memory_Used_MB={mem.get("usedMB")}')
+        worker.queue_write(DB126, layout['memory_used_mb'], mem_buf, f'EdgeDevice Memory_Used_MB={mem.get("usedMB")}')
 
         uptime_min = int(uptime_secs) // 60
         uptime_buf = bytearray(4)
         struct.pack_into('>i', uptime_buf, 0, uptime_min)
-        worker.queue_write(DB126, 12, uptime_buf, f'EdgeDevice Uptime_Minutes={uptime_min}')
+        worker.queue_write(DB126, layout['uptime_minutes'], uptime_buf, f'EdgeDevice Uptime_Minutes={uptime_min}')
 
         flags_byte = bytearray(1)
         set_bool(flags_byte, 0, 0, overloaded)
         set_bool(flags_byte, 0, 1, overtemp)
-        worker.queue_write(DB126, 16, flags_byte, f'EdgeDevice flags overloaded={overloaded} overtemp={overtemp}')
+        worker.queue_write(DB126, layout['overloaded'], flags_byte, f'EdgeDevice flags overloaded={overloaded} overtemp={overtemp}')
 
     except Exception as e:
         logger.warning(f'EdgeDevice PLC write error: {e}')
@@ -686,7 +784,16 @@ def _write_iolink_to_plc(worker):
     """Write IO-Link master supervision data to DB127."""
     from snap7.util import set_bool, set_real, set_int as snap7_set_int
 
-    DB127 = 127
+    layout = _resolve_db_layout('db127', {
+        'db_number': 127,
+        'online': 0,
+        'current': 2,
+        'voltage': 6,
+        'temperature': 10,
+        'alarm': 14,
+        'active_port_count': 16,
+    })
+    DB127 = layout['db_number']
     try:
         config = load_config()
         io_config = config.get('io_link', {})
@@ -704,7 +811,7 @@ def _write_iolink_to_plc(worker):
         online = result is not None
         online_byte = bytearray(1)
         set_bool(online_byte, 0, 0, online)
-        worker.queue_write(DB127, 0, online_byte, f'IOLink Online={online}')
+        worker.queue_write(DB127, layout['online'], online_byte, f'IOLink Online={online}')
 
         if online:
             _append_supervision_history(result.get('supervision', {}))
@@ -727,19 +834,19 @@ def _write_iolink_to_plc(worker):
 
             current_buf = bytearray(4)
             set_real(current_buf, 0, current_ma)
-            worker.queue_write(DB127, 2, current_buf, f'IOLink Current={current_ma}mA')
+            worker.queue_write(DB127, layout['current'], current_buf, f'IOLink Current={current_ma}mA')
 
             voltage_buf = bytearray(4)
             set_real(voltage_buf, 0, voltage_v)
-            worker.queue_write(DB127, 6, voltage_buf, f'IOLink Voltage={voltage_v}V')
+            worker.queue_write(DB127, layout['voltage'], voltage_buf, f'IOLink Voltage={voltage_v}V')
 
             temp_buf = bytearray(4)
             set_real(temp_buf, 0, temp_c)
-            worker.queue_write(DB127, 10, temp_buf, f'IOLink Temp={temp_c}C')
+            worker.queue_write(DB127, layout['temperature'], temp_buf, f'IOLink Temp={temp_c}C')
 
             alarm_byte = bytearray(1)
             set_bool(alarm_byte, 0, 0, alarm)
-            worker.queue_write(DB127, 14, alarm_byte, f'IOLink Alarm={alarm}')
+            worker.queue_write(DB127, layout['alarm'], alarm_byte, f'IOLink Alarm={alarm}')
 
             ports = result.get('ports', [])
             active_count = sum(
@@ -747,7 +854,7 @@ def _write_iolink_to_plc(worker):
             )
             count_buf = bytearray(2)
             snap7_set_int(count_buf, 0, active_count)
-            worker.queue_write(DB127, 16, count_buf, f'IOLink Active_Port_Count={active_count}')
+            worker.queue_write(DB127, layout['active_port_count'], count_buf, f'IOLink Active_Port_Count={active_count}')
 
     except Exception as e:
         logger.warning(f'IOLink PLC write error: {e}')
@@ -2232,11 +2339,11 @@ def robot_arm_move_xyz():
         'x': float(x),
         'y': float(y),
         'z': float(z),
-        'orientation': DEFAULT_TCP_DOWN_ORIENTATION,
     }
     if 'speed' in data:
         payload['speed'] = int(data['speed'])
     if 'orientation' in data:
+        # Caller can still opt into a constrained orientation explicitly.
         payload['orientation'] = data['orientation']
 
     with robot_arm_bridge_lock:

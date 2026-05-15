@@ -32,9 +32,13 @@ smart-factory-robot-arm/
 │   │   ├── camera_service.py       # USB camera + PoE CAM proxy routes
 │   │   ├── vision_service.py       # YOLO + HSV cube detection
 │   │   └── ssl/                    # Self-signed certs (not in git)
-│   └── frontend/
-│       ├── vision-system-new.html  # Active vision page (USB↔PoE toggle)
-│       └── ...                     # Other pages (robot-arm, plc-setup, io-link, etc.)
+│   ├── frontend/
+│   │   ├── vision-system-new.html  # Active vision page (USB↔PoE toggle)
+│   │   └── ...                     # Other pages (robot-arm, plc-setup, io-link, etc.)
+│   └── robotarmv3-pi-service/      # Node.js service for ST3215 robot arm (port 8090)
+│       ├── server.js               # WebSocket server, command queue, USB-disconnect recovery
+│       ├── kinematics.js           # FK/IK, joint-lock pinning (wrist_roll → 0°)
+│       └── README.md               # Queue/watchdog/auto-recovery details
 ├── poe-camera-firmware/
 │   ├── M5PoECAM_SmartFactory/
 │   │   └── M5PoECAM_SmartFactory.ino  # v1.1.0 — ETH.h, static 192.168.7.6
@@ -117,6 +121,19 @@ Serial console must be absent from `/boot/firmware/cmdline.txt`.
 | DB127 | IO-Link PLC telemetry |
 
 Full tag map: `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_READ_WRITE_MAP.md`
+
+## Robot-arm bridge
+
+The 6-DOF ST3215 arm is driven by a separate Node.js service on the Pi (`robotarmv3-pi.service`, port 8090, serial via USB→RS485). Flask talks to it over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
+
+Key behaviours documented in `pwa-dobot-plc/robotarmv3-pi-service/README.md` (read this before touching the bridge):
+
+- **Command queue**: single global queue serialises serial-bus access. `getStatus` and `moveToXYZ` coalesce (latest-wins). Safety commands (`stopAllJoints`, `homeAll`, `setTorqueAll`) are FIFO and never dropped.
+- **In-flight watchdog** (`COMMAND_WATCHDOG_MS`, 20s): a hung serial read can't permanently wedge the bridge.
+- **USB-disconnect auto-recovery**: serialport `'close'` handler exits the process when the CH343 adapter re-enumerates; systemd (`Restart=always`) restarts and re-runs servo init.
+- **Flask side guards**: resend interval, active-target dedup, exponential error backoff (2→30s), stale-target watchdog (15s) that surfaces `DB125.invalid_target` to the PLC.
+
+Kinematics (`kinematics.js`): position-only IK is the default. Orientation is opt-in — passing `orientation` constrains the TCP direction. **`wrist_roll` (J4) is locked to 0°** during `moveToXYZ` to keep the TCP pointing down. Locked joints are configured by name pattern in `LOCKED_JOINT_NAME_PATTERNS`.
 
 ## Vision system
 
