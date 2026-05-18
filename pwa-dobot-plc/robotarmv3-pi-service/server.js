@@ -1985,10 +1985,6 @@ async function handleCommand(ws, data) {
                         cause: causeStr
                     }));
                 } else {
-                    const wristLockReleased = !!(xyzIkDetails && xyzIkDetails.wristLockReleased);
-                    if (wristLockReleased) {
-                        console.warn(`[IK] moveToXYZ to (${mX}, ${mY}, ${mZ}) succeeded only with wrist-roll lock released — TCP may be rotated.`);
-                    }
                     ws.send(JSON.stringify({
                         type: 'moving',
                         angles: xyzAngles,
@@ -2000,8 +1996,7 @@ async function handleCommand(ws, data) {
                         positionErrorMm: xyzDiagnostics.positionErrorMm,
                         orientationErrorDeg: xyzDiagnostics.orientationErrorDeg,
                         solverMode: xyzDiagnostics.solverMode,
-                        tcpConfig: xyzDiagnostics.tcpConfig,
-                        wristLockReleased: wristLockReleased
+                        tcpConfig: xyzDiagnostics.tcpConfig
                     }));
                 }
             }

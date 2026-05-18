@@ -227,7 +227,6 @@
         </button>
         <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
           <img src="/assets/img/matrix2.png" alt="Matrix Logo" class="h-8 w-auto" />
-          <span class="sf-brand-mark"><i class="material-icons">factory</i></span>
           <span class="sf-brand-text">Smart Factory</span>
         </a>
       </div>
@@ -235,20 +234,11 @@
         <span class="sf-template-shell-title">Smart Factory 2</span>
       </div>
       <div class="sf-template-header-right flex-none flex items-center gap-4">
-        <label class="sf-theme-wrap label cursor-pointer gap-2">
-          <span>Theme</span>
-          <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <button class="sf-btn sf-btn-ghost btn btn-outline btn-sm" type="button" onclick="refreshNow()">
-          <i class="material-icons">refresh</i>
-          Refresh
-        </button>
-        <button class="sf-btn sf-btn-danger btn btn-error btn-sm" type="button" onclick="ioLinkEmergencyStop()">
-          <i class="material-icons">stop_circle</i>
-          E-Stop
+        <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+          <span class="sf-theme-toggle-icon-wrap">
+            <i class="material-icons sf-theme-icon-sun">light_mode</i>
+            <i class="material-icons sf-theme-icon-moon">dark_mode</i>
+          </span>
         </button>
       </div>
     </header>
@@ -260,7 +250,7 @@
         <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
           <div>
             <p class="sf-template-sidebar-kicker">Workspace</p>
-            <strong>Production Pages</strong>
+            <strong>Smart Factory</strong>
           </div>
           <div class="sf-template-sidebar-actions flex items-center gap-2">
             <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
@@ -271,21 +261,20 @@
             </button>
           </div>
         </div>
-
-        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Main navigation">
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Primary navigation">
           <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
             <li class="sf-menu-title"><span>Production</span></li>
-            <li><a class="sf-nav-item" href="/index.html"><i class="material-icons">dashboard</i><span>Dashboard</span></a></li>
-            <li><a class="sf-nav-item" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span>Robot Arm</span></a></li>
-            <li><a class="sf-nav-item" href="/vision-system-new.html"><i class="material-icons">visibility</i><span>Vision System</span></a></li>
-            <li><a class="sf-nav-item" href="/rfid.html"><i class="material-icons">nfc</i><span>RFID Tracking</span></a></li>
-            <li><a class="sf-nav-item" href="/plc-setup.html"><i class="material-icons">analytics</i><span>PLC Setup</span></a></li>
-            <li><a class="sf-nav-item active" href="/io-link.html"><i class="material-icons">settings_input_component</i><span>IO-Link Master</span></a></li>
-            <li><a class="sf-nav-item" href="/edge-device-stats.html"><i class="material-icons">memory</i><span>Edge Device Stats</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/index.html"><i class="material-icons">dashboard</i><span class="sf-nav-text">Dashboard</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span class="sf-nav-text">Robot Arm</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/vision-system-new.html"><i class="material-icons">visibility</i><span class="sf-nav-text">Vision System</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/rfid.html"><i class="material-icons">nfc</i><span class="sf-nav-text">RFID Tracking</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/plc-setup.html"><i class="material-icons">analytics</i><span class="sf-nav-text">PLC Setup</span></a></li>
+              <li><a class="sf-nav-item active flex items-center gap-3 rounded-lg" href="/io-link.html"><i class="material-icons">settings_input_component</i><span class="sf-nav-text">IO-Link Master</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/edge-device-stats.html"><i class="material-icons">memory</i><span class="sf-nav-text">Edge Device Stats</span></a></li>
             <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
-            <li><a class="sf-nav-item" href="/hotspot-status.html"><i class="material-icons">wifi</i><span>Hotspot Status</span></a></li>
-            <li><a class="sf-nav-item" href="/color-voting-test.html"><i class="material-icons">palette</i><span>Color Voting Test</span></a></li>
-            <li><a class="sf-nav-item" href="/vision-system.html"><i class="material-icons">history</i><span>Vision Legacy</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/hotspot-status.html"><i class="material-icons">wifi</i><span class="sf-nav-text">Hotspot Status</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/color-voting-test.html"><i class="material-icons">palette</i><span class="sf-nav-text">Color Voting Test</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/vision-system.html"><i class="material-icons">history</i><span class="sf-nav-text">Vision Legacy</span></a></li>
           </ul>
         </nav>
       </aside>

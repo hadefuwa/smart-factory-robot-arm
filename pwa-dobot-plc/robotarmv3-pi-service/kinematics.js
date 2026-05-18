@@ -663,92 +663,33 @@ class RobotKinematics {
             }
         }
 
-        // Identify joints that should not move during moveToXYZ IK, and pin
-        // them to a known neutral angle. For the 6-DOF arm "wrist roll = 0°"
-        // is the configuration that keeps the TCP pointing down — locking it
-        // there means every moveToXYZ both reaches the target XYZ and leaves
-        // the wrist down, regardless of where J4 happened to be before.
-        // Manual joint commands still drive the locked joints; only XYZ IK
-        // forces them back to the lock angle.
-        //
-        // FALLBACK: with J4 pinned the reachable workspace shrinks. If the
-        // first two solver attempts (warm-start + zero-seed) can't get within
-        // tolerance, the caller will set `_allowUnlocked: true` and we'll
-        // re-run with the lock disabled to recover the old reachability —
-        // accepting that the TCP may end up rotated.
-        const LOCKED_JOINT_NAME_PATTERNS = [
-            { match: 'wrist_roll', angleDeg: 0 }
-        ];
-        const allowUnlocked = !!(options && options._allowUnlocked);
-        const lockedJointIndices = [];
-        if (!allowUnlocked) {
-            for (let i = 0; i < numJoints; i++) {
-                const jointName = ((this.joints[i] && this.joints[i].name) || '').toLowerCase();
-                for (const lock of LOCKED_JOINT_NAME_PATTERNS) {
-                    if (jointName.indexOf(lock.match) !== -1) {
-                        lockedJointIndices.push(i);
-                        angles[i] = lock.angleDeg;  // override the seed for this joint
-                        break;
-                    }
-                }
-            }
-        }
-
-        // --- Analytical base-yaw pre-computation ---
-        // If joint 0 rotates around the world Z axis (axis ≈ {0,0,1}) it is a pure base
-        // yaw. For any target (X, Y) there are two valid base angles 180° apart:
-        //   "front":  atan2(Y, X)         — arm faces the target
-        //   "back":   atan2(Y, X) ± 180°  — arm faces away, shoulder wraps around
-        // We pick whichever is closest to the current joint-1 angle so the robot stays
-        // in whatever configuration it is already in instead of snapping to the other.
-        let analyticalBaseYawIndex = -1;
+        // Analytical base-yaw SEED (not a pin): if joint 0 rotates around the
+        // world Z axis it's a pure base yaw, and atan2(Y, X) is a much better
+        // starting guess than 0. The iterative solver may refine it. There are
+        // two valid yaws 180° apart ("front" and "back"); we pick whichever is
+        // closer to the current J1 on the first attempt and flip to the other
+        // on the retry (controlled by options._yawFlip).
         if (numJoints > 0) {
             const j0 = this.joints[0];
             if (j0 && j0.axis) {
-                const ax = j0.axis.x || 0;
-                const ay = j0.axis.y || 0;
-                const az = j0.axis.z || 0;
-                // Check if axis is approximately (0, 0, ±1)
+                const ax = j0.axis.x || 0, ay = j0.axis.y || 0, az = j0.axis.z || 0;
                 if (Math.abs(ax) < 0.1 && Math.abs(ay) < 0.1 && Math.abs(az) > 0.9) {
-                    analyticalBaseYawIndex = 0;
-                    const tx = targetPose.x || 0;
-                    const ty = targetPose.y || 0;
-                    // Only pin the yaw when there is a meaningful horizontal component
+                    const tx = targetPose.x || 0, ty = targetPose.y || 0;
                     if (Math.abs(tx) > 1e-3 || Math.abs(ty) > 1e-3) {
-                        let frontYaw = (Math.atan2(ty, tx) * 180) / Math.PI;
-                        // Account for the zero_offset so we store IK angles, not URDF angles
-                        if (typeof j0.zeroOffsetDegrees === 'number') {
-                            frontYaw -= j0.zeroOffsetDegrees;
-                        }
-                        // The back solution is 180° away — normalise both to [-180, 180]
-                        let backYaw = frontYaw + (frontYaw <= 0 ? 180 : -180);
-
-                        // Helper: smallest signed angular difference (handles wraparound)
-                        function angularDist(a, b) {
-                            let d = ((a - b) % 360 + 540) % 360 - 180;
-                            return Math.abs(d);
-                        }
-
-                        // Current seed for joint 0 (from warm-start or 0 if none provided)
-                        const currentYaw = angles[0];
-                        const useFront = angularDist(frontYaw, currentYaw) <= angularDist(backYaw, currentYaw);
-                        let chosenYaw = useFront ? frontYaw : backYaw;
-
-                        // Clamp to joint limits
-                        if (j0.limits && typeof j0.limits.lowerDegrees === 'number' && chosenYaw < j0.limits.lowerDegrees) {
-                            chosenYaw = j0.limits.lowerDegrees;
-                        }
-                        if (j0.limits && typeof j0.limits.upperDegrees === 'number' && chosenYaw > j0.limits.upperDegrees) {
-                            chosenYaw = j0.limits.upperDegrees;
-                        }
-                        angles[0] = chosenYaw;
+                        let yaw = (Math.atan2(ty, tx) * 180) / Math.PI;
+                        if (typeof j0.zeroOffsetDegrees === 'number') yaw -= j0.zeroOffsetDegrees;
+                        const back = yaw + (yaw <= 0 ? 180 : -180);
+                        const wrap = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+                        const useFront = wrap(yaw, angles[0]) <= wrap(back, angles[0]);
+                        const yawFlip = !!(options && options._yawFlip);
+                        angles[0] = (useFront !== yawFlip) ? yaw : back;
                     }
                 }
             }
         }
 
         // Settings for the solver
-        const maxIterations = 400;
+        const maxIterations = 200;
         const positionToleranceMm = 1.0; // stop main loop when we are within 1mm
         const finiteDifferenceDeg = 1.0; // small angle change when estimating Jacobian
         const baseStepSize = 0.03;       // baseline strength for the Jacobian transpose update
@@ -837,13 +778,6 @@ class RobotKinematics {
                 const stepSize = baseStepSize / (1 + positionErrorLength / 50);
                 // deltaTheta_j = stepSize * (Jpos^T * positionError + orientation term)
                 for (let j = 0; j < effectiveJointCount; j++) {
-                    // Skip the analytically-pinned base yaw — the solver must not
-                    // drift it away from atan2(target_y, target_x).
-                    if (j === analyticalBaseYawIndex) continue;
-                    // Skip joints we are deliberately holding at their seed value
-                    // (e.g. wrist roll, so the down-pointing orientation is preserved).
-                    if (lockedJointIndices.indexOf(j) !== -1) continue;
-
                     let grad =
                         Jpos[0][j] * errX +
                         Jpos[1][j] * errY +
@@ -908,37 +842,30 @@ class RobotKinematics {
                 orientationErrorDeg: orientationErrorDeg,
                 tcpConfig: tcpConfig
             };
-            if (finalError > 10.0) {
-                // Identify the target we were trying to reach so the operator can
-                // map this warning back to a PLC command or UI request.
+            const ACCEPT_TOLERANCE_MM = 25.0;
+            const PRECISION_TOLERANCE_MM = 10.0;
+            if (finalError > PRECISION_TOLERANCE_MM) {
                 const tgtStr = 'target=(' + (targetPose.x || 0).toFixed(1) + ', ' + (targetPose.y || 0).toFixed(1) + ', ' + (targetPose.z || 0).toFixed(1) + ')mm';
-
-                // Warm-start seed (current servo positions) led to a local minimum.
-                // Retry once from a clean all-zeros seed before giving up — this handles
-                // cases where a stall left the arm at a random position that confused the solver.
-                if (!options || !options._retried) {
-                    console.warn('IK: warm-start convergence failed (' + finalError.toFixed(1) + 'mm) ' + tgtStr + '. Retrying from zero seed.');
-                    return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _retried: true }));
+                // Retry once with the other base-yaw branch (front <-> back).
+                // The two solutions sit 180° apart and one is often reachable
+                // when the other isn't, depending on shoulder/elbow geometry.
+                if (!options || !options._yawFlip) {
+                    console.warn('IK: ' + finalError.toFixed(1) + 'mm short ' + tgtStr + '. Retrying with opposite base-yaw branch.');
+                    return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _yawFlip: true }));
                 }
-                // Zero-seed also failed. If we've been holding wrist-roll pinned
-                // (LOCKED_JOINT_NAME_PATTERNS) try once more with the lock
-                // disabled — many targets ARE reachable, just not with J4 at 0°.
-                // The TCP may end up rotated about the wrist axis, but the
-                // position is what the PLC actually asked for.
-                if (lockedJointIndices.length > 0 && !options._allowUnlocked) {
-                    console.warn('IK: locked-wrist solver failed (' + finalError.toFixed(1) + 'mm) ' + tgtStr + '. Retrying with wrist-roll lock released.');
-                    return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _allowUnlocked: true, _retried: true }));
+                // Both yaws tried. Accept if within the relaxed 25mm "teach
+                // tolerance" so the move proceeds — operator can nudge from
+                // there. Reject only if even the relaxed tolerance fails.
+                if (finalError <= ACCEPT_TOLERANCE_MM) {
+                    console.warn('IK: accepting best-effort result ' + finalError.toFixed(1) + 'mm short ' + tgtStr + ' (within ' + ACCEPT_TOLERANCE_MM + 'mm teach tolerance).');
+                    this.lastInverseKinematicsResult.toleranceWarning = true;
+                } else {
+                    console.warn('Inverse kinematics could not reach target within ' + ACCEPT_TOLERANCE_MM + 'mm. Final error =' + finalError.toFixed(2) + ' mm. ' + tgtStr);
+                    this.lastInverseKinematicsResult.success = false;
+                    this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
+                    this.lastInverseKinematicsResult.message = 'Inverse kinematics could not reach target within tolerance';
+                    return null;
                 }
-                console.warn('Inverse kinematics could not reach target within 10mm. Final error =', finalError.toFixed(2), 'mm. ' + tgtStr + ' (locks ' + (allowUnlocked ? 'released' : 'engaged') + ')');
-                this.lastInverseKinematicsResult.success = false;
-                this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
-                this.lastInverseKinematicsResult.message = 'Inverse kinematics could not reach target within tolerance';
-                return null;
-            }
-            // Position succeeded but we had to drop the wrist-roll lock — record it so
-            // the bridge can log a warning to the comms log.
-            if (allowUnlocked && lockedJointIndices.length === 0) {
-                this.lastInverseKinematicsResult.wristLockReleased = true;
             }
 
             if (hasOrientationTarget) {

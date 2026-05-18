@@ -3199,28 +3199,72 @@ html[data-theme='dark'] body.dashboard-v2 .sf-topbar {
   -webkit-backdrop-filter: none;
 }
 
-html[data-theme='light'] body.dashboard-v2 .sf-theme-wrap,
-html[data-theme='dark'] body.dashboard-v2 .sf-theme-wrap {
+.sf-theme-toggle {
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--sf-base-300);
+  justify-content: center;
+  padding: 0;
   border-radius: 0.75rem;
-  background: var(--sf-base-100);
-  color: var(--sf-base-content);
-  font-size: 0.75rem;
-  font-weight: 600;
+  border: 1px solid var(--sf-base-300, rgba(127, 127, 127, 0.25));
+  background: var(--sf-base-100, transparent);
+  color: var(--sf-base-content, currentColor);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-html[data-theme='light'] body.dashboard-v2 .sf-theme-select,
-html[data-theme='dark'] body.dashboard-v2 .sf-theme-select {
-  border: 1px solid var(--sf-base-300);
-  border-radius: 0.5rem;
-  background: var(--sf-base-200);
-  color: var(--sf-base-content);
-  padding: 0.2rem 1.75rem 0.2rem 0.5rem;
-  min-height: 2rem;
+.sf-theme-toggle:hover {
+  background: var(--sf-base-200, rgba(127, 127, 127, 0.08));
+  border-color: var(--sf-primary, var(--sf-base-content, currentColor));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.sf-theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 132, 255, 0.35);
+}
+
+.sf-theme-toggle:active {
+  transform: scale(0.94);
+}
+
+.sf-theme-toggle-icon-wrap {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+}
+
+.sf-theme-toggle .material-icons {
+  position: absolute;
+  inset: 0;
+  font-size: 20px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html[data-theme='light'] .sf-theme-toggle .sf-theme-icon-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+html[data-theme='light'] .sf-theme-toggle .sf-theme-icon-moon {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.6);
+}
+
+html[data-theme='dark'] .sf-theme-toggle .sf-theme-icon-sun {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.6);
+}
+
+html[data-theme='dark'] .sf-theme-toggle .sf-theme-icon-moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
 }
 
 html[data-theme='light'] body.dashboard-v2 .sf-btn,

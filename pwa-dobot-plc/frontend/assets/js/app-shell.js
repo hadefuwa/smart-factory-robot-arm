@@ -304,8 +304,10 @@
     const normalized = theme === 'dark' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', normalized);
     localStorage.setItem('sf-template-theme', normalized);
-    document.querySelectorAll('[data-sf-theme-select]').forEach((select) => {
-      select.value = normalized;
+    const nextLabel = normalized === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    document.querySelectorAll('[data-sf-theme-toggle]').forEach((btn) => {
+      btn.setAttribute('aria-label', nextLabel);
+      btn.setAttribute('title', nextLabel);
     });
     const logoSrc = normalized === 'dark' ? '/assets/img/matrix.png' : '/assets/img/matrix2.png';
     document.querySelectorAll('.sf-template-logo-link img').forEach((img) => {
@@ -318,10 +320,13 @@
     const savedTheme = localStorage.getItem('sf-template-theme') || document.documentElement.getAttribute('data-theme') || 'light';
     applyTheme(savedTheme);
 
-    document.querySelectorAll('[data-sf-theme-select]').forEach((select) => {
-      if (select.dataset.boundTheme === 'true') return;
-      select.dataset.boundTheme = 'true';
-      select.addEventListener('change', () => applyTheme(select.value));
+    document.querySelectorAll('[data-sf-theme-toggle]').forEach((btn) => {
+      if (btn.dataset.boundTheme === 'true') return;
+      btn.dataset.boundTheme = 'true';
+      btn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+      });
     });
   }
 
@@ -346,6 +351,75 @@
       <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
       ${buildNavItems(utility)}
     `;
+  }
+
+  function buildCanonicalTopbar() {
+    const initialTheme = localStorage.getItem('sf-template-theme') || document.documentElement.getAttribute('data-theme') || 'light';
+    const initialLogo = initialTheme === 'dark' ? '/assets/img/matrix.png' : '/assets/img/matrix2.png';
+    return `
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="${initialLogo}" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-text">Smart Factory</span>
+        </a>
+      </div>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Smart Factory 2</span>
+      </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+          <span class="sf-theme-toggle-icon-wrap">
+            <i class="material-icons sf-theme-icon-sun">light_mode</i>
+            <i class="material-icons sf-theme-icon-moon">dark_mode</i>
+          </span>
+        </button>
+      </div>
+    `;
+  }
+
+  function buildCanonicalSidebar() {
+    return `
+      <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+        <div>
+          <p class="sf-template-sidebar-kicker">Workspace</p>
+          <strong>Smart Factory</strong>
+        </div>
+        <div class="sf-template-sidebar-actions flex items-center gap-2">
+          <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+            <i class="material-icons">close</i>
+          </button>
+          <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+            <i class="material-icons">left_panel_open</i>
+          </button>
+        </div>
+      </div>
+      <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Primary navigation">
+        <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+          ${buildSidebarSections()}
+        </ul>
+      </nav>
+    `;
+  }
+
+  function normalizeShell() {
+    const topbar = document.querySelector('header.sf-template-headerbar');
+    if (topbar) {
+      topbar.innerHTML = buildCanonicalTopbar();
+    }
+
+    const sidebar = document.getElementById('sfSidebar');
+    if (sidebar) {
+      sidebar.innerHTML = buildCanonicalSidebar();
+    }
+
+    const legacyBody = document.querySelector('.sf-shell > .sf-body');
+    if (legacyBody && !legacyBody.classList.contains('sf-template-body')) {
+      legacyBody.classList.remove('sf-body', 'overflow-hidden');
+      legacyBody.classList.add('sf-template-body', 'flex', 'flex-1', 'bg-base-100', 'relative');
+    }
   }
 
   function buildHero() {
@@ -432,17 +506,12 @@
             <span class="sf-template-shell-title">Smart Factory 2</span>
           </div>
           <div class="sf-template-header-right flex-none flex items-center gap-4">
-            <label class="sf-theme-wrap label cursor-pointer gap-2">
-              <span>Theme</span>
-              <select class="sf-theme-select select select-bordered select-sm" data-sf-theme-select>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            <a class="sf-btn sf-btn-ghost btn btn-outline btn-sm" href="/index.html">
-              <i class="material-icons">dashboard</i>
-              Dashboard
-            </a>
+            <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+              <span class="sf-theme-toggle-icon-wrap">
+                <i class="material-icons sf-theme-icon-sun">light_mode</i>
+                <i class="material-icons sf-theme-icon-moon">dark_mode</i>
+              </span>
+            </button>
           </div>
         </header>
 
@@ -1218,6 +1287,7 @@
   function bootstrap() {
     ensureMatrixAssets();
     transformLegacySubpage();
+    normalizeShell();
     initThemeControls();
     initShellInteractions();
     enhancePageContent();
