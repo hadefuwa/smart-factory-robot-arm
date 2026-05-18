@@ -161,19 +161,26 @@ const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
 // null the slot and force the 5s revive cycle. Two new behaviours:
 //   1. Per-poll: retry the bulk read up to READ_RETRY_COUNT times with a short
 //      gap, so transient frame corruption is swallowed inside one poll.
-//   2. Cross-poll: only null the slot after OFFLINE_FAIL_THRESHOLD consecutive
-//      *failed polls* (after in-poll retries). While under threshold the
-//      slot remains alive and the UI sees a `degraded: true` flag instead of
-//      a hard `available: false`.
+//   2. Cross-poll: only null the slot after a failure-mode-specific threshold
+//      of consecutive *failed polls* (after in-poll retries). -7 (corruption)
+//      keeps the slot indefinitely; -6 (silence) nulls after 6. While under
+//      threshold the slot stays alive and the UI sees `degraded: true` with
+//      last-known angles instead of a hard `available: false`.
 const READ_RETRY_COUNT = 2;            // 1 initial + 2 retries = 3 attempts per poll
 const READ_RETRY_GAP_MS = 25;          // small breather between attempts
-// Raised from 3 → 6 after observing J5 flicker between OFFLINE and DEGRADED
-// every few seconds: its comm-corrupt bursts often hit 3 consecutive failed
-// polls, which used to null the slot and trigger the 5s revive cycle, which
-// then caused moves running at that moment to fall through to 5-joint IK and
-// fail. With 6 the slot survives ~6-8s of sustained bus trouble before being
-// nulled, which matches the observed natural duration of the bursts.
-const OFFLINE_FAIL_THRESHOLD = 6;      // consecutive failed polls before nulling slot
+// Failure-mode-specific thresholds. We distinguish two kinds of read failure:
+//   - read-timeout (-6): no reply at all. Servo may genuinely be unreachable
+//     (cable disconnected, power lost, ID misconfigured). Null after 6 polls.
+//   - comm-corrupt (-7): a reply arrived but bytes were scrambled. The servo
+//     IS alive — its bus transceiver is marginal. Investigation on J5 showed
+//     that nulling the slot in this state is harmful: the bridge can't talk
+//     to the servo any better at the new baud either, but moves fall through
+//     to 5-joint IK and the page flips Offline. Hold the slot indefinitely
+//     in degraded mode with last-known angles; the data is stale but the
+//     joint is still considered reachable, and the next clean read recovers.
+const OFFLINE_FAIL_THRESHOLD_TIMEOUT  = 6;        // -6 (silence) → null after N polls
+const OFFLINE_FAIL_THRESHOLD_CORRUPT  = Infinity; // -7 (corruption) → never null
+const OFFLINE_FAIL_THRESHOLD_DEFAULT  = 6;        // anything else (servo-error, etc.)
 const consecutiveReadFailures = new Array(JOINT_COUNT).fill(0);
 const lastKnownGoodStatus = new Array(JOINT_COUNT).fill(null);
 
@@ -845,9 +852,19 @@ async function getAllServoStatus() {
             // Exhausted in-poll retries.
             consecutiveReadFailures[i] += 1;
             const consec = consecutiveReadFailures[i];
-            console.error(`Error reading status from servo ${i + 1}: ${lastErrMsg} (after ${READ_RETRY_COUNT + 1} attempts, consecutive failed polls=${consec}/${OFFLINE_FAIL_THRESHOLD})`);
+            const failKind = classifyServoError(lastErrMsg);
+            let threshold;
+            if (failKind === 'comm-corrupt') {
+                threshold = OFFLINE_FAIL_THRESHOLD_CORRUPT;
+            } else if (failKind === 'read-timeout') {
+                threshold = OFFLINE_FAIL_THRESHOLD_TIMEOUT;
+            } else {
+                threshold = OFFLINE_FAIL_THRESHOLD_DEFAULT;
+            }
+            const thresholdLabel = threshold === Infinity ? '∞' : threshold;
+            console.error(`Error reading status from servo ${i + 1}: ${lastErrMsg} (after ${READ_RETRY_COUNT + 1} attempts, consecutive failed polls=${consec}/${thresholdLabel}, kind=${failKind})`);
 
-            if (consec >= OFFLINE_FAIL_THRESHOLD) {
+            if (consec >= threshold) {
                 // Hard-offline: too many consecutive failures. Null the slot and
                 // let the revive cycle take over.
                 removeServoController(servo);
@@ -887,7 +904,7 @@ async function getAllServoStatus() {
                     degraded: true,
                     degradedReason: classifyServoError(lastErrMsg),
                     degradedConsecutivePolls: consec,
-                    degradedThreshold: OFFLINE_FAIL_THRESHOLD,
+                    degradedThreshold: threshold === Infinity ? null : threshold,
                     angleDegrees: last.angleDegrees,
                     position: last.position,
                     stepPosition: last.stepPosition,
