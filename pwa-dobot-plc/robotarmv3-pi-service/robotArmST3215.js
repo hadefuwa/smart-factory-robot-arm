@@ -396,13 +396,19 @@ class ServoController {
             parameters = Buffer.alloc(0);
         }
 
+        // commResult is the BUS-LEVEL outcome: header ok, length ok, checksum
+        // ok → COMM_SUCCESS. The servo's status byte (`error`) is data carried
+        // INSIDE a successful reply — it tells us about latched faults
+        // (overload, motor error, etc.) but is not a comm failure. Conflating
+        // the two used to make a faulted servo look exactly like a bus storm
+        // and starved the dedicated fault-byte handling path in readData.
         return {
             complete: true,
             id: id,
             error: error,
             parameters: parameters,
-            commResult: error === 0 ? COMM_SUCCESS : COMM_RX_CORRUPT,
-            responseLength: length  // Store the response packet length to distinguish write vs read responses
+            commResult: COMM_SUCCESS,
+            responseLength: length
         };
     }
 
