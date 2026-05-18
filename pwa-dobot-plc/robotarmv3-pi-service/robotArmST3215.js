@@ -65,6 +65,32 @@ const MAX_SPEED = 3400;
 const DEFAULT_BAUDRATE = 1000000;
 const READ_RESPONSE_TIMEOUT_MS = 120;
 
+// ST3215 status / error byte bits. Returned in every reply; non-zero means
+// the servo is reachable but reporting a fault. The data in the same packet
+// is still valid — these are diagnostic bits, not a protocol error.
+const FAULT_BIT_VOLTAGE     = 0x01; // under/over voltage
+const FAULT_BIT_SENSOR      = 0x02; // sensor error
+const FAULT_BIT_TEMPERATURE = 0x04; // over-temperature
+const FAULT_BIT_OVERLOAD    = 0x08; // overcurrent / overload (the J2 bit)
+const FAULT_BIT_ANGLE       = 0x10; // angle limit exceeded
+const FAULT_BIT_MOTOR       = 0x20; // motor / driver error
+const FAULT_BIT_WHEEL       = 0x40; // wheel-mode error
+const FAULT_BIT_EEPROM      = 0x80; // internal / EEPROM error
+
+function describeServoFaultByte(byte) {
+    if (!byte) return 'OK';
+    const flags = [];
+    if (byte & FAULT_BIT_VOLTAGE)     flags.push('VOLTAGE');
+    if (byte & FAULT_BIT_SENSOR)      flags.push('SENSOR');
+    if (byte & FAULT_BIT_TEMPERATURE) flags.push('OVERTEMP');
+    if (byte & FAULT_BIT_OVERLOAD)    flags.push('OVERLOAD');
+    if (byte & FAULT_BIT_ANGLE)       flags.push('ANGLE_LIMIT');
+    if (byte & FAULT_BIT_MOTOR)       flags.push('MOTOR');
+    if (byte & FAULT_BIT_WHEEL)       flags.push('WHEEL');
+    if (byte & FAULT_BIT_EEPROM)      flags.push('EEPROM');
+    return flags.length ? flags.join('|') : ('UNKNOWN:0x' + byte.toString(16));
+}
+
 // Angle to steps conversion constants
 // Mapping: 0° = 2048 steps (center), -90° = 1024 steps, +90° = 3072 steps
 const CENTER_POSITION = 2048;  // Center position in steps (0 degrees)
@@ -112,6 +138,15 @@ class ServoController {
         this.responseReject = null;
         this.responseTimeout = null;
         this.currentSpeed = 1500; // Default speed, will be updated when setSpeed is called
+        // Latched servo "Status Byte" from the most recent read/ping. Non-zero
+        // means the servo is reachable but reporting a fault (overload, over-
+        // temp, voltage, etc). We expose this upstream so callers can show the
+        // fault instead of nulling the slot. Old behaviour rejected reads on
+        // any non-zero error byte, which caused the slot to be nulled and
+        // re-init looped forever once a sticky fault bit (e.g. overload) was
+        // latched.
+        this.lastReadFaultByte = 0;
+        this.lastPingFaultByte = 0;
     }
 
     /**
@@ -483,38 +518,51 @@ setTimeout(resolve, 1);
                 if (result.commResult !== COMM_SUCCESS) {
                     cleanupPendingRead();
                     reject(new Error(`Communication error: ${result.commResult}`));
-                } else if (result.error !== 0) {
+                    return;
+                }
+                // Return the parameter data (which contains the register values)
+                // For read commands, parameters should be a Buffer with the register data
+                if (!result.parameters) {
+                    if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] No parameters in read response, result:`, result);
                     cleanupPendingRead();
-                    reject(new Error(`Servo error: ${result.error}`));
-                } else {
-                    // Return the parameter data (which contains the register values)
-                    // For read commands, parameters should be a Buffer with the register data
-                    if (!result.parameters) {
-                        if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] No parameters in read response, result:`, result);
+                    reject(new Error('No data in read response'));
+                    return;
+                }
+                // Convert to Buffer if it's not already (it should be a Buffer slice)
+                const data = Buffer.isBuffer(result.parameters) ? result.parameters : Buffer.from(result.parameters);
+                if (data.length === 0) {
+                    // Empty parameters - check if this is a write response (length=2) being matched to read
+                    if (result.responseLength === 2) {
+                        // This is a write response (Error + Checksum only), not a read response
+                        // Ignore it and wait for the actual read response
+                        // Keep quiet to avoid spamming logs during normal operation.
+                        return; // Don't resolve or reject, wait for actual read response
+                    } else {
+                        // This is a read response but with no data - error
+                        if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Read response has no data, responseLength=${result.responseLength}`);
                         cleanupPendingRead();
-                        reject(new Error('No data in read response'));
+                        reject(new Error('Empty read response data'));
                         return;
                     }
-                    // Convert to Buffer if it's not already (it should be a Buffer slice)
-                    const data = Buffer.isBuffer(result.parameters) ? result.parameters : Buffer.from(result.parameters);
-                    if (data.length === 0) {
-                        // Empty parameters - check if this is a write response (length=2) being matched to read
-                        if (result.responseLength === 2) {
-                            // This is a write response (Error + Checksum only), not a read response
-                            // Ignore it and wait for the actual read response
-                            // Keep quiet to avoid spamming logs during normal operation.
-                            return; // Don't resolve or reject, wait for actual read response
-                        } else {
-                            // This is a read response but with no data - error
-                            if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Read response has no data, responseLength=${result.responseLength}`);
-                            cleanupPendingRead();
-                            reject(new Error('Empty read response data'));
-                            return;
-                        }
-                    }
-                    cleanupPendingRead();
-                    resolve(data);
                 }
+                // SERVO ERROR BYTE: a non-zero status byte means the servo is
+                // reachable but reporting a fault. The register data in this
+                // packet is still valid — the servo just wants us to know it
+                // has e.g. an overload, over-temp, or under-voltage condition.
+                // Previously we rejected here, which caused the bridge to null
+                // the slot and start the 5s revive loop forever (the latched
+                // fault bit never clears under that loop). Now we stash the
+                // fault byte and resolve with the data so callers can decide
+                // how to respond (typically: surface the fault to the UI,
+                // continue polling, optionally try to clear it).
+                if (result.error !== 0) {
+                    this.lastReadFaultByte = result.error;
+                    console.warn(`Servo ${this.servoId}: read returned with fault byte 0x${result.error.toString(16).padStart(2, '0')} (${describeServoFaultByte(result.error)}) — data still valid, slot stays alive`);
+                } else {
+                    this.lastReadFaultByte = 0;
+                }
+                cleanupPendingRead();
+                resolve(data);
             };
             
             // Bulk status reads can return larger payloads than simple position reads,
@@ -607,10 +655,19 @@ setTimeout(resolve, 1);
                         clearTimeout(this.responseTimeout);
                         this.responseTimeout = null;
                     }
-                    
-                    // For ping, we just need to check if we got a response with the correct ID
-                    // The error byte should be 0, and the ID should match
-                    const success = result.id === this.servoIdNumber && result.error === 0;
+
+                    // For ping we only need an addressed reply. The status
+                    // (error) byte being non-zero means the servo is alive but
+                    // reporting a latched fault (e.g. overload). We MUST count
+                    // that as a successful ping; otherwise tryReviveServoSlot
+                    // never recovers a faulted joint — the same bit keeps
+                    // failing the ping, the slot stays nulled, the user sees
+                    // "joint offline" forever.
+                    const success = result.id === this.servoIdNumber;
+                    this.lastPingFaultByte = success ? (result.error || 0) : 0;
+                    if (success && result.error !== 0) {
+                        console.warn(`Servo ${this.servoId}: ping reply carried fault byte 0x${result.error.toString(16).padStart(2, '0')} (${describeServoFaultByte(result.error)}) — treating ping as alive`);
+                    }
                     this.responseResolve = null;
                     this.pendingResponse = null;
                     resolve(success);
@@ -1006,7 +1063,9 @@ setTimeout(resolve, 1);
                 voltage: voltage,
                 temperature: temperature,
                 isMoving: isMoving,
-                torqueEnabled: torqueEnabled
+                torqueEnabled: torqueEnabled,
+                faultByte: this.lastReadFaultByte || 0,
+                faultDescription: describeServoFaultByte(this.lastReadFaultByte || 0)
             };
         } catch (error) {
             console.error(`Servo ${this.servoId}: Failed to read status:`, error.message);
@@ -1078,7 +1137,11 @@ setTimeout(resolve, 1);
                 voltage,
                 temperature,
                 isMoving,
-                torqueEnabled
+                torqueEnabled,
+                // Servo status byte from the same packet. 0 = no fault. Non-zero
+                // is a bitmask of latched faults (OVERLOAD, OVERTEMP, etc).
+                faultByte: this.lastReadFaultByte || 0,
+                faultDescription: describeServoFaultByte(this.lastReadFaultByte || 0)
             };
         } catch (error) {
             console.error(`Servo ${this.servoId}: Failed to read quick status:`, error.message);

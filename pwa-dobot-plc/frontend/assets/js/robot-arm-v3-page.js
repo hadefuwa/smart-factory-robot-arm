@@ -101,6 +101,11 @@
   var commsGroupRepeats = true;
   var commsPaused = false;
 
+  // Per-joint offline/online transition tracker. Lets us push a synthetic
+  // comms-log row the moment a joint flips state, with the precise reason
+  // surfaced by the bridge. Keyed by joint number.
+  var jointStateTracker = {};
+
   // ── helpers ──────────────────────────────────────────────────────────────
 
   function el(id) { return document.getElementById(id); }
@@ -323,10 +328,25 @@
       }
 
       var avail = j.available;
+      var degraded = avail && j.degraded === true;
+      var faulted = avail && j.faulted === true;
       var eavail = el('javail-' + j.joint);
       if (eavail) {
-        eavail.textContent = avail ? 'Online' : 'Offline';
-        eavail.className = 'joint-avail ' + (avail ? 'ok' : 'fail');
+        if (faulted) {
+          eavail.textContent = 'Fault: ' + (j.faultDescription || ('0x' + (j.faultByte || 0).toString(16)));
+          eavail.className = 'joint-avail fail';
+          eavail.title = 'Servo reported fault byte 0x' + (j.faultByte || 0).toString(16).padStart(2, '0')
+            + ' (' + (j.faultDescription || 'unknown') + '). Joint is responsive but in a fault state — the bridge is auto-clearing the latched bit. If it persists, check load, voltage, or temperature.';
+        } else if (degraded) {
+          eavail.textContent = 'Degraded';
+          eavail.className = 'joint-avail warn';
+          eavail.title = 'Transient bus errors: ' + (j.degradedReason || '?')
+            + ' (' + (j.degradedConsecutivePolls || '?') + '/' + (j.degradedThreshold || '?') + ' failed polls before offline)';
+        } else {
+          eavail.textContent = avail ? 'Online' : 'Offline';
+          eavail.className = 'joint-avail ' + (avail ? 'ok' : 'fail');
+          eavail.title = !avail && j.offlineReason ? ('Offline reason: ' + j.offlineReason + (j.error ? ' — ' + j.error : '')) : '';
+        }
       }
       var eangle = el('jangle-' + j.joint);
       if (eangle && avail) {
@@ -433,6 +453,7 @@
     if (url === '/api/robot-arm/status') return 'poll-arm';
     if (url.indexOf('/api/plc/') === 0) return 'plc';
     if (url.indexOf('/api/robot-arm/') === 0) return 'robot';
+    if (url === 'evt:joint-state') return 'robot';
     return 'other';
   }
 
@@ -448,7 +469,20 @@
   }
 
   function commsEntrySummary(entry) {
-    if (!entry.ok && entry.error) return 'ERR: ' + entry.error.slice(0, 120);
+    if (!entry.ok && entry.error) {
+      // Special case: /api/robot-arm/status returns 503 when all servos are
+      // unavailable, with per-joint offlineReason inside the body. Enrich the
+      // ERR row with those reasons so the comms log shows WHY, not just THAT.
+      if (entry.url === '/api/robot-arm/status' && entry.resBody && entry.resBody.status && Array.isArray(entry.resBody.status.joints)) {
+        var offlineJoints = entry.resBody.status.joints
+          .filter(function (j) { return j && j.available === false; })
+          .map(function (j) { return 'J' + j.joint + ':' + (j.offlineReason || 'unknown'); });
+        if (offlineJoints.length) {
+          return 'ERR: ' + entry.error.slice(0, 80) + '  [' + offlineJoints.join(', ') + ']';
+        }
+      }
+      return 'ERR: ' + entry.error.slice(0, 120);
+    }
     var url = entry.url || '';
     var res = entry.resBody || {};
 
@@ -473,7 +507,69 @@
       var xyz = res.status && res.status.currentXYZ;
       var xyzStr = xyz ? ('XYZ:(' + (xyz.x||0).toFixed(0) + ',' + (xyz.y||0).toFixed(0) + ',' + (xyz.z||0).toFixed(0) + ')') : '';
       var moving = joints.filter(function(j) { return j.isMoving; });
-      return joints.length + ' joints' + (moving.length ? ' (' + moving.length + ' moving)' : '') + (xyzStr ? '  ' + xyzStr : '');
+      var offlineList = joints
+        .filter(function (j) { return j && j.available === false; })
+        .map(function (j) {
+          // Bridge now populates offlineReason/offlineSource/error for unavailable joints.
+          // Fall back to 'unknown' if a status came from an older bridge build.
+          return 'J' + j.joint + ':' + (j.offlineReason || 'unknown');
+        });
+      var degradedList = joints
+        .filter(function (j) { return j && j.available === true && j.degraded === true; })
+        .map(function (j) {
+          return 'J' + j.joint + ':' + (j.degradedReason || 'transient')
+            + '(' + (j.degradedConsecutivePolls || '?') + '/' + (j.degradedThreshold || '?') + ')';
+        });
+      var faultedList = joints
+        .filter(function (j) { return j && j.available === true && j.faulted === true; })
+        .map(function (j) {
+          return 'J' + j.joint + ':' + (j.faultDescription || ('0x' + (j.faultByte || 0).toString(16)));
+        });
+      var offlineStr  = offlineList.length  ? '  OFFLINE: '  + offlineList.join(', ')  : '';
+      var degradedStr = degradedList.length ? '  DEGRADED: ' + degradedList.join(', ') : '';
+      var faultedStr  = faultedList.length  ? '  FAULT: '    + faultedList.join(', ')  : '';
+      return joints.length + ' joints'
+        + (moving.length ? ' (' + moving.length + ' moving)' : '')
+        + offlineStr
+        + degradedStr
+        + faultedStr
+        + (xyzStr ? '  ' + xyzStr : '');
+    }
+
+    if (entry.url === 'evt:joint-state') {
+      var ev = res || {};
+      if (ev.kind === 'offline') {
+        return 'JOINT OFFLINE J' + ev.joint
+          + ' reason=' + (ev.reason || 'unknown')
+          + (ev.source ? ' source=' + ev.source : '')
+          + (ev.error ? '  msg: ' + String(ev.error).slice(0, 80) : '');
+      }
+      if (ev.kind === 'online') {
+        return 'JOINT RECOVERED J' + ev.joint
+          + (ev.downMs !== null && ev.downMs !== undefined ? ' (was offline ' + (ev.downMs / 1000).toFixed(1) + 's)' : '')
+          + (ev.previousReason ? ', last reason: ' + ev.previousReason : '');
+      }
+      if (ev.kind === 'degraded') {
+        return 'JOINT DEGRADED J' + ev.joint
+          + ' reason=' + (ev.reason || 'transient')
+          + (ev.consecutivePolls !== undefined ? ' polls=' + ev.consecutivePolls + '/' + (ev.threshold || '?') : '')
+          + (ev.error ? '  msg: ' + String(ev.error).slice(0, 80) : '');
+      }
+      if (ev.kind === 'recovered') {
+        return 'JOINT BUS-OK J' + ev.joint
+          + (ev.previousReason ? ' (was degraded: ' + ev.previousReason + ')' : '');
+      }
+      if (ev.kind === 'faulted') {
+        return 'JOINT FAULT J' + ev.joint
+          + ' byte=0x' + (ev.faultByte || 0).toString(16).padStart(2, '0')
+          + ' (' + (ev.faultDescription || 'unknown') + ')'
+          + (ev.previousFaultByte ? ' [was 0x' + ev.previousFaultByte.toString(16).padStart(2, '0') + ']' : '');
+      }
+      if (ev.kind === 'fault-cleared') {
+        return 'JOINT FAULT CLEARED J' + ev.joint
+          + (ev.previousFaultDescription ? ' (was ' + ev.previousFaultDescription + ')' : '');
+      }
+      return 'JOINT EVENT J' + ev.joint;
     }
 
     if (url === '/api/robot-arm/command') {
@@ -489,9 +585,16 @@
       if (res.stalled || (br2.type === 'stall')) return pfx + '  \u2192 STALL' + (br2.cause ? ': ' + br2.cause : '');
       if (res.success) {
         var angles = (br2.angles || []).map(function(a) { return a.toFixed(1) + '\u00b0'; }).join(',');
-        return pfx + '  \u2192 OK [' + angles + ']';
+        var suffix = '';
+        if (br2.wristLockReleased) suffix += '  [WRIST-LOCK RELEASED]';
+        return pfx + '  \u2192 OK [' + angles + ']' + suffix;
       }
-      return pfx + '  \u2192 ' + (br2.message || 'FAIL');
+      // IK failure \u2014 surface the closest position the solver reached.
+      var errSuffix = '';
+      if (br2.positionErrorMm !== undefined && br2.positionErrorMm !== null) {
+        errSuffix = '  (closest=' + Number(br2.positionErrorMm).toFixed(1) + 'mm)';
+      }
+      return pfx + '  \u2192 ' + (br2.message || 'FAIL') + errSuffix;
     }
 
     if (url.indexOf('/api/robot-arm/move') >= 0) {
@@ -1383,6 +1486,142 @@
 
   // ── polling ───────────────────────────────────────────────────────────────
 
+  function pushJointStateEvent(joint, kind, payload) {
+    // Status codes are chosen to drive the row styling in renderCommsLog():
+    //   503  → !ok → comms-row-err (red row): offline
+    //   207  → !ok → comms-row-err (red row): degraded (still serving, but glitching)
+    //   200  →  ok → normal row: online / recovered
+    // We intentionally leave `error` null so the summary's top "ERR:" short
+    // circuit doesn't fire and the evt:joint-state branch takes over.
+    var status, ok;
+    if (kind === 'offline') { status = 503; ok = false; }
+    else if (kind === 'degraded') { status = 207; ok = false; }
+    else if (kind === 'faulted')  { status = 409; ok = false; }
+    else { status = 200; ok = true; }
+    var entry = {
+      seq: ++commsSeq,
+      ts: new Date(),
+      method: 'EVT',
+      url: 'evt:joint-state',
+      reqBody: null,
+      status: status,
+      ok: ok,
+      latencyMs: 0,
+      resBody: Object.assign({ joint: joint, kind: kind }, payload || {}),
+      error: null
+    };
+    pushCommsEntry(entry);
+  }
+
+  function detectJointTransitions(joints) {
+    if (!Array.isArray(joints)) return;
+    joints.forEach(function (j) {
+      if (!j || typeof j.joint !== 'number') return;
+      var prev = jointStateTracker[j.joint];
+      var nowAvail = j.available === true;
+      var nowDegraded = nowAvail && j.degraded === true;
+      var nowFaulted = nowAvail && j.faulted === true;
+      var nowFaultByte = j.faultByte || 0;
+      var nowReason = j.offlineReason || null;
+      var nowDegReason = j.degradedReason || null;
+
+      if (!prev) {
+        // First sighting — seed without emitting unless it's already offline/degraded/faulted.
+        jointStateTracker[j.joint] = {
+          available: nowAvail, degraded: nowDegraded, faulted: nowFaulted,
+          faultByte: nowFaultByte, reason: nowReason, degReason: nowDegReason
+        };
+        if (nowFaulted) {
+          pushJointStateEvent(j.joint, 'faulted', {
+            faultByte: nowFaultByte,
+            faultDescription: j.faultDescription || null
+          });
+        }
+        if (!nowAvail) {
+          pushJointStateEvent(j.joint, 'offline', {
+            reason: nowReason || 'unknown',
+            source: j.offlineSource || null,
+            error: j.error || null,
+            since: j.offlineSince || null
+          });
+        } else if (nowDegraded) {
+          pushJointStateEvent(j.joint, 'degraded', {
+            reason: nowDegReason || 'transient',
+            consecutivePolls: j.degradedConsecutivePolls,
+            threshold: j.degradedThreshold,
+            error: j.error || null
+          });
+        }
+        return;
+      }
+
+      if (prev.available && !nowAvail) {
+        // Online → offline transition.
+        pushJointStateEvent(j.joint, 'offline', {
+          reason: nowReason || 'unknown',
+          source: j.offlineSource || null,
+          error: j.error || null,
+          since: j.offlineSince || null
+        });
+      } else if (!prev.available && nowAvail) {
+        // Offline → online recovery.
+        var downMs = (prev.since && j._nowTs) ? (j._nowTs - prev.since) : null;
+        pushJointStateEvent(j.joint, 'online', {
+          previousReason: prev.reason || null,
+          downMs: downMs
+        });
+      } else if (!nowAvail && nowReason && prev.reason && nowReason !== prev.reason) {
+        // Still offline but the underlying reason changed — surface that too.
+        pushJointStateEvent(j.joint, 'offline', {
+          reason: nowReason,
+          source: j.offlineSource || null,
+          error: j.error || null,
+          since: j.offlineSince || null,
+          previousReason: prev.reason
+        });
+      } else if (nowAvail && !prev.degraded && nowDegraded) {
+        // Healthy → degraded transition (bus glitches, not yet enough to nuke the slot).
+        pushJointStateEvent(j.joint, 'degraded', {
+          reason: nowDegReason || 'transient',
+          consecutivePolls: j.degradedConsecutivePolls,
+          threshold: j.degradedThreshold,
+          error: j.error || null
+        });
+      } else if (nowAvail && prev.degraded && !nowDegraded) {
+        // Degraded → healthy recovery.
+        pushJointStateEvent(j.joint, 'recovered', {
+          previousReason: prev.degReason || null
+        });
+      }
+
+      // Servo fault byte transitions (separate axis — a joint can be online
+      // and faulted, online and clean, or change which fault bits are set).
+      if (nowAvail && nowFaulted && (!prev.faulted || prev.faultByte !== nowFaultByte)) {
+        pushJointStateEvent(j.joint, 'faulted', {
+          faultByte: nowFaultByte,
+          faultDescription: j.faultDescription || null,
+          previousFaultByte: prev.faultByte || 0
+        });
+      } else if (nowAvail && prev.faulted && !nowFaulted) {
+        pushJointStateEvent(j.joint, 'fault-cleared', {
+          previousFaultByte: prev.faultByte || 0,
+          previousFaultDescription: prev.faultDescription || null
+        });
+      }
+
+      jointStateTracker[j.joint] = {
+        available: nowAvail,
+        degraded: nowDegraded,
+        faulted: nowFaulted,
+        faultByte: nowFaultByte,
+        faultDescription: j.faultDescription || null,
+        reason: nowReason,
+        degReason: nowDegReason,
+        since: j.offlineSince || prev.since || null
+      };
+    });
+  }
+
   async function pollStatus() {
     // Poll arm bridge and PLC data independently so a bridge failure
     // never wipes the PLC target display.
@@ -1391,7 +1630,23 @@
 
     try {
       armData = await apiRequest('/api/robot-arm/status');
-    } catch (_) {}
+    } catch (_) {
+      // 503 "all servos unavailable" comes through here. The body was already
+      // parsed into the latest comms entry; mine it for per-joint offline
+      // reasons so the transition detector can still emit JOINT OFFLINE rows.
+      try {
+        for (var k = commsEntries.length - 1; k >= 0; k--) {
+          var ce = commsEntries[k];
+          if (ce && ce.url === '/api/robot-arm/status' && ce.resBody && ce.resBody.status && Array.isArray(ce.resBody.status.joints)) {
+            var jts = ce.resBody.status.joints;
+            var nowT = Date.now();
+            jts.forEach(function (j) { if (j) j._nowTs = nowT; });
+            detectJointTransitions(jts);
+            break;
+          }
+        }
+      } catch (__) {}
+    }
 
     try {
       plcDb125 = await apiRequest('/api/plc/db125/read');
@@ -1436,6 +1691,10 @@
         state.bridgeConnected = true;
         setConnected(true, 'Online');
         var joints = (armData.status && armData.status.joints) || [];
+        // Surface offline/online transitions into the comms log with reason.
+        var nowTs = Date.now();
+        joints.forEach(function (j) { if (j) j._nowTs = nowTs; });
+        try { detectJointTransitions(joints); } catch (_) {}
         if (joints.length) renderJointGrid(joints);
         updateJointGraph(joints);
         var currentXYZ = (armData.status && armData.status.currentXYZ) || null;

@@ -154,6 +154,92 @@ console.error = (...a) => { const s = a.join(' '); logRing('error', s); _origErr
 const servos = [];
 const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
 
+// Resilience against transient RS-485 bus glitches.
+// Real-world journal showed J5 hitting "Communication error: -7" (checksum
+// corruption) at a regular ~32s cadence and J2 hitting "Read timeout" in
+// bursts. The next poll always succeeded, so a *single* failure should not
+// null the slot and force the 5s revive cycle. Two new behaviours:
+//   1. Per-poll: retry the bulk read up to READ_RETRY_COUNT times with a short
+//      gap, so transient frame corruption is swallowed inside one poll.
+//   2. Cross-poll: only null the slot after OFFLINE_FAIL_THRESHOLD consecutive
+//      *failed polls* (after in-poll retries). While under threshold the
+//      slot remains alive and the UI sees a `degraded: true` flag instead of
+//      a hard `available: false`.
+const READ_RETRY_COUNT = 2;            // 1 initial + 2 retries = 3 attempts per poll
+const READ_RETRY_GAP_MS = 25;          // small breather between attempts
+const OFFLINE_FAIL_THRESHOLD = 3;      // consecutive failed polls before nulling slot
+const consecutiveReadFailures = new Array(JOINT_COUNT).fill(0);
+const lastKnownGoodStatus = new Array(JOINT_COUNT).fill(null);
+
+// Servo "Status Byte" fault handling. A non-zero byte means the servo is
+// reachable but reporting a latched fault (OVERLOAD, OVERTEMP, etc.).
+// Previously the bridge treated this as a read failure and nulled the slot,
+// so a latched overload bit kept the joint offline forever (the user's J2
+// stuck-offline pattern). The current behaviour:
+//   - Keep the slot alive, return data, surface fault flags upstream.
+//   - Throttle attempts to re-enable torque (clears latched OVERLOAD on
+//     ST3215) to once every FAULT_CLEAR_INTERVAL_MS per slot so we don't
+//     spam the bus.
+const FAULT_CLEAR_INTERVAL_MS = 5000;
+const servoLastFaultClearMs = new Array(JOINT_COUNT).fill(0);
+
+// Per-slot offline diagnostics. Populated when a slot transitions to offline
+// (init failure, status-read failure, revive miss) and cleared when the slot
+// next reads successfully. Exposed on the getStatus payload so the web UI's
+// comms log can surface WHY a joint is offline, not just THAT it is.
+//   reason:  short token, e.g. 'read-timeout' | 'servo-error' | 'comm-corrupt'
+//            | 'ping-fail' | 'init-torque-fail' | 'revive-miss'
+//   source:  where it happened — 'init' | 'status-read' | 'revive'
+//   message: raw error.message from the offending throw
+//   since:   ms-epoch of the transition online→offline (kept until recovery)
+const servoOfflineReasons = new Array(JOINT_COUNT).fill(null);
+const servoWasAvailable = new Array(JOINT_COUNT).fill(true); // assume online until proven otherwise
+
+function classifyServoError(msg) {
+    if (!msg) return 'unknown';
+    const s = String(msg).toLowerCase();
+    if (s.includes('read timeout')) return 'read-timeout';
+    if (s.includes('communication error')) return 'comm-corrupt';
+    if (s.includes('servo error:')) {
+        const m = s.match(/servo error:\s*(-?\d+)/);
+        return m ? ('servo-error:' + m[1]) : 'servo-error';
+    }
+    if (s.includes('invalid quick status data')) return 'short-frame';
+    if (s.includes('no data in read response') || s.includes('empty read response')) return 'empty-read';
+    if (s.includes('not open')) return 'port-closed';
+    return 'other';
+}
+
+function markServoOffline(slotIndex, source, errorMessage) {
+    const reason = classifyServoError(errorMessage);
+    const prev = servoOfflineReasons[slotIndex];
+    const now = Date.now();
+    const transition = servoWasAvailable[slotIndex] === true;
+    servoOfflineReasons[slotIndex] = {
+        reason,
+        source,
+        message: errorMessage ? String(errorMessage) : null,
+        since: prev && prev.since ? prev.since : now,
+        lastAt: now
+    };
+    servoWasAvailable[slotIndex] = false;
+    if (transition) {
+        console.warn(`[OFFLINE J${slotIndex + 1}] source=${source} reason=${reason} msg="${errorMessage || ''}"`);
+    } else if (prev && prev.reason !== reason) {
+        console.warn(`[OFFLINE J${slotIndex + 1}] reason changed ${prev.reason} → ${reason} (source=${source}) msg="${errorMessage || ''}"`);
+    }
+}
+
+function markServoOnline(slotIndex) {
+    if (servoWasAvailable[slotIndex] === false) {
+        const prev = servoOfflineReasons[slotIndex];
+        const downMs = prev && prev.since ? (Date.now() - prev.since) : null;
+        console.warn(`[ONLINE J${slotIndex + 1}] recovered after ${downMs !== null ? downMs + 'ms' : 'unknown'} (was ${prev ? prev.reason : 'unknown'})`);
+    }
+    servoOfflineReasons[slotIndex] = null;
+    servoWasAvailable[slotIndex] = true;
+}
+
 /**
  * Shared serial port instance (all servos use the same port)
  */
@@ -395,12 +481,14 @@ async function tryInitializeServo(slotIndex, quiet = false) {
 
     if (!sharedSerialPort || !sharedSerialPort.isOpen) {
         logWarn(`Cannot initialize ${servoLabel}: shared serial port is not open`);
+        markServoOffline(slotIndex, 'init', 'shared serial port is not open');
         return null;
     }
 
     const servo = new RobotArm.ServoController(slotIndex + 1, sharedSerialPort, servoId, SERIAL_BAUDRATE);
     let addedToRouter = false;
     let ready = false;
+    let lastPingError = null;
 
     try {
         await servo.open();
@@ -413,7 +501,8 @@ async function tryInitializeServo(slotIndex, quiet = false) {
                 logInfo(`Pinging ${servoLabel} (attempt ${attempt}/3)...`);
                 pingResult = await servo.ping();
             } catch (error) {
-                logWarn(`Ping failed for ${servoLabel} on attempt ${attempt}: ${error.message}`);
+                lastPingError = error && error.message ? error.message : String(error);
+                logWarn(`Ping failed for ${servoLabel} on attempt ${attempt}: ${lastPingError}`);
             }
 
             if (pingResult) {
@@ -425,25 +514,29 @@ async function tryInitializeServo(slotIndex, quiet = false) {
 
         if (!pingResult) {
             logWarn(`Skipping ${servoLabel}: no ping response after retries`);
+            markServoOffline(slotIndex, 'init', lastPingError ? `ping-fail-after-3-tries: ${lastPingError}` : 'ping-fail-after-3-tries: no response');
             return null;
         }
 
         await new Promise(resolve => setTimeout(resolve, 50));
 
         let torqueSet = false;
+        let lastTorqueError = null;
         for (let attempt = 1; attempt <= 2; attempt++) {
             try {
                 await servo.setTorqueLimit(TORQUE_LIMIT_PERCENT);
                 torqueSet = true;
                 break;
             } catch (error) {
-                logWarn(`Torque-limit write failed for ${servoLabel} on attempt ${attempt}: ${error.message}`);
+                lastTorqueError = error && error.message ? error.message : String(error);
+                logWarn(`Torque-limit write failed for ${servoLabel} on attempt ${attempt}: ${lastTorqueError}`);
                 await new Promise(resolve => setTimeout(resolve, 80));
             }
         }
 
         if (!torqueSet) {
             logWarn(`Skipping ${servoLabel}: could not set torque limit`);
+            markServoOffline(slotIndex, 'init', lastTorqueError ? `init-torque-fail: ${lastTorqueError}` : 'init-torque-fail');
             return null;
         }
 
@@ -461,6 +554,7 @@ async function tryInitializeServo(slotIndex, quiet = false) {
         return servo;
     } catch (error) {
         logError(`Failed to initialize ${servoLabel}: ${error.message}`);
+        markServoOffline(slotIndex, 'init', error && error.message ? error.message : String(error));
         return null;
     } finally {
         if (addedToRouter && !ready) {
@@ -479,10 +573,20 @@ async function tryReviveServoSlot(slotIndex) {
     const servo = await tryInitializeServo(slotIndex, true);
     if (servo) {
         servos[slotIndex] = servo;
+        consecutiveReadFailures[slotIndex] = 0;
         console.log(`Recovered servo ${slotIndex + 1} after startup miss`);
+        markServoOnline(slotIndex);
         return servo;
     }
 
+    // tryInitializeServo already called markServoOffline with the precise
+    // reason; we don't overwrite it here. Just annotate the source as 'revive'.
+    const prev = servoOfflineReasons[slotIndex];
+    if (prev) {
+        servoOfflineReasons[slotIndex] = Object.assign({}, prev, { source: 'revive', lastAt: Date.now() });
+    } else {
+        markServoOffline(slotIndex, 'revive', 'revive-miss');
+    }
     return null;
 }
 
@@ -633,49 +737,10 @@ async function getAllServoStatus() {
         }
 
         if (servo === null) {
-            // Servo not available - push default status
-            statuses.push({
-                joint: i + 1,
-                available: false,
-                isMoving: false,
-                angleDegrees: 0,
-                position: 0,
-                stepPosition: 0,
-                speed: 0,
-                load: 0,
-                voltage: 0,
-                temperature: 0,
-                torqueEnabled: false
-            });
-            continue;
-        }
-
-        const startServo = Date.now();
-        try {
-            // Fast path: one bulk read per servo (angle, speed, load, voltage, temp, moving, torque)
-            let status;
-            try {
-                status = await servo.readQuickStatus();
-            } catch (error) {
-                const isRetryableTimeout = error && typeof error.message === 'string' && error.message.toLowerCase().includes('timeout');
-                if (!isRetryableTimeout) {
-                    throw error;
-                }
-                console.warn(`Servo ${i + 1}: quick status timed out, falling back to smaller reads`);
-                status = await servo.readStatus();
-            }
-            statuses.push({
-                joint: i + 1,
-                available: true,
-                ...status,
-                stepPosition: status.position
-            });
-        } catch (error) {
-            console.error(`Error reading status from servo ${i + 1}:`, error.message);
-            // Remove stale controller from the data router so it stops consuming
-            // response bytes meant for the next revive attempt of the same servo ID.
-            removeServoController(servo);
-            servos[i] = null;
+            // Servo not available - push default status, including the last
+            // recorded offline reason so the UI can show WHY (not just that it's
+            // offline).
+            const off = servoOfflineReasons[i];
             statuses.push({
                 joint: i + 1,
                 available: false,
@@ -688,8 +753,147 @@ async function getAllServoStatus() {
                 voltage: 0,
                 temperature: 0,
                 torqueEnabled: false,
-                error: error.message
+                offlineReason: off ? off.reason : 'unknown',
+                offlineSource: off ? off.source : null,
+                offlineSince: off ? off.since : null,
+                error: off ? off.message : null
             });
+            continue;
+        }
+
+        const startServo = Date.now();
+
+        // Try the bulk read with in-poll retries. RS-485 -7 (checksum) and
+        // 120ms timeouts almost always succeed on the very next attempt; this
+        // catches them inside one poll instead of dragging the joint through
+        // the 5s revive cycle.
+        let status = null;
+        let lastErrMsg = null;
+        const attemptErrors = [];
+        for (let attempt = 0; attempt <= READ_RETRY_COUNT; attempt++) {
+            try {
+                try {
+                    status = await servo.readQuickStatus();
+                } catch (error) {
+                    const isRetryableTimeout = error && typeof error.message === 'string' && error.message.toLowerCase().includes('timeout');
+                    if (!isRetryableTimeout) throw error;
+                    // Quick-read timeout — fall back to slower segmented reads once before retrying.
+                    console.warn(`Servo ${i + 1}: quick status timed out (attempt ${attempt + 1}/${READ_RETRY_COUNT + 1}), falling back to segmented reads`);
+                    status = await servo.readStatus();
+                }
+                break; // success — leave the retry loop
+            } catch (error) {
+                lastErrMsg = error && error.message ? error.message : String(error);
+                attemptErrors.push(lastErrMsg);
+                if (attempt < READ_RETRY_COUNT) {
+                    console.warn(`Servo ${i + 1}: read attempt ${attempt + 1}/${READ_RETRY_COUNT + 1} failed (${lastErrMsg}); retrying in ${READ_RETRY_GAP_MS}ms`);
+                    await new Promise(r => setTimeout(r, READ_RETRY_GAP_MS));
+                }
+            }
+        }
+
+        if (status) {
+            // Success (possibly after retries). Reset the consecutive-fail
+            // counter, cache for the degraded fallback, mark online.
+            if (consecutiveReadFailures[i] > 0) {
+                console.warn(`Servo ${i + 1}: recovered after ${consecutiveReadFailures[i]} prior failed polls (this poll succeeded after ${attemptErrors.length} in-poll retries)`);
+            }
+            consecutiveReadFailures[i] = 0;
+            const goodEntry = {
+                joint: i + 1,
+                available: true,
+                ...status,
+                stepPosition: status.position
+            };
+
+            // Servo reported a fault byte (overload, over-temp, etc). Keep the
+            // slot alive — that's the whole point of this branch — but mark
+            // the entry as `faulted: true` and try a one-shot clear: writing
+            // torque-enable=1 clears the latched OVERLOAD bit on ST3215s after
+            // a brief settle period. We rate-limit the clear attempt so we
+            // don't spam writes if the fault is persistent (e.g. real
+            // mechanical overload).
+            if (status.faultByte) {
+                goodEntry.faulted = true;
+                // Re-use the offline tracker as a unified "joint has a problem"
+                // surface so the UI's existing degraded/offline paths apply.
+                if (servoLastFaultClearMs[i] === undefined) servoLastFaultClearMs[i] = 0;
+                const sinceLastClear = Date.now() - servoLastFaultClearMs[i];
+                if (sinceLastClear > FAULT_CLEAR_INTERVAL_MS) {
+                    servoLastFaultClearMs[i] = Date.now();
+                    console.warn(`Servo ${i + 1}: fault byte 0x${status.faultByte.toString(16).padStart(2, '0')} (${status.faultDescription}) — attempting one-shot torque-enable to clear latched bit`);
+                    // Fire-and-forget. If the underlying condition (e.g. servo
+                    // physically jammed) is still present, the bit will simply
+                    // re-latch on the next poll and we'll try again in
+                    // FAULT_CLEAR_INTERVAL_MS.
+                    servo.startServo().catch(e => {
+                        console.warn(`Servo ${i + 1}: torque-enable clear attempt failed: ${e.message}`);
+                    });
+                }
+            }
+
+            lastKnownGoodStatus[i] = goodEntry;
+            markServoOnline(i);
+            statuses.push(goodEntry);
+        } else {
+            // Exhausted in-poll retries.
+            consecutiveReadFailures[i] += 1;
+            const consec = consecutiveReadFailures[i];
+            console.error(`Error reading status from servo ${i + 1}: ${lastErrMsg} (after ${READ_RETRY_COUNT + 1} attempts, consecutive failed polls=${consec}/${OFFLINE_FAIL_THRESHOLD})`);
+
+            if (consec >= OFFLINE_FAIL_THRESHOLD) {
+                // Hard-offline: too many consecutive failures. Null the slot and
+                // let the revive cycle take over.
+                removeServoController(servo);
+                servos[i] = null;
+                markServoOffline(i, 'status-read', `${lastErrMsg} (after ${consec} consecutive failed polls)`);
+                const off = servoOfflineReasons[i];
+                statuses.push({
+                    joint: i + 1,
+                    available: false,
+                    isMoving: false,
+                    angleDegrees: 0,
+                    position: 0,
+                    stepPosition: 0,
+                    speed: 0,
+                    load: 0,
+                    voltage: 0,
+                    temperature: 0,
+                    torqueEnabled: false,
+                    offlineReason: off ? off.reason : classifyServoError(lastErrMsg),
+                    offlineSource: 'status-read',
+                    offlineSince: off ? off.since : Date.now(),
+                    consecutiveFailedPolls: consec,
+                    error: lastErrMsg
+                });
+            } else {
+                // Soft / degraded: keep the slot, surface a `degraded: true`
+                // flag with the last-known angles so the UI graph doesn't snap
+                // to zero. The joint is still considered available.
+                const last = lastKnownGoodStatus[i] || {
+                    angleDegrees: 0, position: 0, stepPosition: 0, speed: 0,
+                    load: 0, voltage: 0, temperature: 0, isMoving: false,
+                    torqueEnabled: true
+                };
+                statuses.push({
+                    joint: i + 1,
+                    available: true,
+                    degraded: true,
+                    degradedReason: classifyServoError(lastErrMsg),
+                    degradedConsecutivePolls: consec,
+                    degradedThreshold: OFFLINE_FAIL_THRESHOLD,
+                    angleDegrees: last.angleDegrees,
+                    position: last.position,
+                    stepPosition: last.stepPosition,
+                    speed: 0,                  // unknown right now
+                    load: last.load,
+                    voltage: last.voltage,
+                    temperature: last.temperature,
+                    isMoving: last.isMoving,
+                    torqueEnabled: last.torqueEnabled,
+                    error: lastErrMsg
+                });
+            }
         }
 
         const servoDuration = Date.now() - startServo;
@@ -1542,15 +1746,19 @@ async function handleCommand(ws, data) {
             }
             // Seed the IK solver with the robot's current joint angles so it converges
             // to the nearest solution rather than jumping to an opposite configuration.
-            // Also capture torque state here so we can only re-enable on joints that need it.
+            // Also capture torque state and fault bytes here so we can re-enable any
+            // joint whose internal motor drive is latched off (overload, etc.)
+            // before the move starts.
             let xyzInitialAngles = null;
             let xyzTorqueStates = [];
+            let xyzFaultBytes = [];
             let xyzAvailableJointCount = robotKinematics.getJointCount();
             try {
                 const xyzStatuses = await getAllServoStatus();
                 const xyzJc = robotKinematics.getJointCount();
                 const xyzCurrentAngles = xyzStatuses.map(s => s.angleDegrees).slice(0, xyzJc);
                 xyzTorqueStates = xyzStatuses.map(s => s.torqueEnabled);
+                xyzFaultBytes = xyzStatuses.map(s => s.faultByte || 0);
                 xyzAvailableJointCount = getAvailableKinematicJointCount(xyzStatuses);
                 if (xyzCurrentAngles.length === xyzJc) {
                     xyzInitialAngles = xyzCurrentAngles;
@@ -1579,21 +1787,45 @@ async function handleCommand(ws, data) {
                 const failureMessage = xyzIkDetails && xyzIkDetails.message
                     ? xyzIkDetails.message
                     : 'moveToXYZ: position unreachable';
-                ws.send(JSON.stringify({ type: 'error', message: failureMessage, failureReason: failureReason, solverMode: xyzIkDetails && xyzIkDetails.solverMode, appliedOrientation: xyzPose.orientation }));
+                // Surface the target XYZ and last-attempt position error so the
+                // frontend can show "target (X,Y,Z) unreachable, closest = N mm".
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: failureMessage,
+                    failureReason: failureReason,
+                    solverMode: xyzIkDetails && xyzIkDetails.solverMode,
+                    appliedOrientation: xyzPose.orientation,
+                    targetX: Number(mX),
+                    targetY: Number(mY),
+                    targetZ: Number(mZ),
+                    positionErrorMm: xyzIkDetails && xyzIkDetails.positionErrorMm
+                }));
                 break;
             }
             // Build diagnostics for the response (orientation is best-effort, not a blocker)
             const xyzDiagnostics = buildIkDiagnostics(xyzPose, xyzAngles, xyzAvailableJointCount);
             const moveSpeed = mSpeed !== undefined ? Number(mSpeed) : 1500;
-            // Only re-enable torque on joints where it is actually off (e.g. after user pressed
-            // stop, or after a stall). Calling startServo() on an already-energised servo causes
-            // a micro-glitch as the servo briefly re-processes the enable command, which shows up
-            // as a small positional blip right before the move starts.
+            // Re-enable torque on joints that need it before commanding the move.
+            // Two cases:
+            //   1. torqueEnabled register reads 0 → user pressed stop / stalled out.
+            //   2. fault byte is non-zero → servo has a latched fault (OVERLOAD,
+            //      OVERTEMP, etc.). The STS_TORQUE_ENABLE register may STILL
+            //      read 1 in that state, but the servo internally cut motor
+            //      drive and won't move when commanded. Writing torque-enable
+            //      again clears the latch on ST3215. Without this, J2 and J5
+            //      sit still under "torqueEnabled=true" and every move stalls
+            //      with `moved=0steps`.
+            // Calling startServo() on a healthy already-energised servo costs a
+            // tiny re-process glitch, so we still skip it in the all-clear case.
             for (let ji = 0; ji < xyzAngles.length; ji++) {
-                if (servos[ji] !== null && xyzTorqueStates[ji] === false) {
-                    try { await servos[ji].holdCurrentPosition(); } catch (_) {
-                        try { await servos[ji].startServo(); } catch (_2) {}
-                    }
+                if (servos[ji] === null) continue;
+                const needsTorqueReset = (xyzTorqueStates[ji] === false) || (xyzFaultBytes[ji] && xyzFaultBytes[ji] !== 0);
+                if (!needsTorqueReset) continue;
+                if (xyzFaultBytes[ji]) {
+                    console.warn(`[MOVE-XYZ] J${ji + 1} pre-flight: fault byte 0x${xyzFaultBytes[ji].toString(16).padStart(2, '0')} detected — writing torque-enable to clear latch before move`);
+                }
+                try { await servos[ji].holdCurrentPosition(); } catch (_) {
+                    try { await servos[ji].startServo(); } catch (_2) {}
                 }
             }
             for (let ji = 0; ji < xyzAngles.length; ji++) {
@@ -1726,6 +1958,10 @@ async function handleCommand(ws, data) {
                         cause: causeStr
                     }));
                 } else {
+                    const wristLockReleased = !!(xyzIkDetails && xyzIkDetails.wristLockReleased);
+                    if (wristLockReleased) {
+                        console.warn(`[IK] moveToXYZ to (${mX}, ${mY}, ${mZ}) succeeded only with wrist-roll lock released — TCP may be rotated.`);
+                    }
                     ws.send(JSON.stringify({
                         type: 'moving',
                         angles: xyzAngles,
@@ -1737,7 +1973,8 @@ async function handleCommand(ws, data) {
                         positionErrorMm: xyzDiagnostics.positionErrorMm,
                         orientationErrorDeg: xyzDiagnostics.orientationErrorDeg,
                         solverMode: xyzDiagnostics.solverMode,
-                        tcpConfig: xyzDiagnostics.tcpConfig
+                        tcpConfig: xyzDiagnostics.tcpConfig,
+                        wristLockReleased: wristLockReleased
                     }));
                 }
             }

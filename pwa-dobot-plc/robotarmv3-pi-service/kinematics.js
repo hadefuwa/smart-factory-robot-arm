@@ -670,17 +670,26 @@ class RobotKinematics {
         // the wrist down, regardless of where J4 happened to be before.
         // Manual joint commands still drive the locked joints; only XYZ IK
         // forces them back to the lock angle.
+        //
+        // FALLBACK: with J4 pinned the reachable workspace shrinks. If the
+        // first two solver attempts (warm-start + zero-seed) can't get within
+        // tolerance, the caller will set `_allowUnlocked: true` and we'll
+        // re-run with the lock disabled to recover the old reachability —
+        // accepting that the TCP may end up rotated.
         const LOCKED_JOINT_NAME_PATTERNS = [
             { match: 'wrist_roll', angleDeg: 0 }
         ];
+        const allowUnlocked = !!(options && options._allowUnlocked);
         const lockedJointIndices = [];
-        for (let i = 0; i < numJoints; i++) {
-            const jointName = ((this.joints[i] && this.joints[i].name) || '').toLowerCase();
-            for (const lock of LOCKED_JOINT_NAME_PATTERNS) {
-                if (jointName.indexOf(lock.match) !== -1) {
-                    lockedJointIndices.push(i);
-                    angles[i] = lock.angleDeg;  // override the seed for this joint
-                    break;
+        if (!allowUnlocked) {
+            for (let i = 0; i < numJoints; i++) {
+                const jointName = ((this.joints[i] && this.joints[i].name) || '').toLowerCase();
+                for (const lock of LOCKED_JOINT_NAME_PATTERNS) {
+                    if (jointName.indexOf(lock.match) !== -1) {
+                        lockedJointIndices.push(i);
+                        angles[i] = lock.angleDeg;  // override the seed for this joint
+                        break;
+                    }
                 }
             }
         }
@@ -900,18 +909,36 @@ class RobotKinematics {
                 tcpConfig: tcpConfig
             };
             if (finalError > 10.0) {
+                // Identify the target we were trying to reach so the operator can
+                // map this warning back to a PLC command or UI request.
+                const tgtStr = 'target=(' + (targetPose.x || 0).toFixed(1) + ', ' + (targetPose.y || 0).toFixed(1) + ', ' + (targetPose.z || 0).toFixed(1) + ')mm';
+
                 // Warm-start seed (current servo positions) led to a local minimum.
                 // Retry once from a clean all-zeros seed before giving up — this handles
                 // cases where a stall left the arm at a random position that confused the solver.
                 if (!options || !options._retried) {
-                    console.warn('IK: warm-start convergence failed (' + finalError.toFixed(1) + 'mm). Retrying from zero seed.');
+                    console.warn('IK: warm-start convergence failed (' + finalError.toFixed(1) + 'mm) ' + tgtStr + '. Retrying from zero seed.');
                     return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _retried: true }));
                 }
-                console.warn('Inverse kinematics could not reach target within 10mm. Final error =', finalError.toFixed(2), 'mm');
+                // Zero-seed also failed. If we've been holding wrist-roll pinned
+                // (LOCKED_JOINT_NAME_PATTERNS) try once more with the lock
+                // disabled — many targets ARE reachable, just not with J4 at 0°.
+                // The TCP may end up rotated about the wrist axis, but the
+                // position is what the PLC actually asked for.
+                if (lockedJointIndices.length > 0 && !options._allowUnlocked) {
+                    console.warn('IK: locked-wrist solver failed (' + finalError.toFixed(1) + 'mm) ' + tgtStr + '. Retrying with wrist-roll lock released.');
+                    return this.inverseKinematics(targetPose, null, Object.assign({}, options, { _allowUnlocked: true, _retried: true }));
+                }
+                console.warn('Inverse kinematics could not reach target within 10mm. Final error =', finalError.toFixed(2), 'mm. ' + tgtStr + ' (locks ' + (allowUnlocked ? 'released' : 'engaged') + ')');
                 this.lastInverseKinematicsResult.success = false;
                 this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
                 this.lastInverseKinematicsResult.message = 'Inverse kinematics could not reach target within tolerance';
                 return null;
+            }
+            // Position succeeded but we had to drop the wrist-roll lock — record it so
+            // the bridge can log a warning to the comms log.
+            if (allowUnlocked && lockedJointIndices.length === 0) {
+                this.lastInverseKinematicsResult.wristLockReleased = true;
             }
 
             if (hasOrientationTarget) {
