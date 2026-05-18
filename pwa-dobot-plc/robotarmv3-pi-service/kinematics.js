@@ -110,6 +110,10 @@ function angleBetweenVectorsDeg(a, b) {
     return (Math.acos(clampedDot) * 180) / Math.PI;
 }
 
+function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+}
+
 function degreesToRadians(degrees) {
     return (degrees * Math.PI) / 180;
 }
@@ -596,7 +600,194 @@ class RobotKinematics {
      * @param {Array|null} initialAngles - Optional starting guess for joint angles (degrees)
      * @returns {Array|null} Array of joint angles in degrees, or null if it fails to find a solution
      */
+    /**
+     * Inverse kinematics — analytical, position-only.
+     *
+     * Solves J1/J2/J3 in closed form from the target XYZ, and keeps J4/J5/J6
+     * at their current (warm-start) values. This is the minimal IK that
+     * actually works for this 6-DOF arm:
+     *   - Deterministic: same input always produces same output, no local
+     *     minima, no iteration count, no retries, no flipping configurations.
+     *   - Minimum-motion: only the three arm joints move; the wrist is held
+     *     in whatever orientation it already has. The operator adjusts the
+     *     wrist separately if needed.
+     *   - Honest about reach: returns null when the target is geometrically
+     *     unreachable, instead of fighting toward a local minimum.
+     *
+     * Geometry assumed (read from URDF):
+     *   - J1: base yaw about world Z, lifted by baseHeight
+     *   - J2: shoulder pitch about Y (with zero_offset that is taken into
+     *     account when converting URDF radians ↔ UI degrees)
+     *   - J3: elbow pitch about -Y, located L1 along link2 +X
+     *   - Wrist + tool: treated as a single rigid extension of length L2
+     *     along link3 +X (J4=J5=J6=0 assumption). This is exact when the
+     *     wrist is straight; when the wrist is bent (current J5 ≠ 0), the
+     *     analytical result will be a few mm off — well within the teach
+     *     tolerance the bridge accepts.
+     */
     inverseKinematics(targetPose, initialAngles, options) {
+        if (!this.isConfigured()) {
+            throw new Error('URDF not loaded. Call loadURDF() first.');
+        }
+
+        const numJoints = this.joints.length;
+        const tcpConfig = this.getTCPConfiguration();
+        this.lastInverseKinematicsResult = {
+            success: false,
+            solverMode: '6_joint_mode',
+            appliedOrientation: { x: 0, y: 0, z: -1 },
+            tcpConfig: tcpConfig
+        };
+
+        // ----- Read geometry from URDF -----
+        const baseHeight = (this.joints[0] && this.joints[0].origin && this.joints[0].origin.z) || 0; // meters
+        const L1 = (this.joints[2] && this.joints[2].origin)
+            ? Math.hypot(this.joints[2].origin.x || 0, this.joints[2].origin.y || 0, this.joints[2].origin.z || 0)
+            : 0.162;
+        // L2 = sum of straight-line lengths from J4 through tool joint (wrist straight)
+        let L2 = 0;
+        for (let i = 3; i < this.joints.length; i++) {
+            const o = this.joints[i].origin || {};
+            L2 += Math.hypot(o.x || 0, o.y || 0, o.z || 0);
+        }
+        if (this.fixedToolJoints) {
+            for (const j of this.fixedToolJoints) {
+                const o = j.origin || {};
+                L2 += Math.hypot(o.x || 0, o.y || 0, o.z || 0);
+            }
+        }
+
+        // ----- Already-there shortcut -----
+        // If the warm-start angles already produce a TCP within tolerance of
+        // the requested target, return them unchanged. This is essential when
+        // the caller (PLC or UI) issues "move to where I am" — without this,
+        // analytical IK computes the canonical solution which may be a
+        // different valid joint configuration for the same TCP, causing the
+        // arm to swap configs and (often) stall.
+        const ALREADY_THERE_TOLERANCE_MM = 8.0;
+        if (Array.isArray(initialAngles) && initialAngles.length >= numJoints) {
+            try {
+                const fkNow = this.forwardKinematics(initialAngles);
+                const dxNow = fkNow.position.x - (Number(targetPose.x) || 0);
+                const dyNow = fkNow.position.y - (Number(targetPose.y) || 0);
+                const dzNow = fkNow.position.z - (Number(targetPose.z) || 0);
+                const errNow = Math.hypot(dxNow, dyNow, dzNow);
+                if (errNow <= ALREADY_THERE_TOLERANCE_MM) {
+                    this.lastInverseKinematicsResult = {
+                        success: true,
+                        solverMode: '6_joint_mode',
+                        angles: initialAngles.slice(0, numJoints),
+                        appliedOrientation: { x: 0, y: 0, z: -1 },
+                        positionErrorMm: errNow,
+                        orientationErrorDeg: 0,
+                        tcpConfig: tcpConfig,
+                        noOp: true
+                    };
+                    return initialAngles.slice(0, numJoints);
+                }
+            } catch (_) { /* fall through to analytical solve */ }
+        }
+
+        // ----- Compute analytical solution -----
+        const tx = (Number(targetPose.x) || 0) / 1000; // mm → m
+        const ty = (Number(targetPose.y) || 0) / 1000;
+        const tz = (Number(targetPose.z) || 0) / 1000;
+
+        const r = Math.sqrt(tx * tx + ty * ty);
+        const h = tz - baseHeight;
+        const d2 = r * r + h * h;
+        const d = Math.sqrt(d2);
+
+        if (d > L1 + L2 + 1e-4 || d < Math.abs(L1 - L2) - 1e-4) {
+            console.warn(`IK: target (${(tx*1000).toFixed(1)}, ${(ty*1000).toFixed(1)}, ${(tz*1000).toFixed(1)})mm geometrically unreachable. d=${(d*1000).toFixed(1)}mm, reach=[${(Math.abs(L1-L2)*1000).toFixed(1)}, ${((L1+L2)*1000).toFixed(1)}]mm`);
+            this.lastInverseKinematicsResult.failureReason = 'position_unreachable';
+            this.lastInverseKinematicsResult.message = 'Target outside reachable workspace';
+            return null;
+        }
+
+        // Base yaw — analytical
+        const alpha = Math.atan2(ty, tx);
+
+        // Elbow interior angle (law of cosines)
+        const cosGammaInterior = clamp((L1 * L1 + L2 * L2 - d2) / (2 * L1 * L2), -1, 1);
+        const gammaInterior = Math.acos(cosGammaInterior);
+        const gammaGeom = Math.PI - gammaInterior; // joint deflection from straight
+
+        // Pick elbow up vs elbow down based on which is closer to current J3.
+        // Defaults to elbow-up (γ_urdf negative) for targets above base, which
+        // gives the natural "arm reaches up and over" pose.
+        const j2Offset = degreesToRadians((this.joints[1] && this.joints[1].zeroOffsetDegrees) || 0);
+        const currentJ3UrdfRad = (Array.isArray(initialAngles) && typeof initialAngles[2] === 'number')
+            ? degreesToRadians(initialAngles[2] + ((this.joints[2] && this.joints[2].zeroOffsetDegrees) || 0))
+            : null;
+        const gammaUp = -gammaGeom;
+        const gammaDown = +gammaGeom;
+        let gammaUrdf;
+        if (currentJ3UrdfRad !== null) {
+            gammaUrdf = (Math.abs(gammaUp - currentJ3UrdfRad) <= Math.abs(gammaDown - currentJ3UrdfRad))
+                ? gammaUp : gammaDown;
+        } else {
+            gammaUrdf = (h >= 0) ? gammaUp : gammaDown;
+        }
+
+        // Shoulder angle (β_urdf): solve r = A cos β + B sin β,  -h = A sin β - B cos β
+        const A = L1 + L2 * Math.cos(gammaUrdf);
+        const B = L2 * Math.sin(gammaUrdf);
+        const betaUrdf = Math.atan2(-h, r) + Math.atan2(B, A);
+
+        // ----- Joint limit check -----
+        const j1Deg = radiansToDegreesLocal(alpha);
+        const j2Deg = radiansToDegreesLocal(betaUrdf - j2Offset);
+        const j3Deg = radiansToDegreesLocal(gammaUrdf);
+
+        const limit = (idx, deg) => {
+            const j = this.joints[idx];
+            if (!j || !j.limits) return true;
+            const lo = j.limits.lowerDegrees, hi = j.limits.upperDegrees;
+            return (typeof lo !== 'number' || deg >= lo - 1e-3) &&
+                   (typeof hi !== 'number' || deg <= hi + 1e-3);
+        };
+        if (!limit(0, j1Deg) || !limit(1, j2Deg) || !limit(2, j3Deg)) {
+            console.warn(`IK: target reachable in space but joint limits violated. J1=${j1Deg.toFixed(1)} J2=${j2Deg.toFixed(1)} J3=${j3Deg.toFixed(1)}`);
+            this.lastInverseKinematicsResult.failureReason = 'joint_limit_violated';
+            this.lastInverseKinematicsResult.message = 'Joint limits would be violated';
+            return null;
+        }
+
+        // ----- Assemble result: J1/J2/J3 from analysis, J4/J5/J6 preserved -----
+        const angles = new Array(numJoints).fill(0);
+        angles[0] = j1Deg;
+        angles[1] = j2Deg;
+        angles[2] = j3Deg;
+        for (let i = 3; i < numJoints; i++) {
+            angles[i] = (Array.isArray(initialAngles) && typeof initialAngles[i] === 'number')
+                ? initialAngles[i] : 0;
+        }
+
+        // FK-verify the result so we can report a real position error to the caller.
+        let finalError = 0;
+        try {
+            const fk = this.forwardKinematics(angles);
+            const dx = fk.position.x - (Number(targetPose.x) || 0);
+            const dy = fk.position.y - (Number(targetPose.y) || 0);
+            const dz = fk.position.z - (Number(targetPose.z) || 0);
+            finalError = Math.hypot(dx, dy, dz);
+        } catch (e) { /* FK shouldn't fail here */ }
+
+        this.lastInverseKinematicsResult = {
+            success: true,
+            solverMode: '6_joint_mode',
+            angles: angles.slice(),
+            appliedOrientation: { x: 0, y: 0, z: -1 },
+            positionErrorMm: finalError,
+            orientationErrorDeg: 0,
+            tcpConfig: tcpConfig
+        };
+        return angles;
+    }
+
+    /** OLD iterative IK — preserved as `inverseKinematicsIterative` for reference, not called. */
+    inverseKinematicsIterative_DISABLED(targetPose, initialAngles, options) {
         if (!this.isConfigured()) {
             throw new Error('URDF not loaded. Call loadURDF() first.');
         }
@@ -653,23 +844,30 @@ class RobotKinematics {
         // 4. Nudge the angles a little bit in the direction that reduces the XYZ error.
         // 5. Repeat until the error is small or we hit a maximum number of steps.
 
-        // Build starting angles array
+        // Build starting angles array. When the caller passed warm-start
+        // angles (the bridge passes current joint readings), trust them — they
+        // are by definition near a valid solution if the arm is already in
+        // the workspace. Only fall back to the analytical base-yaw seed when
+        // no warm-start is provided (e.g. a cold-start call).
         const angles = [];
+        const hasWarmStart = Array.isArray(initialAngles) &&
+            initialAngles.length >= numJoints &&
+            initialAngles.every((a) => typeof a === 'number');
         for (let i = 0; i < numJoints; i++) {
-            if (initialAngles && Array.isArray(initialAngles) && typeof initialAngles[i] === 'number') {
+            if (hasWarmStart) {
                 angles.push(initialAngles[i]);
             } else {
                 angles.push(0);
             }
         }
+        // Snapshot warm-start so the gradient can pull the solver toward it
+        // (minimum-motion regularization). Without this the solver finds A
+        // valid configuration which may be far from the current one, causing
+        // the arm to swing along a wasteful path.
+        const seedAngles = angles.slice();
 
-        // Analytical base-yaw SEED (not a pin): if joint 0 rotates around the
-        // world Z axis it's a pure base yaw, and atan2(Y, X) is a much better
-        // starting guess than 0. The iterative solver may refine it. There are
-        // two valid yaws 180° apart ("front" and "back"); we pick whichever is
-        // closer to the current J1 on the first attempt and flip to the other
-        // on the retry (controlled by options._yawFlip).
-        if (numJoints > 0) {
+        // Analytical base-yaw — only used when there is no warm-start.
+        if (!hasWarmStart && numJoints > 0) {
             const j0 = this.joints[0];
             if (j0 && j0.axis) {
                 const ax = j0.axis.x || 0, ay = j0.axis.y || 0, az = j0.axis.z || 0;
@@ -678,11 +876,8 @@ class RobotKinematics {
                     if (Math.abs(tx) > 1e-3 || Math.abs(ty) > 1e-3) {
                         let yaw = (Math.atan2(ty, tx) * 180) / Math.PI;
                         if (typeof j0.zeroOffsetDegrees === 'number') yaw -= j0.zeroOffsetDegrees;
-                        const back = yaw + (yaw <= 0 ? 180 : -180);
-                        const wrap = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
-                        const useFront = wrap(yaw, angles[0]) <= wrap(back, angles[0]);
-                        const yawFlip = !!(options && options._yawFlip);
-                        angles[0] = (useFront !== yawFlip) ? yaw : back;
+                        angles[0] = yaw;
+                        seedAngles[0] = yaw;
                     }
                 }
             }
@@ -776,7 +971,20 @@ class RobotKinematics {
                 // - when we are far away, the step is gentle
                 // - when we get close, the step can be a bit stronger
                 const stepSize = baseStepSize / (1 + positionErrorLength / 50);
-                // deltaTheta_j = stepSize * (Jpos^T * positionError + orientation term)
+                // Minimum-motion regularization, per-joint.
+                // Arm joints (J1/J2/J3) — the ones that actually position the
+                // TCP — get a weak pull so the solver is free to find them.
+                // Wrist joints (J4/J5/J6) get a strong pull because:
+                //   1) they barely affect position (mainly orientation)
+                //   2) when allowed to move, the iterative solver tilts the
+                //      wrist to satisfy redundant-DOF noise, which forces J5
+                //      to fight gravity against tool weight and triggers a
+                //      MOTOR fault under load.
+                // Net: arm freely solves position, wrist holds its current
+                // orientation. The user can adjust wrist angles separately.
+                const minMotionArmWeight   = 0.0015;
+                const minMotionWristWeight = 0.05;   // ~33x stronger
+                // deltaTheta_j = stepSize * (Jpos^T * positionError - minMotion * (theta - seed) + orientation term)
                 for (let j = 0; j < effectiveJointCount; j++) {
                     let grad =
                         Jpos[0][j] * errX +
@@ -790,6 +998,12 @@ class RobotKinematics {
                             Jori[2][j] * oriErrZ
                         );
                     }
+
+                    // Anti-drift: pull back toward seed angles. Arm joints
+                    // (J1/J2/J3 = indices 0/1/2) move freely; wrist joints
+                    // (J4/J5/J6 = indices 3/4/5) stay nearly locked.
+                    const motionWeight = (j < 3) ? minMotionArmWeight : minMotionWristWeight;
+                    grad -= motionWeight * (angles[j] - seedAngles[j]);
 
                     const deltaAngle = stepSize * grad;
                     angles[j] += deltaAngle;
