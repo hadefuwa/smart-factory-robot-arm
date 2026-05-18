@@ -167,7 +167,13 @@ const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
 //      a hard `available: false`.
 const READ_RETRY_COUNT = 2;            // 1 initial + 2 retries = 3 attempts per poll
 const READ_RETRY_GAP_MS = 25;          // small breather between attempts
-const OFFLINE_FAIL_THRESHOLD = 3;      // consecutive failed polls before nulling slot
+// Raised from 3 → 6 after observing J5 flicker between OFFLINE and DEGRADED
+// every few seconds: its comm-corrupt bursts often hit 3 consecutive failed
+// polls, which used to null the slot and trigger the 5s revive cycle, which
+// then caused moves running at that moment to fall through to 5-joint IK and
+// fail. With 6 the slot survives ~6-8s of sustained bus trouble before being
+// nulled, which matches the observed natural duration of the bursts.
+const OFFLINE_FAIL_THRESHOLD = 6;      // consecutive failed polls before nulling slot
 const consecutiveReadFailures = new Array(JOINT_COUNT).fill(0);
 const lastKnownGoodStatus = new Array(JOINT_COUNT).fill(null);
 

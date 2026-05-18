@@ -1527,9 +1527,17 @@
 
       if (!prev) {
         // First sighting — seed without emitting unless it's already offline/degraded/faulted.
+        // We capture the page-local timestamp as `localSince` whenever the
+        // joint first appears in an offline state. The bridge's offlineSince
+        // is *sticky* across its revive cycles (it remembers the original
+        // offline moment within a single bridge run), so we can't rely on it
+        // to compute "how long was J5 offline this time" — that would yield
+        // 2+ day durations on a long-running bridge. Local timestamps give
+        // sane, recent durations.
         jointStateTracker[j.joint] = {
           available: nowAvail, degraded: nowDegraded, faulted: nowFaulted,
-          faultByte: nowFaultByte, reason: nowReason, degReason: nowDegReason
+          faultByte: nowFaultByte, reason: nowReason, degReason: nowDegReason,
+          localSince: nowAvail ? null : (j._nowTs || Date.now())
         };
         if (nowFaulted) {
           pushJointStateEvent(j.joint, 'faulted', {
@@ -1541,8 +1549,7 @@
           pushJointStateEvent(j.joint, 'offline', {
             reason: nowReason || 'unknown',
             source: j.offlineSource || null,
-            error: j.error || null,
-            since: j.offlineSince || null
+            error: j.error || null
           });
         } else if (nowDegraded) {
           pushJointStateEvent(j.joint, 'degraded', {
@@ -1555,17 +1562,25 @@
         return;
       }
 
+      // Maintain the page-local "since this transition" timestamp.
+      var nowTsLocal = j._nowTs || Date.now();
+      var localSince = prev.localSince || null;
+      if (prev.available && !nowAvail) {
+        localSince = nowTsLocal;   // fresh offline start
+      } else if (nowAvail) {
+        localSince = null;         // joint is up — no down-clock running
+      }
+
       if (prev.available && !nowAvail) {
         // Online → offline transition.
         pushJointStateEvent(j.joint, 'offline', {
           reason: nowReason || 'unknown',
           source: j.offlineSource || null,
-          error: j.error || null,
-          since: j.offlineSince || null
+          error: j.error || null
         });
       } else if (!prev.available && nowAvail) {
-        // Offline → online recovery.
-        var downMs = (prev.since && j._nowTs) ? (j._nowTs - prev.since) : null;
+        // Offline → online recovery. Use the page-local down-clock.
+        var downMs = (prev.localSince && nowTsLocal) ? (nowTsLocal - prev.localSince) : null;
         pushJointStateEvent(j.joint, 'online', {
           previousReason: prev.reason || null,
           downMs: downMs
@@ -1617,7 +1632,7 @@
         faultDescription: j.faultDescription || null,
         reason: nowReason,
         degReason: nowDegReason,
-        since: j.offlineSince || prev.since || null
+        localSince: localSince
       };
     });
   }
