@@ -362,21 +362,15 @@ async function queueCommand(commandFn, meta) {
         const commandType = (meta && meta.type) ? String(meta.type) : 'unknown';
         const callerWs = meta && meta.ws;
 
-        // Coalesce idempotent getStatus polls: every getStatus runs a full serial-bus
-        // scan, so under a bus slowdown they pile up faster than they drain and the
-        // queue fills to MAX_COMMAND_QUEUE_SIZE (the "Command queue is full" failure).
-        // Instead, if a getStatus is already running or queued, ride on it — the
-        // primary handler will broadcast its result to every waiter.
-        if (commandType === 'getStatus' && callerWs) {
-            const alreadyPending =
-                inFlightCommandType === 'getStatus' ||
-                commandQueue.some(c => c.commandType === 'getStatus');
-            if (alreadyPending) {
-                pendingGetStatusWaiters.push(callerWs);
-                resolve();
-                return;
-            }
-        }
+        // getStatus coalescing was removed 2026-05-18 — the resolve()-without-send
+        // pattern made a waiter's promise complete without anything actually being
+        // written to its WS, so a client that ended up as a waiter would block on
+        // recv() until its 10s timeout fired, then close the socket. The bridge's
+        // subsequent broadcast then sent to a dead socket. Net effect: every
+        // Flask status call timed out, disconnected, reconnected, retimed —
+        // matching the 10s flap visible in client connect/disconnect logs.
+        // Let each getStatus enter the queue like any other command; the
+        // queue-full reject path is the right protection against backpressure.
 
         // Coalesce latest-wins commands: when a new moveToXYZ (or other coalescable
         // type) arrives, supersede any earlier queued ones of the same type. The arm
@@ -1199,16 +1193,6 @@ async function handleCommand(ws, data) {
                 currentXYZ: currentXYZ
             });
             ws.send(statusMessage);
-
-            // Send the same fresh read to any polls that coalesced onto this one
-            // while we were on the serial bus. Drains pendingGetStatusWaiters so
-            // they don't sit waiting for a queue slot that never opens.
-            if (pendingGetStatusWaiters.length > 0) {
-                const waiters = pendingGetStatusWaiters.splice(0);
-                for (const waiterWs of waiters) {
-                    try { waiterWs.send(statusMessage); } catch (_) {}
-                }
-            }
             break;
         }
 
