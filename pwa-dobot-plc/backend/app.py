@@ -975,7 +975,11 @@ def _position_logger_loop():
     """Background thread: append a CSV row (PLC target vs arm current XYZ + distance)
     every _POSITION_LOG_INTERVAL_S seconds. The CSV file lives at
     /home/pi/sf2/logs/plc_vs_arm_positions.csv and is the diagnostic source for
-    "why is the arm going back and forth" questions."""
+    "why is the arm going back and forth" questions.
+
+    The PLC target is read from cache (kept fresh by the PLC worker). The arm
+    current XYZ is queried directly from the bridge so it doesn't depend on
+    whoever else is polling /api/robot-arm/status to keep the cache fresh."""
     _ensure_position_log_initialised()
     while True:
         time.sleep(_POSITION_LOG_INTERVAL_S)
@@ -988,9 +992,29 @@ def _position_logger_loop():
             ty = cache.get('db125_target_y')
             tz = cache.get('db125_target_z')
             speed = cache.get('db125_speed')
-            ax = cache.get('db125_x_position')
-            ay = cache.get('db125_y_position')
-            az = cache.get('db125_z_position')
+
+            # Arm XYZ: query the bridge directly so we get a fresh reading
+            # every 0.5s regardless of frontend polling. Falls back to the
+            # PLC cache if the bridge call fails.
+            ax = ay = az = None
+            if bridge_conn:
+                try:
+                    with robot_arm_bridge_lock:
+                        ws = robot_arm_bridge_state.get('ws')
+                        if ws and robot_arm_bridge_state.get('connected'):
+                            ws.settimeout(2)
+                            try:
+                                resp = send_robot_arm_command({'command': 'getStatus'})
+                                xyz = resp.get('currentXYZ') or {}
+                                ax, ay, az = xyz.get('x'), xyz.get('y'), xyz.get('z')
+                            finally:
+                                ws.settimeout(3)
+                except Exception:
+                    pass
+            if ax is None:
+                ax = cache.get('db125_x_position')
+                ay = cache.get('db125_y_position')
+                az = cache.get('db125_z_position')
 
             def fmt(v):
                 if v is None:
