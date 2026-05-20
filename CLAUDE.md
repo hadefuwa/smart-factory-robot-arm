@@ -72,20 +72,31 @@ The Pi has no internet access. File transfers use SCP over the local network.
 # SCP a file to Pi
 scp pwa-dobot-plc/backend/config.json pi@rpi:/home/pi/sf2/pwa-dobot-plc/backend/config.json
 
-# Restart service on Pi
-ssh pi@rpi 'sudo systemctl restart smart-factory'
+# Restart services on Pi
+ssh pi@rpi 'sudo systemctl restart smart-factory'           # Flask backend
+ssh pi@rpi 'sudo systemctl restart robotarmv3-pi.service'   # Node arm bridge
 
 # Check logs
 ssh pi@rpi 'sudo journalctl -u smart-factory -n 50'
+ssh pi@rpi 'sudo journalctl -u robotarmv3-pi.service -n 50'
 ```
 
-## Pi service
+## Pi services
+
+Two systemd units run on the Pi:
 
 ```
-Service name:    smart-factory
-Working dir:     /home/pi/sf2/pwa-dobot-plc/backend
-Exec:            /home/pi/sf2/pwa-dobot-plc/backend/venv/bin/python app.py
-Repo on Pi:      ~/sf2/   (cloned from GitHub)
+smart-factory.service       (Flask backend + web UI, HTTPS port 8080)
+  Working dir:     /home/pi/sf2/pwa-dobot-plc/backend
+  Exec:            /home/pi/sf2/pwa-dobot-plc/backend/venv/bin/python app.py
+
+robotarmv3-pi.service       (Node bridge to ST3215 arm, WebSocket port 8090)
+  Working dir:     /home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service
+  Exec:            node server.js
+  Restart=always — so when /dev/ttyACM0 re-enumerates after a USB glitch
+                   the process exits cleanly and systemd brings it back.
+
+Repo on Pi:        ~/sf2/   (cloned from GitHub, no internet access from here)
 ```
 
 ## PoE camera firmware
@@ -124,16 +135,34 @@ Full tag map: `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_REA
 
 ## Robot-arm bridge
 
-The 6-DOF Waveshare ST3215 arm is driven by a separate Node.js service on the Pi (`robotarmv3-pi.service`, port 8090). The bus is **half-duplex TTL serial** (single signal wire + GND + V+, 5 V logic, daisy-chained across all 6 servos) at 1 Mbps via the SC-B1 USB-to-TTL adapter on `/dev/ttyACM0` — **not RS-485**, despite a few legacy comments still using that term. Flask talks to the bridge over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
+The 6-DOF Waveshare ST3215 arm is driven by a separate Node.js service on the Pi (`robotarmv3-pi.service`, port 8090). The bus is a **single-wire TTL half-duplex serial bus** (3 wires: V+ / GND / SIGNAL, 5 V logic, idles HIGH, daisy-chained across all 6 servos) at **500 kbps** via the SC-B1 USB-to-TTL adapter on `/dev/ttyACM0`. This is **not RS-485** — termination concepts that apply to RS-485 (120 Ω, A/B biasing, shield grounding) don't translate; signal-integrity work on this bus is about idle-line voltage, scope rise/fall edges, stub length, common-ground bounce, and IR drop on V+. Baud was dropped from 1 Mbps after J5 corruption appeared at 1 Mbps — see `docs/J5_WRIST_PITCH_BUS_CORRUPTION.md`.
+
+Flask talks to the bridge over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
 
 Key behaviours documented in `pwa-dobot-plc/robotarmv3-pi-service/README.md` (read this before touching the bridge):
 
-- **Command queue**: single global queue serialises serial-bus access. `getStatus` and `moveToXYZ` coalesce (latest-wins). Safety commands (`stopAllJoints`, `homeAll`, `setTorqueAll`) are FIFO and never dropped.
+- **Command queue**: single global queue serialises serial-bus access. `moveToXYZ` coalesces latest-wins. Safety commands (`stopAllJoints`, `homeAll`, `setTorqueAll`) are FIFO and never dropped.
+- **Dark-bus fast-fail** in `getAllServoStatus()`: after the first servo times out, the remaining servos in that poll are short-circuited to "unavailable" rather than each spending the full timeout. `ALL_FAIL_RECOVERY_THRESHOLD = 2` polls before close-reopen-reinit auto-recovery runs.
 - **In-flight watchdog** (`COMMAND_WATCHDOG_MS`, 20s): a hung serial read can't permanently wedge the bridge.
 - **USB-disconnect auto-recovery**: serialport `'close'` handler exits the process when the CH343 adapter re-enumerates; systemd (`Restart=always`) restarts and re-runs servo init.
-- **Flask side guards**: resend interval, active-target dedup, exponential error backoff (2→30s), stale-target watchdog (15s) that surfaces `DB125.invalid_target` to the PLC.
+- **`moveToXYZ` returns immediately on `allDone`** (per-joint within 20 steps, ~1.76°). There is no post-move creep pass — earlier versions blocked 1.5s tightening to 8 steps, which serialised back-to-back PLC waypoints; removed in commit 44b386e.
+- **Stall handling**: when stuck-consec >= `STALL_POLLS` (30), the bridge declares `type: 'stall'` to the caller but leaves servo goals in place. The previous behaviour wrote current position into the goal, wiping the target. The PLC backend then treats `stall within tolerance` as success.
+- **Motor protection lifted** by `raise-motor-limits.js` — UnloadCondition 47 → 7 (OVERLOAD + MOTOR auto-unload bits cleared), OverloadTime 80 → 254. Voltage / sensor / overtemp protection remain. With this, weak joints crawl toward goal under load instead of latching off.
+- **Flask side guards**: resend interval, active-target dedup, exponential error backoff (2→30s, exponent capped to avoid int→float overflow), stale-target watchdog (15s) that surfaces `DB125.invalid_target` to the PLC.
 
-Kinematics (`kinematics.js`): position-only IK is the default. Orientation is opt-in — passing `orientation` constrains the TCP direction. **`wrist_roll` (J4) is locked to 0°** during `moveToXYZ` to keep the TCP pointing down. Locked joints are configured by name pattern in `LOCKED_JOINT_NAME_PATTERNS`.
+Kinematics (`kinematics.js`): analytical 3-DOF closed-form solver for J1/J2/J3 that preserves J4/J5/J6 from the current joint angles. Position-only by default; orientation is opt-in. No joints are pinned by the solver — the wrist-roll / base-yaw locks that earlier versions used were dropped in commit 0ed8b99.
+
+## PLC auto-move backend (`app.py`)
+
+Owns the loop that turns `DB125.target_xyz` into bridge `moveToXYZ` commands. Runs every 50 ms (was 300 ms — dropped for snappier HMI response):
+
+- **Home-waypoint routing**: en route to any operator target, the loop first drives the arm to `PLC_AUTO_HOME_WAYPOINT = (40, 260, 350)` (60 mm tolerance) for obstacle clearance, then continues to the final target. The decision is one-time per operator target via `home_visited_for_target_key` — without that, the arm would flip-flop between "go home" and "go target" when it landed just outside the final tolerance.
+- **Tolerance**: `PLC_AUTO_TARGET_TOLERANCE_MM = 20` Euclidean. A stall response within this distance is treated as a successful arrival so the PLC doesn't retry indefinitely against a weak joint.
+- **Position-logger thread** writes `/home/pi/sf2/logs/plc_vs_arm_positions.csv` every 0.5 s with target XYZ, arm current XYZ (queried directly from the bridge so it's fresh), and connection state. Useful for diagnosing remaining latency without enabling verbose journal logs.
+
+## PLC worker write path
+
+`plc_integration.py` mediates all writes to DB123/DB124/DB125 via the `plc_worker.queue_write` queue. The helpers that the bridge polls into frequently (`queue_robot_status`, `queue_robot_position`, `queue_robot_faults`) are **idempotent** — they track last-written values in module state and skip enqueueing when the value hasn't changed. Without this, periodic telemetry from the bridge re-enqueued ~7 PLC writes per poll, saturating the worker's queue and dragging cycle time from ~150 ms to 1500-2000 ms. Any new helper that gets called on a periodic poller should follow the same pattern.
 
 ## Vision system
 

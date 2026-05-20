@@ -762,8 +762,12 @@ class PLCWorker:
                 )
                 self.stats['max_cycle_time_ms'] = max(self.stats['max_cycle_time_ms'], cycle_time_ms)
 
-                # Log slow cycles with per-step breakdown so we know WHICH step is slow.
-                if cycle_time_ms > (self.cycle_time_ms * 1.5):
+                # Per-step breakdown for genuinely slow cycles. Baseline at the
+                # current 100ms target settles around 150-180ms (reads dominate);
+                # warning at 1.5x flooded the log. Use 3x as the "something is
+                # wrong" floor — that's the regime where the write queue is
+                # saturating and operator-visible latency starts to appear.
+                if cycle_time_ms > (self.cycle_time_ms * 3.0):
                     reads_ms = (_t_reads_done - _t_reads) * 1000.0
                     connstat_ms = (_t_connstat_done - _t_reads_done) * 1000.0
                     vision_ms = (_t_vision_done - _t_connstat_done) * 1000.0

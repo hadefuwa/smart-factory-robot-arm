@@ -11,6 +11,7 @@ A comprehensive smart factory automation system featuring Dobot Magician robot c
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Key Features](#-key-features)
+- [Recent: Robot Arm Latency Overhaul (2026-05-20)](#-recent-robot-arm-latency-overhaul-2026-05-20)
 - [Recent Vision System Work (2026-02-26)](#-recent-vision-system-work-2026-02-26)
 - [Documentation](#-documentation)
 - [Testing](#-testing)
@@ -411,6 +412,41 @@ python3 app.py
 - ✅ **Camera Support** - Multiple MJPEG streams for raw feed, analyzed image, and annotated results
 - ✅ **HTTPS for WinCC** - Self-signed SSL for embedding camera in WinCC Unified HMI (run `deploy/generate_ssl_cert.sh`)
 - ✅ **WinCC HMI Support** - Camera streams can be embedded in Siemens Unified Panels
+
+---
+
+## 🤖 Recent: Robot Arm Latency Overhaul (2026-05-20)
+
+Tagged as `v5.1.0`. The arm now responds to a PLC HMI target change in well under a second end-to-end; previously a 2-3 s lag accumulated at each stage.
+
+### Where the latency was
+
+| Stage | Before | After |
+|-------|--------|-------|
+| HMI press → PLC worker cache reflects new DB125 target | 1.5-2 s | ~150-180 ms |
+| Cache change → bridge receives `moveToXYZ` | tick-bound | ~50 ms |
+| Bridge response → next waypoint dispatched (via-home → final) | +1.5-2 s | < 200 ms |
+
+### Root causes fixed
+
+1. **PLC worker write queue saturation.** `queue_robot_position(x, y, z)` and `queue_robot_faults(...)` enqueued 7 PLC writes on every bridge telemetry poll regardless of whether values had changed. Queue length climbed to 28-60, dragging cycle time from a 150 ms baseline to 1500-2000 ms. **Fix:** both helpers now track last-written values in `plc_integration.py` and short-circuit on no-op writes. REAL fault metrics are quantised to 2dp so float noise can't force a write.
+2. **Bridge post-move creep pass.** After every successful `moveToXYZ`, the Node bridge ran a hardcoded 1500 ms `setTimeout` to tighten per-joint error from 20 → 8 steps. Because the bridge command queue is one-at-a-time, that sleep blocked the *next* `moveToXYZ(final)` from being dispatched. **Fix:** creep pass removed in `server.js`. The PLC auto-move's existing 20 mm Euclidean tolerance is the acceptance criterion now.
+3. **ST3215 bus fast-fail on dark bus.** When the SC-B1 serial adapter or a servo went silent, `getAllServoStatus()` polled every joint sequentially with full timeout per joint, taking seconds per status fetch and starving the queue. **Fix:** dark-bus short-circuit in `getAllServoStatus()` — after the first timeout, remaining servos are skipped this poll. `ALL_FAIL_RECOVERY_THRESHOLD` dropped from 5 → 2 polls so the auto-recovery (close + reopen + re-init) fires sooner.
+4. **PLC worker idempotent status writes** — `queue_robot_status(connected, busy)` already had a cache-compare guard; the position/faults helpers above bring the rest of the robot-telemetry write path in line with it.
+5. **Auto-move tick interval** dropped from 300 ms → 50 ms in `app.py` so the cache → bridge dispatch is bounded by `~one_tick + WS round-trip`, not by the operator-noticeable scan period.
+6. **Home-waypoint routing** is now a one-time decision per operator target (stateful `home_visited_for_target_key` in `app.py`). Previously the router re-evaluated per tick, which caused the arm to flip-flop between "go home" and "go target" when it landed just outside tolerance.
+7. **Stall behaviour** — the bridge no longer wipes servo goals on stall (`server.js`) and the PLC backend treats `stall` within tolerance as success (`app.py`). With the prototype's weak J2 and the EEPROM motor-protection lift (`raise-motor-limits.js`: UnloadCondition 47 → 7, OverloadTime 80 → 254), the joint crawls to the goal instead of being declared dead.
+8. **Servo bus terminology corrected.** The ST3215 + SC-B1 path is a **single-wire TTL half-duplex bus** at 500 kbps (V+ / GND / SIGNAL, 5 V logic, idles HIGH), not RS-485. CLAUDE.md, `pwa-dobot-plc/robotarmv3-pi-service/README.md`, and `docs/J5_WRIST_PITCH_BUS_CORRUPTION.md` were corrected. Termination concepts that apply to RS-485 (120 Ω, A/B biasing, shield grounding) were replaced with the TTL-relevant checks (idle-line voltage, scope rise/fall edges, stub length, common-ground bounce, IR drop on V+).
+
+### New diagnostic helpers (in `pwa-dobot-plc/robotarmv3-pi-service/`)
+
+- `change-baud.js` — one-shot broadcast utility to walk the chain and lower the servo baud (used to drop from 1 Mbps → 500 kbps when J5 was marginal at 1 Mbps).
+- `raise-motor-limits.js` — clears the OVERLOAD + MOTOR auto-unload bits and maxes `OverloadTime`. Keeps voltage / sensor / overtemp protection on.
+- `read-protection.js` — dumps every protection-related EEPROM register on each servo.
+
+### Live observability
+
+`pwa-dobot-plc/backend/app.py` runs a background CSV logger that writes PLC target vs arm-current XYZ every 0.5 s to `/home/pi/sf2/logs/plc_vs_arm_positions.csv`. Arm XYZ is queried directly from the bridge so it stays fresh regardless of frontend polling. Columns: `iso_timestamp, tx, ty, tz, speed, ax, ay, az, dx, dy, dz, dist, plc_connected, bridge_connected, move_in_flight`.
 
 ---
 
