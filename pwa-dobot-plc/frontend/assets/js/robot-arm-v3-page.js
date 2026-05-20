@@ -842,6 +842,9 @@
     setVal('posCurX', xyz ? xyz.x : null);
     setVal('posCurY', xyz ? xyz.y : null);
     setVal('posCurZ', xyz ? xyz.z : null);
+    // Keep the latest reading around for the "Use Current" buttons on the
+    // Positions tab. Each tab refresh updates it.
+    latestXyz = xyz || null;
   }
 
   function initXyzGraphCanvas() {
@@ -1811,10 +1814,14 @@
   // ── Named positions ───────────────────────────────────────────────────────
 
   var POSITIONS = [
-    { id: 'pickup',     label: 'Pickup',    xId: 'posPickupX',     yId: 'posPickupY',     zId: 'posPickupZ',     msgId: 'posPickupMsg',     atId: 'posAtPickup',     atKey: 'at_pickup_position',     saveBtn: 'posSavePickupBtn',     moveBtn: 'posMovePickupBtn',     wX: 'pickup_x',     wY: 'pickup_y',     wZ: 'pickup_z' },
-    { id: 'quarantine', label: 'Quarantine',xId: 'posQuarantineX', yId: 'posQuarantineY', zId: 'posQuarantineZ', msgId: 'posQuarantineMsg', atId: 'posAtQuarantine', atKey: 'at_quarantine_position',  saveBtn: 'posSaveQuarantineBtn', moveBtn: 'posMoveQuarantineBtn', wX: 'quarantine_x', wY: 'quarantine_y', wZ: 'quarantine_z' },
-    { id: 'pallet',     label: 'Pallet',    xId: 'posPalletX',     yId: 'posPalletY',     zId: 'posPalletZ',     msgId: 'posPalletMsg',     atId: 'posAtPallet',     atKey: 'at_pallet_position',     saveBtn: 'posSavePalletBtn',     moveBtn: 'posMovePalletBtn',     wX: 'pallet_x',     wY: 'pallet_y',     wZ: 'pallet_z' }
+    { id: 'pickup',     label: 'Pickup',    xId: 'posPickupX',     yId: 'posPickupY',     zId: 'posPickupZ',     msgId: 'posPickupMsg',     atId: 'posAtPickup',     atKey: 'at_pickup_position',     saveBtn: 'posSavePickupBtn',     moveBtn: 'posMovePickupBtn',     useBtn: 'posUsePickupBtn',     wX: 'pickup_x',     wY: 'pickup_y',     wZ: 'pickup_z' },
+    { id: 'quarantine', label: 'Quarantine',xId: 'posQuarantineX', yId: 'posQuarantineY', zId: 'posQuarantineZ', msgId: 'posQuarantineMsg', atId: 'posAtQuarantine', atKey: 'at_quarantine_position',  saveBtn: 'posSaveQuarantineBtn', moveBtn: 'posMoveQuarantineBtn', useBtn: 'posUseQuarantineBtn', wX: 'quarantine_x', wY: 'quarantine_y', wZ: 'quarantine_z' },
+    { id: 'pallet',     label: 'Pallet',    xId: 'posPalletX',     yId: 'posPalletY',     zId: 'posPalletZ',     msgId: 'posPalletMsg',     atId: 'posAtPallet',     atKey: 'at_pallet_position',     saveBtn: 'posSavePalletBtn',     moveBtn: 'posMovePalletBtn',     useBtn: 'posUsePalletBtn',     wX: 'pallet_x',     wY: 'pallet_y',     wZ: 'pallet_z' }
   ];
+
+  // Latest current TCP — updated by renderCurrentXYZ — so "Use Current"
+  // buttons can copy it into a position's input fields.
+  var latestXyz = null;
 
   function posMsg(msgId, text, isError) {
     var e = el(msgId);
@@ -1858,6 +1865,21 @@
     }
   }
 
+  // Copy the latest current TCP reading into a position's input fields.
+  // This is for "teach by hand": move arm with torque off, click Use Current,
+  // then Save to PLC.
+  function useCurrentPosition(pos) {
+    if (!latestXyz || typeof latestXyz.x !== 'number' || typeof latestXyz.y !== 'number' || typeof latestXyz.z !== 'number') {
+      posMsg(pos.msgId, 'Current position not available yet', true);
+      return;
+    }
+    var fX = el(pos.xId), fY = el(pos.yId), fZ = el(pos.zId);
+    if (fX) fX.value = Math.round(latestXyz.x);
+    if (fY) fY.value = Math.round(latestXyz.y);
+    if (fZ) fZ.value = Math.round(latestXyz.z);
+    posMsg(pos.msgId, 'Copied current position (' + Math.round(latestXyz.x) + ', ' + Math.round(latestXyz.y) + ', ' + Math.round(latestXyz.z) + ')', false);
+  }
+
   async function savePosition(pos) {
     var x = Number(el(pos.xId) && el(pos.xId).value);
     var y = Number(el(pos.yId) && el(pos.yId).value);
@@ -1872,6 +1894,11 @@
       });
       if (d.success) {
         posMsg(pos.msgId, 'Saved to PLC', false);
+        // PLC DB values are runtime-only; on PLC reboot they revert to the
+        // start values defined in TIA Portal. Remind the operator.
+        window.alert(
+          'The values have been moved to the PLC values however you will need to manually change the PLC start values in TIA Portal else these values will be lost on reboot.'
+        );
       } else {
         posMsg(pos.msgId, (d.errors || ['Write failed']).join(', '), true);
       }
@@ -2280,8 +2307,10 @@
     POSITIONS.forEach(function (pos) {
       var sb = el(pos.saveBtn);
       var mb = el(pos.moveBtn);
+      var ub = el(pos.useBtn);
       if (sb) sb.addEventListener('click', (function (p) { return function () { withBtn(sb, function () { return savePosition(p); }); }; })(pos));
       if (mb) mb.addEventListener('click', (function (p) { return function () { withBtn(mb, function () { return moveToPosition(p); }); }; })(pos));
+      if (ub) ub.addEventListener('click', (function (p) { return function () { useCurrentPosition(p); }; })(pos));
     });
 
     // PLC auto-move — interval input (apply on change, no button needed)
