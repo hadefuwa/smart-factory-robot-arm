@@ -50,10 +50,16 @@ const PERF_DEBUG = false;
 let TORQUE_LIMIT_PERCENT = 100;
 
 // Stall detection parameters — adjustable at runtime via setStallConfig command.
-let STALL_TIMEOUT_MS = 8000; // max ms to wait for a move to complete
-let STALL_POLL_MS    = 200;  // how often to sample positions during a move
-let STALL_STUCK_DELTA = 5;   // steps — position change below this per poll = "not progressing"
-let STALL_POLLS      = 8;    // consecutive "not progressing" polls before declaring stall — 1.6s grace at 200ms poll
+// Stall watchdog. Tuned for a weak-J2 prototype where the shoulder takes
+// 2-4s under load to even START moving against gravity. With the original
+// 1.6s grace + 5-step threshold, J2's slow lifts were being declared
+// stalled *before* the joint had time to begin, then holdCurrentPosition()
+// froze it where it was, the PLC backend applied 30s backoff, and the
+// operator saw "robot does nothing for 30s after every command".
+let STALL_TIMEOUT_MS = 12000; // hard cap on a move (raised from 8s to give slow lifts room)
+let STALL_POLL_MS    = 200;
+let STALL_STUCK_DELTA = 1;    // any motion at all counts as progress (was 5)
+let STALL_POLLS      = 30;    // 6s of zero motion before declaring stall (was 8 = 1.6s)
 // Hard upper bound on how long a single queued command may occupy the in-flight
 // slot. Must exceed STALL_TIMEOUT_MS + finite IK/poll overhead so a healthy
 // stalled move resolves itself before this fires. When this watchdog trips it
