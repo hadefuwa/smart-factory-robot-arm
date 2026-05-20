@@ -955,6 +955,87 @@ def _plc_telemetry_writer_loop():
         _write_iolink_to_plc(worker)
 
 
+_POSITION_LOG_PATH = '/home/pi/sf2/logs/plc_vs_arm_positions.csv'
+_POSITION_LOG_INTERVAL_S = 0.5  # 2 Hz: enough to catch back-and-forth, small file growth
+
+def _ensure_position_log_initialised():
+    """Create the CSV with a header row if it doesn't exist or is empty."""
+    try:
+        import os
+        os.makedirs(os.path.dirname(_POSITION_LOG_PATH), exist_ok=True)
+        new_file = (not os.path.exists(_POSITION_LOG_PATH)) or os.path.getsize(_POSITION_LOG_PATH) == 0
+        if new_file:
+            with open(_POSITION_LOG_PATH, 'w', encoding='utf-8') as f:
+                f.write('timestamp_iso,plc_target_x,plc_target_y,plc_target_z,plc_speed,arm_x,arm_y,arm_z,dx,dy,dz,distance_mm,plc_connected,bridge_connected,move_in_flight\n')
+    except Exception as e:
+        logger.warning(f'Position log init failed: {e}')
+
+
+def _position_logger_loop():
+    """Background thread: append a CSV row (PLC target vs arm current XYZ + distance)
+    every _POSITION_LOG_INTERVAL_S seconds. The CSV file lives at
+    /home/pi/sf2/logs/plc_vs_arm_positions.csv and is the diagnostic source for
+    "why is the arm going back and forth" questions."""
+    _ensure_position_log_initialised()
+    while True:
+        time.sleep(_POSITION_LOG_INTERVAL_S)
+        try:
+            cache = get_plc_cache() or {}
+            plc_conn = bool(cache.get('connected', False))
+            bridge_conn = bool(robot_arm_bridge_state.get('connected', False))
+            mif = bool(plc_auto_backend_state.get('move_in_flight', False))
+            tx = cache.get('db125_target_x')
+            ty = cache.get('db125_target_y')
+            tz = cache.get('db125_target_z')
+            speed = cache.get('db125_speed')
+            ax = cache.get('db125_x_position')
+            ay = cache.get('db125_y_position')
+            az = cache.get('db125_z_position')
+
+            def fmt(v):
+                if v is None:
+                    return ''
+                if isinstance(v, float):
+                    return f'{v:.2f}'
+                return str(v)
+
+            dx, dy, dz, dist = '', '', '', ''
+            try:
+                if None not in (tx, ty, tz, ax, ay, az):
+                    fdx = float(ax) - float(tx)
+                    fdy = float(ay) - float(ty)
+                    fdz = float(az) - float(tz)
+                    dx, dy, dz = f'{fdx:.2f}', f'{fdy:.2f}', f'{fdz:.2f}'
+                    dist = f'{math.sqrt(fdx*fdx + fdy*fdy + fdz*fdz):.2f}'
+            except Exception:
+                pass
+
+            row = ','.join([
+                datetime.now().isoformat(timespec='milliseconds'),
+                fmt(tx), fmt(ty), fmt(tz), fmt(speed),
+                fmt(ax), fmt(ay), fmt(az),
+                dx, dy, dz, dist,
+                'T' if plc_conn else 'F',
+                'T' if bridge_conn else 'F',
+                'T' if mif else 'F',
+            ])
+            with open(_POSITION_LOG_PATH, 'a', encoding='utf-8') as f:
+                f.write(row + '\n')
+        except Exception as e:
+            logger.warning(f'Position log row write failed: {e}')
+
+
+def start_position_logger():
+    """Start the position-vs-target CSV logger thread."""
+    t = threading.Thread(
+        target=_position_logger_loop,
+        daemon=True,
+        name='position-logger',
+    )
+    t.start()
+    logger.info(f'Position logger started (csv: {_POSITION_LOG_PATH}, interval: {_POSITION_LOG_INTERVAL_S}s)')
+
+
 def start_plc_telemetry_writer():
     """Start the background thread that writes DB126/DB127 telemetry to the PLC."""
     t = threading.Thread(
@@ -1764,6 +1845,7 @@ def init_clients():
         # arm even when nobody has robot-arm.html open in a browser.
         start_plc_auto_move_thread()
         start_plc_telemetry_writer()
+        start_position_logger()
         # Create compatibility wrapper for gradual migration
         plc_client = PLCClientCompatWrapper(plc_worker)
         logger.info("✅ NEW PLC worker started (100ms cycle, cache-based reads)")
