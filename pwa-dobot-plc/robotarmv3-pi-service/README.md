@@ -70,7 +70,7 @@ client. The queue has four behaviours worth knowing about:
    `COMMAND_WATCHDOG_MS` must exceed `STALL_TIMEOUT_MS` plus IK/poll overhead,
    otherwise normal stalled moves will trip the watchdog.
 3a. **USB-disconnect auto-recovery.** The serialport `'close'` event fires
-    when the USB-to-RS485 adapter physically disappears (cable wiggle,
+    when the SC-B1 USB-to-TTL-half-duplex adapter physically disappears (cable wiggle,
     re-enumeration, adapter brownout). When that happens our open file
     handle is dead and every servo silently goes unavailable. The handler
     logs the event and calls `process.exit(1)`; systemd

@@ -124,7 +124,7 @@ Full tag map: `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_REA
 
 ## Robot-arm bridge
 
-The 6-DOF ST3215 arm is driven by a separate Node.js service on the Pi (`robotarmv3-pi.service`, port 8090, serial via USB→RS485). Flask talks to it over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
+The 6-DOF Waveshare ST3215 arm is driven by a separate Node.js service on the Pi (`robotarmv3-pi.service`, port 8090). The bus is **half-duplex TTL serial** (single signal wire + GND + V+, 5 V logic, daisy-chained across all 6 servos) at 1 Mbps via the SC-B1 USB-to-TTL adapter on `/dev/ttyACM0` — **not RS-485**, despite a few legacy comments still using that term. Flask talks to the bridge over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
 
 Key behaviours documented in `pwa-dobot-plc/robotarmv3-pi-service/README.md` (read this before touching the bridge):
 

@@ -1,14 +1,14 @@
-# J5 (wrist_pitch) — RS-485 Bus Corruption Investigation
+# J5 (wrist_pitch) — Servo Bus Corruption Investigation
 
-**Status:** open / mitigated in software (2026-05-18). Underlying cause is hardware-side bus signal integrity. This document is the canonical reference for what we know, what we've tried, and what to check next.
+**Status:** open / mitigated in software (2026-05-18, refined 2026-05-20). Underlying cause is hardware-side bus signal integrity. This document is the canonical reference for what we know, what we've tried, and what to check next.
 
-**Affected joint:** J5 / `wrist_pitch` / ST3215 servo ID 5 on the daisy-chained RS-485 bus driven by the SC-B1 board on `/dev/ttyACM0`.
+**Affected joint:** J5 / `wrist_pitch` / Waveshare ST3215 servo ID 5 on the daisy-chained **half-duplex TTL serial bus** (single signal wire + GND + V+, 5 V logic, idles HIGH) driven by the SC-B1 USB-to-TTL adapter on `/dev/ttyACM0` at 1 Mbps. **This is NOT RS-485** — earlier versions of this doc called it RS-485, which is wrong. The bus is single-ended TTL, not differential. The corrupted-frame failure mode is similar in shape but the diagnostic checks and physical-layer assumptions differ; see "Hardware diagnostic checklist" below.
 
 ---
 
 ## Summary
 
-J5 intermittently drops off the RS-485 bus with `Communication error: -7` (checksum corruption). The other five joints on the same daisy chain are stable. Symptom escalates in software to "joint offline" — moves either fall back to 5-joint IK or fail outright. Pattern looks like a regular ~30 s cadence at idle plus extra noise during motion.
+J5 intermittently drops off the servo bus with `Communication error: -7` (checksum / framing corruption). The other five joints on the same daisy chain are stable. Symptom escalates in software to "joint offline" — moves either fall back to 5-joint IK or fail outright. Pattern looks like a regular ~30 s cadence at idle plus extra noise during motion.
 
 The bridge runs at `pwa-dobot-plc/robotarmv3-pi-service/server.js`; J5 corresponds to slot index 4 in `SERVO_IDS = [1, 2, 3, 4, 5, 6]`.
 
@@ -80,12 +80,12 @@ A `-7` is raised when the bridge received a reply packet **but its bytes didn't 
 
 ## Root cause
 
-This is **RS-485 bus signal-integrity** at the J5 branch of the daisy chain. Evidence:
+This is **half-duplex TTL bus signal-integrity** at the J5 branch of the daisy chain. Evidence:
 
-1. **Regular 32 s cadence at idle.** Software has no 32 s timer. Most likely candidate: an electrical phenomenon — periodic disturbance, ground-loop pulse, EMI from a nearby periodic load (lighting, switching power supply, fan PWM). The exact source matters less than the fact that the period is deterministic.
-2. **Affects one joint only.** J1-J4 and J6 share the same SC-B1, the same USB-to-RS485 chip, the same firmware, the same power rail. They do not show the same -7 cadence at idle. So the problem is downstream of the SC-B1, at the J5 branch / cable / connector / servo.
+1. **Regular 32 s cadence at idle.** Software has no 32 s timer. Most likely candidate: an electrical phenomenon — periodic disturbance, ground-loop pulse, EMI from a nearby periodic load (lighting, switching power supply, fan PWM). On single-ended TTL with no differential rejection, a coupled disturbance only needs ~1 V to flip a bit. The exact source matters less than the fact that the period is deterministic.
+2. **Affects one joint only.** J1-J4 and J6 share the same SC-B1, the same CH343 USB-to-UART chip, the same firmware, the same power rail. They do not show the same -7 cadence at idle. So the problem is downstream of the SC-B1, at the J5 branch / cable / connector / servo.
 3. **The bus IS responding** — pings to J5 succeed, position reads succeed for most polls. We're seeing **occasional corruption**, not silence.
-4. **`-7` not `-6`.** Replies are arriving; their bytes are wrong. That's classic for marginal signal levels (under-driven differential, intermittent termination, partial cable shield) rather than a missing connection.
+4. **`-7` not `-6`.** Replies are arriving; their bytes are wrong. On a single-ended TTL bus this is classic for marginal signal levels — sagging high level under cable capacitance, weak pull-up, intermittent contact at a connector, or coupled noise lifting the line briefly above the receiver's `V_IL` threshold.
 
 ---
 
@@ -130,15 +130,21 @@ const READ_RETRY_GAP_MS = 25;
 
 A single `-7` is now retried twice on the same poll before being counted as a failed poll. From the journal, this catches the vast majority of idle-cadence `-7`s in-place.
 
-### 2. N-consecutive-poll threshold before nulling
+### 2. Failure-mode-specific threshold before nulling
 
 ```js
-const OFFLINE_FAIL_THRESHOLD = 6;   // started at 3, raised to 6
+const OFFLINE_FAIL_THRESHOLD_TIMEOUT  = 6;        // -6 (silence) → null after N polls
+const OFFLINE_FAIL_THRESHOLD_CORRUPT  = Infinity; // -7 (corruption) → never null
+const OFFLINE_FAIL_THRESHOLD_DEFAULT  = 6;        // anything else (servo-error, etc.)
 ```
 
-The slot is no longer nulled on first failure. It enters a `degraded: true` state with last-known angles, and is only nulled after `OFFLINE_FAIL_THRESHOLD` consecutive failed polls (after in-poll retries). The page surfaces the degraded state with an amber **Degraded** badge and shows the current `polls=N/6` count in the comms log.
+The slot is no longer nulled on first failure. It enters a `degraded: true` state with last-known angles, and the threshold for nulling depends on the failure type:
 
-This was originally 3, raised to 6 after J5 was still flickering. Increasing further (to 10+) would smooth the experience further at the cost of slower detection of a truly dead servo.
+- **`-7` (COMM_RX_CORRUPT)** — frames arriving but parsed wrong. Set to `Infinity` because the servo is alive (it's replying, just with intermittent bit-level errors). J5 stays "degraded" indefinitely and IK keeps using its last-known angle. Any successful read returns it to fully online. This is the right answer for the J5 cadence specifically — pulling the slot offline served no purpose because the next poll usually worked.
+- **`-6` (COMM_RX_TIMEOUT)** — true silence. After 6 consecutive timeouts the slot is nulled and the revive cycle takes over. Catches a servo that actually dropped off the bus (cable yanked, power lost) within a few seconds.
+- **Other** (`Servo error`, `Empty read response data`, etc.) — same 6-poll threshold as timeout.
+
+Evolution: this started at a single threshold of 3 for all failure types, was raised to 6, then split per-failure-kind in [`246f726`](https://github.com/hadefuwa/smart-factory-robot-arm/commit/246f726) once it was clear that J5's `-7` cadence didn't need a finite threshold at all.
 
 ### 3. Servo "status byte" / fault byte handling
 
@@ -197,21 +203,22 @@ This is what to physically check now that the software mitigations are exhausted
 
 5. Swap J5's bus cable with a known-good one (e.g. take J6's cable, swap them). If the problem follows the cable, it's the cable. If the problem stays on J5 (now connected via J6's previously-good cable), it's the servo or its branch.
 
-### C. Termination and biasing
+### C. Signal-line integrity (TTL, not RS-485, so no 120 Ω termination applies)
 
-6. The SC-B1 should have RS-485 termination on one end. Check the termination jumper / DIP switch and ensure it's enabled. If the bus is unterminated or terminated on the wrong end, signal reflections cause exactly this kind of intermittent checksum corruption.
-7. Confirm the bus has bias resistors (idle state should not float). If the SC-B1 doesn't provide them, idle bytes can flip and break the first byte of a reply.
+6. Confirm the bus is **idling HIGH** at the J5 connector with a multimeter or scope: probe the SIGNAL pin to GND with the bridge idle (between polls). It should sit near 5 V with no servo driving the line. A floating or low-idle reading means the pull-up on the SC-B1 isn't reaching J5 — most likely a cable break or oxidised pin between J4 and J5.
+7. With a scope on the J5 SIGNAL pin during a status read: rising edges should reach ~4.5 V cleanly, falling edges should reach ~0.4 V, no overshoot/undershoot beyond a few hundred mV. Slow rising edges (RC-curved) or undershoot dipping back across the threshold = capacitance / reflections from a long stub.
+8. Stub length: the daisy chain works best when each servo is a node on the line, not branched. If J5 hangs off a long "T" stub past J6, shorten the stub or re-order the chain so J5 sits between J4 and J6 with minimal extension.
 
 ### D. Servo itself
 
-8. Try J5 in isolation: connect just J1 → J5 (skip J2/J3/J4/J6 if your harness allows), and run a long-idle test. If the `-7` cadence persists, the J5 servo's onboard RS-485 transceiver is marginal.
-9. If you have a spare ST3215, swap J5 with the spare and re-test.
+9. Try J5 in isolation: connect just J1 → J5 (skip J2/J3/J4/J6 if your harness allows), and run a long-idle test. If the `-7` cadence persists, the J5 servo's onboard line driver is marginal.
+10. If you have a spare ST3215, swap J5 with the spare and re-test.
 
-### E. Power / EMI
+### E. Power / EMI / ground
 
-10. Measure the bus VCC at J5 with a multimeter. If it sags below ~6.5 V under load the servo's transceiver may drop bias.
-11. Note any equipment switching on/off near the arm at 32 s intervals — overhead lighting controller, an LED driver, anything PWM. EMI coupling through poorly-shielded cable could explain the cadence.
-12. Check the bus cable shield is connected to chassis ground at exactly one end (not both, not neither).
+11. Measure the bus V+ at J5 with a multimeter. If it sags below the servo's rated minimum (check the Waveshare ST3215 datasheet — typically ~6.5 V) under load, the servo's TTL line driver may not pull the signal cleanly to logic high. Look for thin-wire IR drop along the daisy chain, or a shared V+ rail that dips when other joints draw current.
+12. Common-ground check: measure GND-to-GND between the SC-B1 and J5 during a corruption burst. Any AC component (a few hundred mV of ground bounce) on a single-ended TTL bus directly translates to receive-threshold violations. Strengthen the GND wire or add a star-grounded return.
+13. Note any equipment switching on/off near the arm at 32 s intervals — overhead lighting controller, an LED driver, anything PWM. EMI coupling onto the single-ended SIGNAL line could explain the cadence; differential balanced lines (RS-485) would reject this, but TTL does not.
 
 ---
 
@@ -255,9 +262,9 @@ The right answer is to fix the bus signal integrity. The threshold is a band-aid
 
 - [ ] Physical inspection of J5 cable and connector (Section A above).
 - [ ] Cable swap test (Section B).
-- [ ] Verify SC-B1 termination and biasing (Section C).
+- [ ] Verify TTL-bus signal integrity at J5 (Section C — idle level, scope rise/fall edges, stub length).
 - [ ] Identify the source of the 32 s cadence. If it tracks a periodic external event (HVAC, lighting, conveyor cycle) we can confirm EMI; if it doesn't, the source is internal to the bus.
-- [ ] Optional software follow-up: differentiate `comm-corrupt` (signal-integrity, keep degraded) from `read-timeout` (silence, allow null). Right now both treat the same threshold. Treating `-7` more leniently than `-6` would let J5 stay "degraded" indefinitely and only null on true silence.
+- [x] ~~Software follow-up: differentiate `comm-corrupt` (signal-integrity, keep degraded) from `read-timeout` (silence, allow null).~~ Done in [`246f726`](https://github.com/hadefuwa/smart-factory-robot-arm/commit/246f726): `OFFLINE_FAIL_THRESHOLD_CORRUPT = Infinity` keeps J5 degraded forever on `-7`; `_TIMEOUT = 6` still nulls on true silence.
 
 ---
 
