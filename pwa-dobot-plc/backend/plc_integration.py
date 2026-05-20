@@ -164,10 +164,25 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
     # the bits we're explicitly updating — not zero-out the rest.
     try:
         cache = get_plc_cache()
+        # Idempotency: if the values we'd write match what cache already holds,
+        # skip enqueueing entirely. Without this, every Flask-to-bridge
+        # connection flap (close + open) queued 2 writes per side = 4+ writes
+        # to status bytes that hadn't actually changed, slamming the PLC
+        # worker's write queue (~50ms per write) and dragging cycle time
+        # from 150ms baseline to 500-2000ms. With this guard, repeated
+        # close/open cycles where the cache already reflects the state
+        # produce zero writes.
+        current_connected = bool(cache.get('db125_connected', False))
+        current_busy = bool(cache.get('db125_busy', False))
+        new_connected = bool(connected) if connected is not None else current_connected
+        new_busy = bool(busy) if busy is not None else current_busy
+        if new_connected == current_connected and new_busy == current_busy:
+            return
+
         if connected is None:
-            connected = cache.get('db125_connected', False)
+            connected = current_connected
         if busy is None:
-            busy = cache.get('db125_busy', False)
+            busy = current_busy
 
         # Build a map of byte_offset → buffer, pre-seeded from all known status bits
         STATUS_FIELDS = [

@@ -710,6 +710,7 @@ class PLCWorker:
                 _prev_plc_connected = True
 
                 # 2. BATCH READS - main DB, camera DB, and robot DB
+                _t_reads = time.perf_counter()
                 try:
                     main_data = self.client.db_read(self.main_db_number, 0, self.main_db_total_size)
                     camera_data = self.client.db_read(self.camera_db_number, 0, self.camera_db_total_size)
@@ -730,19 +731,26 @@ class PLCWorker:
                         self.cache['connected'] = False
                     time.sleep(0.5)
                     continue
+                _t_reads_done = time.perf_counter()
 
                 # 3. UPDATE CAMERA/ROBOT CONNECTED STATUS
                 self._update_camera_connected()
                 self._update_robot_connected()
+                _t_connstat_done = time.perf_counter()
 
                 # 4. VISION HANDSHAKE STATE MACHINE
                 self._process_vision_handshake()
 
                 # 5. FINALIZE PENDING VISION RESULTS (if any)
                 self._finalize_vision_result()
+                _t_vision_done = time.perf_counter()
 
                 # 6. BATCH WRITE - process all queued writes
+                with self.write_queue_lock:
+                    _write_qlen = len(self.write_queue)
+                    _writes_snapshot = list(self.write_queue)
                 self._process_write_queue()
+                _t_writes_done = time.perf_counter()
 
                 # 6. UPDATE STATS
                 cycle_end = time.perf_counter()
@@ -754,9 +762,20 @@ class PLCWorker:
                 )
                 self.stats['max_cycle_time_ms'] = max(self.stats['max_cycle_time_ms'], cycle_time_ms)
 
-                # Log slow cycles
+                # Log slow cycles with per-step breakdown so we know WHICH step is slow.
                 if cycle_time_ms > (self.cycle_time_ms * 1.5):
-                    logger.warning(f"Slow PLC cycle: {cycle_time_ms:.1f}ms (target: {self.cycle_time_ms}ms)")
+                    reads_ms = (_t_reads_done - _t_reads) * 1000.0
+                    connstat_ms = (_t_connstat_done - _t_reads_done) * 1000.0
+                    vision_ms = (_t_vision_done - _t_connstat_done) * 1000.0
+                    writes_ms = (_t_writes_done - _t_vision_done) * 1000.0
+                    descs = ''
+                    if _write_qlen > 0:
+                        descs = ' | ' + ', '.join(getattr(w, 'description', '?') or '?' for w in _writes_snapshot)
+                    logger.warning(
+                        f"Slow PLC cycle: {cycle_time_ms:.1f}ms "
+                        f"(reads={reads_ms:.0f} connstat={connstat_ms:.0f} "
+                        f"vision={vision_ms:.0f} writes={writes_ms:.0f}ms qlen={_write_qlen}){descs}"
+                    )
 
                 # 7. SLEEP TO MAINTAIN DETERMINISTIC CYCLE TIME
                 sleep_time = self.cycle_time_sec - (cycle_end - cycle_start)
