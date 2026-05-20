@@ -670,8 +670,18 @@ def plc_auto_backend_tick():
 def _trigger_auto_move_backoff(reason):
     """Apply exponential backoff after a failed PLC auto-move send."""
     consecutive = int(plc_auto_backend_state.get('consecutive_errors') or 0) + 1
+    # Cap the exponent before the shift so 2**N can't blow past float range.
+    # log2(BACKOFF_MAX / BACKOFF_BASE) + 1 is the largest meaningful exponent;
+    # beyond that the min() caps to MAX anyway. Without this clamp, a long
+    # run of stalls (>~1024) hit "int too large to convert to float" because
+    # 2**N is a huge Python int and `BASE * (2**N)` tries to convert it to
+    # float for the multiplication.
+    cap_exp = max(0, int(math.ceil(math.log2(
+        max(PLC_AUTO_ERROR_BACKOFF_MAX_S / PLC_AUTO_ERROR_BACKOFF_BASE_S, 1.0)
+    ))) + 4)
+    safe_exp = min(consecutive - 1, cap_exp)
     backoff = min(
-        PLC_AUTO_ERROR_BACKOFF_BASE_S * (2 ** (consecutive - 1)),
+        PLC_AUTO_ERROR_BACKOFF_BASE_S * (2 ** safe_exp),
         PLC_AUTO_ERROR_BACKOFF_MAX_S,
     )
     plc_auto_backend_state['consecutive_errors'] = consecutive
