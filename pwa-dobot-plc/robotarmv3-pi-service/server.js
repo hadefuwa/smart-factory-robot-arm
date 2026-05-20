@@ -1936,18 +1936,22 @@ async function handleCommand(ws, data) {
                             stalledConsec++;
                             console.warn(`[STALL] Stuck joints (consec=${stalledConsec}/${STALL_POLLS}): ${stuckJoints.map(j => `J${j.ji+1} moved=${j.delta}steps errToTarget=${Math.abs(j.pos-j.tgt)}steps`).join(', ')}`);
                             if (stalledConsec >= STALL_POLLS) {
-                                // Stall confirmed — hold each servo at its current position instead of
-                                // disabling torque. stopServo() would let the arm go limp and fall under
-                                // gravity; holdCurrentPosition() keeps torque on but freezes the joint
-                                // at wherever it stopped, so the arm stays up safely.
-                                for (const sv of servos) {
-                                    if (sv) try { await sv.holdCurrentPosition(); } catch (_) {
-                                        try { await sv.startServo(); } catch (_2) {}
-                                    }
-                                }
+                                // Stall confirmed — DECLARE the stall to the caller but DO NOT
+                                // rewrite servo goals. We used to call holdCurrentPosition() here
+                                // to keep the arm from going limp, but that writes the current
+                                // position INTO the goal register, killing the actual target.
+                                // The next move attempt would set the goal again, the motor would
+                                // start trying, the stall would re-fire before the slow lift
+                                // could begin, and the goal would get wiped again. Net effect:
+                                // J2 sits forever at current with operator seeing no motion.
+                                //
+                                // Now: leave each servo's goal alone. With the motor protection
+                                // also lifted (UnloadCondition=7), the joint will keep pushing
+                                // toward the target indefinitely; over seconds-to-minutes it
+                                // will crawl there on its own.
                                 stallDetected = true;
                                 stallCause = stuckJoints;
-                                console.warn(`[STALL] CONFIRMED — holding position. Cause: ${stuckJoints.map(j => `J${j.ji+1} moved=${j.delta}steps errToTarget=${Math.abs(j.pos-j.tgt)}steps`).join(', ')}`);
+                                console.warn(`[STALL] CONFIRMED — leaving goals in place. Cause: ${stuckJoints.map(j => `J${j.ji+1} moved=${j.delta}steps errToTarget=${Math.abs(j.pos-j.tgt)}steps`).join(', ')}`);
                                 break;
                             }
                         } else {
