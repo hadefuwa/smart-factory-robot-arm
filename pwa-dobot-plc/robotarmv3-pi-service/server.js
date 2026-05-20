@@ -2173,7 +2173,7 @@ async function recoverBus(reason) {
                 console.log(`[BUS RECOVERY] Servo ${i + 1} restored.`);
             }
         }
-        console.warn(`[BUS RECOVERY] Done — restored ${recovered}/${servos.filter(s => s !== null).length + recovered} servos.`);
+        console.warn(`[BUS RECOVERY] Done — restored ${recovered}/${JOINT_COUNT} servos.`);
         if (recovered > 0) consecutiveAllFailCount = 0;
         return recovered > 0;
     } catch (e) {

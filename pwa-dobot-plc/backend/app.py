@@ -289,7 +289,7 @@ plc_auto_backend_state = {
     'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
     'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
 }
-PLC_AUTO_TARGET_TOLERANCE_MM = 10
+PLC_AUTO_TARGET_TOLERANCE_MM = 20
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
 PLC_AUTO_ERROR_BACKOFF_BASE_S = 2.0      # First-failure backoff
 PLC_AUTO_ERROR_BACKOFF_MAX_S = 30.0      # Cap so we still recover when the arm comes back
@@ -297,6 +297,14 @@ PLC_AUTO_ERROR_BACKOFF_MAX_S = 30.0      # Cap so we still recover when the arm 
 # Must exceed the Node bridge's STALL_TIMEOUT_MS (default 8s) plus some slack, so a
 # normal stall response from the bridge reaches us before this timer fires.
 PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S = 15.0
+
+# Obstacle-avoidance home waypoint: route every PLC move through here first.
+# The 3 named positions (pickup, quarantine, pallet) sit at different heights
+# with obstacles between them, so going A -> B directly clashes. Going
+# A -> HOME -> B clears them. The waypoint itself is loose (25mm) because
+# it's an intermediate stop; the final target uses the normal tolerance.
+PLC_AUTO_HOME_WAYPOINT = {'x': 40, 'y': 260, 'z': 350}
+PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM = 25
 plc_manual_override_state = {
     'until': 0.0,
     'source': None,
@@ -357,6 +365,34 @@ def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
     dy = current_y - target_y
     dz = current_z - target_z
     return math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_mm
+
+
+def _route_target_via_home(cache: Dict[str, Any], x: Any, y: Any, z: Any):
+    """Decide whether to go directly to the requested target or via the home
+    waypoint first. Returns (x, y, z) for the next physical move.
+
+    Logic: if the arm is already at home OR already at the final target OR
+    the final target IS home, just go direct. Otherwise return the home
+    waypoint — the auto-move loop will reach it, the next tick will see the
+    arm is at home, and the final target will then be sent.
+    """
+    h = PLC_AUTO_HOME_WAYPOINT
+    home_tol = PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM
+    # Already at home? → go straight to the final target.
+    if _target_position_reached(cache, h['x'], h['y'], h['z'], tolerance_mm=home_tol):
+        return x, y, z
+    # Already (close enough to) the final target? → leave it, the rest of the
+    # loop will detect "reached" and stop.
+    if _target_position_reached(cache, x, y, z):
+        return x, y, z
+    # Final target IS the home waypoint (rounded match)? → no detour needed.
+    try:
+        if abs(float(x) - h['x']) <= 5 and abs(float(y) - h['y']) <= 5 and abs(float(z) - h['z']) <= 5:
+            return x, y, z
+    except (TypeError, ValueError):
+        pass
+    # Otherwise route via home.
+    return h['x'], h['y'], h['z']
 
 
 def _manual_override_remaining_seconds() -> int:
@@ -548,13 +584,20 @@ def plc_auto_backend_tick():
             pass
         return
 
-    x = cache.get('db125_target_x')
-    y = cache.get('db125_target_y')
-    z = cache.get('db125_target_z')
+    x_final = cache.get('db125_target_x')
+    y_final = cache.get('db125_target_y')
+    z_final = cache.get('db125_target_z')
     speed = cache.get('db125_speed') or 1500
 
-    if x is None or y is None or z is None:
+    if x_final is None or y_final is None or z_final is None:
         return
+
+    # Obstacle avoidance: route through home before reaching the actual target,
+    # unless we're already at home or already at the final target. The next
+    # tick re-evaluates and proceeds to the final target once the arm has
+    # reached home.
+    x, y, z = _route_target_via_home(cache, x_final, y_final, z_final)
+    via_home = (x, y, z) != (x_final, y_final, z_final)
 
     target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
     active_target_key = plc_auto_backend_state.get('active_target_key')
@@ -664,10 +707,16 @@ def plc_auto_backend_tick():
                         queue_invalid_target(ik_failed)
                     except Exception:
                         pass
-                    logger.info(
-                        'PLC auto-move backend: sent target x=%s y=%s z=%s speed=%s -> %s',
-                        x, y, z, speed, resp_type
-                    )
+                    if via_home:
+                        logger.info(
+                            'PLC auto-move backend: routing via HOME (%s,%s,%s) en route to final (%s,%s,%s) speed=%s -> %s',
+                            x, y, z, x_final, y_final, z_final, speed, resp_type
+                        )
+                    else:
+                        logger.info(
+                            'PLC auto-move backend: sent target x=%s y=%s z=%s speed=%s -> %s',
+                            x, y, z, speed, resp_type
+                        )
                 except Exception as e:
                     plc_auto_backend_state['active_target_key'] = None
                     plc_auto_backend_state['active_target_set_at'] = 0.0
