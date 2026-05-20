@@ -792,15 +792,21 @@ def _trigger_auto_move_backoff(reason):
 
 def plc_auto_backend_loop():
     """
-    Infinite loop that runs plc_auto_backend_tick() every 300 ms.
+    Infinite loop that runs plc_auto_backend_tick() every 50 ms.
     Runs as a daemon thread so it stops automatically when the process exits.
+
+    Tightened from 300ms to 50ms so the arm responds to PLC target changes
+    near-instantly. The tick itself is cheap unless there's a move to send
+    (gated by resend interval, backoff, in-flight flag). When there IS a
+    new target, the delay from PLC HMI press to bridge moveToXYZ is now
+    dominated by the PLC worker poll cycle (~100ms), not this loop.
     """
     while True:
         try:
             plc_auto_backend_tick()
         except Exception as e:
             logger.warning('PLC auto-move backend loop error: %s', e)
-        time.sleep(0.3)  # 300 ms — same interval as the JavaScript version
+        time.sleep(0.05)
 
 
 def start_plc_auto_move_thread():
