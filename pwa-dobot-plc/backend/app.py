@@ -288,6 +288,7 @@ plc_auto_backend_state = {
     'active_target_set_at': 0.0,    # When active_target_key was set (for stale-target timeout)
     'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
     'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
+    'home_visited_for_target_key': None,  # operator target key we've already passed through home for
 }
 PLC_AUTO_TARGET_TOLERANCE_MM = 20
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
@@ -373,31 +374,51 @@ def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
     return math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_mm
 
 
-def _route_target_via_home(cache: Dict[str, Any], x: Any, y: Any, z: Any):
+def _route_target_via_home(cache: Dict[str, Any], x: Any, y: Any, z: Any,
+                            operator_target_key: str):
     """Decide whether to go directly to the requested target or via the home
     waypoint first. Returns (x, y, z) for the next physical move.
 
-    Logic: if the arm is already at home OR already at the final target OR
-    the final target IS home, just go direct. Otherwise return the home
-    waypoint — the auto-move loop will reach it, the next tick will see the
-    arm is at home, and the final target will then be sent.
+    Routing is a ONE-TIME decision per operator-commanded target, not a
+    per-tick re-evaluation. Without that, when the arm reaches "almost"
+    the target (just outside tolerance, e.g. 23mm vs 20mm) the router
+    sees "not at target, not at home" and reroutes BACK to home — the
+    arm then starts moving the other way, never settles, and the
+    operator sees the arm jittering between two goals.
+
+    State machine per operator target:
+      - operator changes target: clear the visited flag
+      - first tick: arm at home OR at final OR target IS home → mark
+        visited, route direct; else → route via home
+      - subsequent ticks: visited flag set → always route direct,
+        regardless of where the arm has drifted to. Only an operator
+        target change resets this.
     """
+    home_visited = plc_auto_backend_state.get('home_visited_for_target_key')
+    if home_visited == operator_target_key:
+        # Already passed through (or skipped) home for this target — stay direct.
+        return x, y, z
+
     h = PLC_AUTO_HOME_WAYPOINT
     home_tol = PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM
-    # Already at home? → go straight to the final target.
+
+    # Already at home? → mark visited, go direct.
     if _target_position_reached(cache, h['x'], h['y'], h['z'], tolerance_mm=home_tol):
+        plc_auto_backend_state['home_visited_for_target_key'] = operator_target_key
         return x, y, z
-    # Already (close enough to) the final target? → leave it, the rest of the
-    # loop will detect "reached" and stop.
+    # Already (close enough to) the final target? → mark visited, leave it.
     if _target_position_reached(cache, x, y, z):
+        plc_auto_backend_state['home_visited_for_target_key'] = operator_target_key
         return x, y, z
-    # Final target IS the home waypoint (rounded match)? → no detour needed.
+    # Final target IS the home waypoint? → no detour needed.
     try:
         if abs(float(x) - h['x']) <= 5 and abs(float(y) - h['y']) <= 5 and abs(float(z) - h['z']) <= 5:
+            plc_auto_backend_state['home_visited_for_target_key'] = operator_target_key
             return x, y, z
     except (TypeError, ValueError):
         pass
-    # Otherwise route via home.
+    # Otherwise route via home (this tick — next tick will see arm reach home
+    # within tolerance and the visited flag will flip to direct mode).
     return h['x'], h['y'], h['z']
 
 
@@ -598,11 +619,18 @@ def plc_auto_backend_tick():
     if x_final is None or y_final is None or z_final is None:
         return
 
-    # Obstacle avoidance: route through home before reaching the actual target,
-    # unless we're already at home or already at the final target. The next
-    # tick re-evaluates and proceeds to the final target once the arm has
-    # reached home.
-    x, y, z = _route_target_via_home(cache, x_final, y_final, z_final)
+    # Operator target (what the PLC HMI commanded). The routing decision is
+    # tied to this key — once we've routed via home for this operator target,
+    # the next tick will go direct.
+    operator_target_key = '{}|{}|{}|{}'.format(x_final, y_final, z_final, speed)
+    # Reset the home-visited flag whenever the operator commands a new target.
+    if plc_auto_backend_state.get('home_visited_for_target_key') not in (None, operator_target_key):
+        plc_auto_backend_state['home_visited_for_target_key'] = None
+
+    # Obstacle avoidance: route through home before reaching the actual target.
+    # See _route_target_via_home for the state-machine details — short version:
+    # the decision is one-time per operator target, not per-tick.
+    x, y, z = _route_target_via_home(cache, x_final, y_final, z_final, operator_target_key)
     via_home = (x, y, z) != (x_final, y_final, z_final)
 
     target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
