@@ -289,7 +289,7 @@ plc_auto_backend_state = {
     'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
     'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
 }
-PLC_AUTO_TARGET_TOLERANCE_MM = 8
+PLC_AUTO_TARGET_TOLERANCE_MM = 10
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
 PLC_AUTO_ERROR_BACKOFF_BASE_S = 2.0      # First-failure backoff
 PLC_AUTO_ERROR_BACKOFF_MAX_S = 30.0      # Cap so we still recover when the arm comes back
@@ -336,7 +336,13 @@ def _send_safety_torque_off(reason: str):
 
 def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
                              tolerance_mm: int = PLC_AUTO_TARGET_TOLERANCE_MM) -> bool:
-    """Return True when cached DB125 XYZ feedback is already near the requested target."""
+    """Return True when cached DB125 XYZ feedback is within tolerance_mm
+    (Euclidean) of the requested target. Used in two places:
+      1. To declare a successful arrival when a "moving" response completes.
+      2. To accept a "stall close enough" as success on this weak-joint
+         prototype — without that the PLC would retry indefinitely whenever
+         J2 stalls a few mm short of the IK target.
+    """
     try:
         current_x = float(cache.get('db125_x_position'))
         current_y = float(cache.get('db125_y_position'))
@@ -347,11 +353,10 @@ def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
     except (TypeError, ValueError):
         return False
 
-    return (
-        abs(current_x - target_x) <= tolerance_mm
-        and abs(current_y - target_y) <= tolerance_mm
-        and abs(current_z - target_z) <= tolerance_mm
-    )
+    dx = current_x - target_x
+    dy = current_y - target_y
+    dz = current_z - target_z
+    return math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_mm
 
 
 def _manual_override_remaining_seconds() -> int:
@@ -628,11 +633,24 @@ def plc_auto_backend_tick():
                     resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
                     succeeded = resp_type in ('success', 'moving', 'ikResult')
-                    if succeeded:
+                    # Weak-joint prototype: a `stall` response near the target
+                    # should be treated as successful arrival, not a failure.
+                    # Otherwise the PLC backs off and retries the same target
+                    # every 30s even though the arm is physically there.
+                    stalled_within_tolerance = (
+                        resp_type == 'stall'
+                        and _target_position_reached(cache, x, y, z)
+                    )
+                    if succeeded or stalled_within_tolerance:
                         plc_auto_backend_state['active_target_key'] = target_key
                         plc_auto_backend_state['active_target_set_at'] = time.time()
                         plc_auto_backend_state['consecutive_errors'] = 0
                         plc_auto_backend_state['error_backoff_until'] = 0.0
+                        if stalled_within_tolerance:
+                            logger.info(
+                                'PLC auto-move backend: %s within %dmm of target — treating as reached',
+                                resp_type, PLC_AUTO_TARGET_TOLERANCE_MM
+                            )
                     else:
                         plc_auto_backend_state['active_target_key'] = None
                         plc_auto_backend_state['active_target_set_at'] = 0.0
