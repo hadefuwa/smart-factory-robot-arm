@@ -304,7 +304,13 @@ PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S = 15.0
 # A -> HOME -> B clears them. The waypoint itself is loose (25mm) because
 # it's an intermediate stop; the final target uses the normal tolerance.
 PLC_AUTO_HOME_WAYPOINT = {'x': 40, 'y': 260, 'z': 350}
-PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM = 25
+# Loose tolerance because the arm can be 30-50mm off from this waypoint
+# due to weak J2 and IK approximation. If the threshold is too tight,
+# the router insists on going to home forever and the final target
+# never gets sent. 60mm is generous enough to count "close to home" as
+# at home while still being distinguishably different from far-away
+# poses (e.g. the named positions which are 100s of mm away).
+PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM = 60
 plc_manual_override_state = {
     'until': 0.0,
     'source': None,
