@@ -64,10 +64,19 @@ const COMMAND_WATCHDOG_MS = 20000;
 
 // Serial bus watchdog:
 // - We always track repeated all-fail status polls for diagnostics.
-// - Process exit is now opt-in via env var because forced restart loops hide root cause.
+// - Process exit is opt-in via env var because forced restart loops hide root cause.
+// - Auto bus recovery (close + reopen port, re-init servos) fires when the
+//   bus has been entirely silent for ALL_FAIL_RECOVERY_THRESHOLD polls.
+//   Throttled to once per BUS_RECOVERY_COOLDOWN_MS so we don't thrash a
+//   genuinely dead bus. This is what lets the bridge self-heal after a
+//   power cycle where the servos boot slower than the bridge process.
 const ALL_FAIL_EXIT_THRESHOLD = 10;
 const ALL_FAIL_EXIT_ENABLED = process.env.ROBOT_ALL_FAIL_EXIT_ENABLED === '1';
+const ALL_FAIL_RECOVERY_THRESHOLD = 5; // ~5s at default poll rate
+const BUS_RECOVERY_COOLDOWN_MS = 30000;
 let consecutiveAllFailCount = 0;
+let lastBusRecoveryAttemptMs = 0;
+let busRecoveryInProgress = false;
 const DEFAULT_TCP_DOWN_ORIENTATION = { x: 0, y: 0, z: -1 };
 const FIVE_JOINT_ORIENTATION_TOLERANCE_DEG = 12.0;
 const SIX_JOINT_ORIENTATION_TOLERANCE_DEG = 8.0;
@@ -1152,10 +1161,20 @@ async function handleCommand(ws, data) {
             const statuses = await getAllServoStatus();
 
             // Serial bus watchdog: if the bus gets stuck, all servos go unavailable.
-            // Keep counting for diagnostics. Exit is optional and disabled by default.
+            // Keep counting for diagnostics. Two recovery actions:
+            //   - At ALL_FAIL_RECOVERY_THRESHOLD: trigger a bus recovery (close +
+            //     reopen serial port, re-init null slots). Throttled internally so
+            //     a genuinely dead bus doesn't get hammered.
+            //   - At ALL_FAIL_EXIT_THRESHOLD: exit for systemd restart (opt-in).
             const anyAvailable = statuses.some(s => s.available);
             if (!anyAvailable) {
                 consecutiveAllFailCount++;
+                if (consecutiveAllFailCount >= ALL_FAIL_RECOVERY_THRESHOLD) {
+                    // Fire-and-forget — don't block the getStatus response.
+                    recoverBus(`all servos unavailable for ${consecutiveAllFailCount} polls`).catch((e) =>
+                        console.error('[BUS RECOVERY] unexpected:', e && e.message ? e.message : e)
+                    );
+                }
                 if (consecutiveAllFailCount >= ALL_FAIL_EXIT_THRESHOLD) {
                     if (ALL_FAIL_EXIT_ENABLED) {
                         console.error(`[WATCHDOG] All servos unavailable for ${consecutiveAllFailCount} consecutive polls — exiting for systemd restart (ROBOT_ALL_FAIL_EXIT_ENABLED=1)`);
@@ -2113,6 +2132,59 @@ let portOpenedAt = Date.now();
 // ping (every 900ms idle) already prevents SC-B1 idle disconnect, so frequent renewal
 // is unnecessary. 5-minute interval is a safety fallback only.
 const PORT_SESSION_MS = 300000;
+/**
+ * Force a full bus recovery: close + reopen the serial port and re-init
+ * each currently-null servo slot. Throttled so a genuinely dead bus
+ * doesn't get hammered. Called by the watchdog when every joint has
+ * been unavailable for a sustained run of polls — the classic symptom
+ * after a power cycle where the bridge process started before the
+ * servo bus came up.
+ */
+async function recoverBus(reason) {
+    const now = Date.now();
+    if (busRecoveryInProgress) return false;
+    if (now - lastBusRecoveryAttemptMs < BUS_RECOVERY_COOLDOWN_MS) return false;
+    busRecoveryInProgress = true;
+    lastBusRecoveryAttemptMs = now;
+    console.warn(`[BUS RECOVERY] Triggered — ${reason}. Closing and reopening ${SERIAL_PORT}.`);
+    try {
+        if (sharedSerialPort && sharedSerialPort.isOpen) {
+            intentionalSerialClose = true;
+            await new Promise((res) => { sharedSerialPort.close((err) => { if (err) console.warn('[BUS RECOVERY] close warn:', err.message); res(); }); });
+            await new Promise((res, rej) => {
+                const t = setTimeout(() => { console.error('[BUS RECOVERY] open() hung for 6s — giving up this cycle'); rej(new Error('open timeout')); }, 6000);
+                sharedSerialPort.open((err) => {
+                    clearTimeout(t);
+                    if (err) { console.error('[BUS RECOVERY] reopen err:', err.message); rej(err); }
+                    else { portOpenedAt = Date.now(); lastSerialActivity = Date.now(); console.log('[BUS RECOVERY] Port reopened.'); res(); }
+                });
+            });
+        }
+        // Re-init any null slots.
+        let recovered = 0;
+        for (let i = 0; i < JOINT_COUNT; i++) {
+            if (servos[i] !== null) continue;
+            const s = await tryInitializeServo(i, true);
+            if (s) {
+                servos[i] = s;
+                consecutiveReadFailures[i] = 0;
+                markServoOnline(i);
+                recovered++;
+                console.log(`[BUS RECOVERY] Servo ${i + 1} restored.`);
+            }
+        }
+        console.warn(`[BUS RECOVERY] Done — restored ${recovered}/${servos.filter(s => s !== null).length + recovered} servos.`);
+        if (recovered > 0) consecutiveAllFailCount = 0;
+        return recovered > 0;
+    } catch (e) {
+        console.error('[BUS RECOVERY] Failed:', e.message || e);
+        return false;
+    } finally {
+        intentionalSerialClose = false;
+        busRecoveryInProgress = false;
+    }
+}
+
 async function maybeReopenPort() {
     if (!sharedSerialPort || !sharedSerialPort.isOpen) return;
     const age = Date.now() - portOpenedAt;
