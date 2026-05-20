@@ -5,20 +5,19 @@
   const NAV_ITEMS = [
     { href: '/index.html', label: 'Dashboard', icon: 'dashboard', section: 'primary' },
     { href: '/robot-arm.html', label: 'Robot Arm', icon: 'precision_manufacturing', section: 'primary' },
-    { href: '/vision-system-new.html', label: 'Vision System', icon: 'visibility', section: 'primary' },
+    { href: '/vision.html', label: 'Vision System', icon: 'visibility', section: 'primary' },
     { href: '/rfid.html', label: 'RFID Tracking', icon: 'nfc', section: 'primary' },
     { href: '/plc-setup.html', label: 'PLC Setup', icon: 'analytics', section: 'primary' },
     { href: '/io-link.html', label: 'IO-Link Master', icon: 'settings_input_component', section: 'primary' },
     { href: '/edge-device-stats.html', label: 'Edge Device Stats', icon: 'memory', section: 'primary' },
     { href: '/hotspot-status.html', label: 'Hotspot Status', icon: 'wifi', section: 'utility' },
     { href: '/color-voting-test.html', label: 'Color Voting Test', icon: 'palette', section: 'utility' },
-    { href: '/vision-system.html', label: 'Vision Legacy', icon: 'history', section: 'utility' },
   ];
 
   const PAGE_META = {
     '/index.html': { kind: 'primary' },
     '/robot-arm.html': { kind: 'primary' },
-    '/vision-system-new.html': { kind: 'primary' },
+    '/vision.html': { kind: 'primary' },
     '/rfid.html': { kind: 'primary' },
     '/plc-setup.html': { kind: 'primary' },
     '/plc-diagnostics.html': { kind: 'primary' },
@@ -26,12 +25,6 @@
     '/edge-device-stats.html': { kind: 'primary' },
     '/hotspot-status.html': { kind: 'utility' },
     '/color-voting-test.html': { kind: 'utility' },
-    '/vision-system.html': {
-      kind: 'legacy',
-      ctaHref: '/vision-system-new.html',
-      ctaLabel: 'Open Production Vision',
-      notice: 'This is a retained legacy interface. Use the production vision page for normal operations.',
-    },
   };
 
   const HERO_CONFIG = {
@@ -46,14 +39,14 @@
         ['Safety', 'E-Stop Ready'],
       ],
     },
-    '/vision-system-new.html': {
+    '/vision.html': {
       kicker: 'Vision Control',
-      title: 'Run the production vision workflow with live camera, ROI, and PLC-trigger status.',
-      description: 'This remains the primary vision page and keeps the existing capture, analyze, voting, and config behavior intact.',
+      title: 'Run the production vision workflow with live PoE camera and PLC-trigger status.',
+      description: 'PoE-camera only — USB camera and color voting flows have been retired in favour of the AI imaging model.',
       variant: 'vision',
       chips: [
         ['Role', 'Production Vision'],
-        ['Camera', 'Streaming'],
+        ['Camera', 'PoE Streaming'],
         ['PLC', 'Integrated'],
       ],
     },
@@ -132,17 +125,6 @@
         ['Category', 'Test Tool'],
         ['Vision', 'Voting'],
         ['Audience', 'Engineering'],
-      ],
-    },
-    '/vision-system.html': {
-      kicker: 'Legacy View',
-      title: 'Keep the legacy vision page visually aligned while production users move to the new interface.',
-      description: 'This page is treated as a legacy utility view and remains accessible without becoming part of the main production navigation.',
-      variant: 'vision',
-      chips: [
-        ['Category', 'Legacy'],
-        ['Status', 'Secondary'],
-        ['Successor', 'vision-system-new'],
       ],
     },
   };
@@ -1250,11 +1232,9 @@
       enhanceRobotPage();
       enhanceRobotModal();
       applyRobotDynamicEnhancements();
-    } else if (normalizedPath === '/vision-system-new.html') {
+    } else if (normalizedPath === '/vision.html') {
       document.body.classList.add('sf-page-vision');
       enhanceVisionPage();
-      enhanceVisionSettingsPanel();
-      observeDynamicContent('#resultsContent', applyVisionDynamicEnhancements);
     } else if (normalizedPath === '/rfid.html') {
       document.body.classList.add('sf-page-rfid');
       enhanceRfidPage();
@@ -1274,9 +1254,6 @@
     } else if (normalizedPath === '/color-voting-test.html') {
       document.body.classList.add('sf-page-color-voting');
       enhanceColorVotingPage();
-    } else if (normalizedPath === '/vision-system.html') {
-      document.body.classList.add('sf-page-vision-legacy');
-      enhanceLegacyVisionPage();
     } else if (normalizedPath === '/plc-diagnostics.html' || normalizedPath === '/plc-setup.html') {
       document.body.classList.add('sf-page-plc');
       enhancePlcPage();

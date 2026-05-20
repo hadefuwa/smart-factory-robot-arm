@@ -153,7 +153,7 @@
       window.location.href = '/robot-arm.html';
     },
     openVision() {
-      window.location.href = '/vision-system-new.html';
+      window.location.href = '/vision.html';
     },
     openPLC() {
       window.location.href = '/plc-setup.html';

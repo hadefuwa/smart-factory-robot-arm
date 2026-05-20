@@ -1792,89 +1792,76 @@ def init_clients():
     if 'home_position' in dobot_config:
         dobot_client.HOME_POSITION = dobot_config['home_position']
 
-    # Camera settings
-    camera_config = config.get('camera', {})
-    camera_service = CameraService(
-        camera_index=camera_config.get('index', 0),
-        width=camera_config.get('width', 640),
-        height=camera_config.get('height', 480)
-    )
-    # Load crop settings if available
-    crop_config = camera_config.get('crop', {})
-    if crop_config:
-        camera_service.set_crop(
-            enabled=crop_config.get('enabled', False),
-            x=crop_config.get('x', 0),
-            y=crop_config.get('y', 0),
-            width=crop_config.get('width', 100),
-            height=crop_config.get('height', 100)
-        )
-    # Load detection ROI settings if available
-    detection_roi_config = camera_config.get('detection_roi', {})
-    if detection_roi_config:
-        camera_service.set_detection_roi(
-            enabled=detection_roi_config.get('enabled', False),
-            x=detection_roi_config.get('x', 0),
-            y=detection_roi_config.get('y', 0),
-            width=detection_roi_config.get('width', 100),
-            height=detection_roi_config.get('height', 100)
-        )
-    # Initialize camera and keep it always active
-    def _camera_retry_thread():
-        """Background thread: retries camera init, escalates to USB reset then reboot."""
-        consecutive_failures = 0
-        usb_reset_done = False
-
-        while True:
-            time.sleep(5)
-            if camera_service is None:
-                continue
-            try:
-                cam_ok = camera_service.camera is not None and camera_service.camera.isOpened()
-                if not cam_ok:
-                    ok = camera_service.initialize_camera()
-                    if ok:
-                        logger.info("Camera initialized successfully (retry after %d failures)", consecutive_failures)
-                        consecutive_failures = 0
-                        usb_reset_done = False
-                        break  # Camera is up — stop retrying
-                    else:
-                        # Only escalate when the device node actually exists (camera physically connected).
-                        if _camera_device_present():
-                            consecutive_failures += 1
-                            logger.debug("Camera init failed (attempt %d)", consecutive_failures)
-
-                            # ~60 s of failures → try USB soft reset once
-                            if consecutive_failures == 12 and not usb_reset_done:
-                                logger.warning(
-                                    "Camera unresponsive for ~60 s — attempting USB soft reset"
-                                )
-                                usb_reset_done = True
-                                _usb_camera_reset()
-                                consecutive_failures = 0  # give fresh window after reset
-
-                            # Camera still unresponsive after USB reset — log and keep waiting
-                            elif usb_reset_done and consecutive_failures >= 12:
-                                logger.warning(
-                                    "Camera still unresponsive after USB reset — no camera available, continuing without it"
-                                )
-                                break  # Stop retry loop; camera unavailable
-                        else:
-                            # Device node absent — camera simply not plugged in, keep waiting
-                            consecutive_failures = 0
-            except Exception:
-                pass
-
-    try:
-        success = camera_service.initialize_camera()
-        if success:
-            logger.info("Camera initialized and will stay always active")
-        else:
-            logger.warning("Camera initialization failed - will retry automatically")
-            threading.Thread(target=_camera_retry_thread, daemon=True).start()
-    except Exception as e:
-        logger.warning(f"Camera initialization failed (may not be connected): {e}")
-        threading.Thread(target=_camera_retry_thread, daemon=True).start()
+    # USB camera + color-voting pipeline DISABLED — production vision is PoE-only now.
+    # Original USB CameraService instantiation, crop/ROI load, initialize_camera call,
+    # and the auto-recovery retry thread used to live here. Leaving camera_service = None
+    # means the legacy /api/camera/* and /api/vision/* (color voting) routes — themselves
+    # now also commented out — fall through to 503 if anything still calls them.
+    camera_service = None
+    # camera_config = config.get('camera', {})
+    # camera_service = CameraService(
+    #     camera_index=camera_config.get('index', 0),
+    #     width=camera_config.get('width', 640),
+    #     height=camera_config.get('height', 480)
+    # )
+    # crop_config = camera_config.get('crop', {})
+    # if crop_config:
+    #     camera_service.set_crop(
+    #         enabled=crop_config.get('enabled', False),
+    #         x=crop_config.get('x', 0),
+    #         y=crop_config.get('y', 0),
+    #         width=crop_config.get('width', 100),
+    #         height=crop_config.get('height', 100)
+    #     )
+    # detection_roi_config = camera_config.get('detection_roi', {})
+    # if detection_roi_config:
+    #     camera_service.set_detection_roi(
+    #         enabled=detection_roi_config.get('enabled', False),
+    #         x=detection_roi_config.get('x', 0),
+    #         y=detection_roi_config.get('y', 0),
+    #         width=detection_roi_config.get('width', 100),
+    #         height=detection_roi_config.get('height', 100)
+    #     )
+    # def _camera_retry_thread():
+    #     consecutive_failures = 0
+    #     usb_reset_done = False
+    #     while True:
+    #         time.sleep(5)
+    #         if camera_service is None:
+    #             continue
+    #         try:
+    #             cam_ok = camera_service.camera is not None and camera_service.camera.isOpened()
+    #             if not cam_ok:
+    #                 ok = camera_service.initialize_camera()
+    #                 if ok:
+    #                     logger.info("Camera initialized successfully (retry after %d failures)", consecutive_failures)
+    #                     consecutive_failures = 0
+    #                     usb_reset_done = False
+    #                     break
+    #                 else:
+    #                     if _camera_device_present():
+    #                         consecutive_failures += 1
+    #                         if consecutive_failures == 12 and not usb_reset_done:
+    #                             usb_reset_done = True
+    #                             _usb_camera_reset()
+    #                             consecutive_failures = 0
+    #                         elif usb_reset_done and consecutive_failures >= 12:
+    #                             break
+    #                     else:
+    #                         consecutive_failures = 0
+    #         except Exception:
+    #             pass
+    # try:
+    #     success = camera_service.initialize_camera()
+    #     if success:
+    #         logger.info("Camera initialized and will stay always active")
+    #     else:
+    #         logger.warning("Camera initialization failed - will retry automatically")
+    #         threading.Thread(target=_camera_retry_thread, daemon=True).start()
+    # except Exception as e:
+    #     logger.warning(f"Camera initialization failed (may not be connected): {e}")
+    #     threading.Thread(target=_camera_retry_thread, daemon=True).start()
+    logger.info("USB camera disabled — production vision served by PoE CAM-W + poe_vision_service")
 
     # YOLO model is now loaded in the separate vision-service process
     # No need to load it here - all YOLO calls go through vision service
@@ -1886,7 +1873,7 @@ def init_clients():
         plc_worker = init_plc_worker(
             plc_ip=plc_config['ip'],
             camera_service=camera_service,
-            vision_callback=process_vision_cycle_new,  # New callback for worker
+            vision_callback=None,  # USB color voting disabled — PoE AI model not yet wired into PLC cycle
             cycle_time_ms=plc_config.get('cycle_time_ms', 100),
             db123_config=plc_config.get('db123', {}),
             db124_config=get_camera_db_config(config),
@@ -3450,7 +3437,7 @@ def generate_annotated_result_frames():
         # 10 FPS is sufficient for result monitoring and significantly reduces CPU load.
         time.sleep(0.1)
 
-@app.route('/api/camera/stream')
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/stream')
 def camera_stream():
     """MJPEG video stream endpoint - iFrame embeddable for WinCC Unified"""
     if camera_service is None:
@@ -3543,7 +3530,7 @@ def poe_camera_stream():
 #         time.sleep(0.1)  # ~10 FPS - 3D rendering is heavier than camera
 
 
-@app.route('/camera-frame')
+# DISABLED (USB / color-voting retired): @app.route('/camera-frame')
 def camera_frame():
     """Single JPEG frame from camera - no Playwright, no extra deps. Use with live-view.html"""
     if camera_service is None:
@@ -3612,7 +3599,7 @@ def camera_frame():
 
 
 
-@app.route('/api/camera/status', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/status', methods=['GET'])
 def camera_status():
     """Get camera connection status"""
     if camera_service is None:
@@ -3656,7 +3643,7 @@ def camera_status():
             'error': str(e)
         }), 500
 
-@app.route('/api/vision/status', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/status', methods=['GET'])
 def vision_status():
     """Compatibility alias for dashboard clients expecting /api/vision/status."""
     if camera_service is None:
@@ -3698,7 +3685,7 @@ def vision_status():
             'error': str(e)
         }), 500
 
-@app.route('/api/camera/connect', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/connect', methods=['POST'])
 def camera_connect():
     """Initialize and connect to camera"""
     global camera_service
@@ -3741,7 +3728,7 @@ def camera_connect():
             'error': str(e)
         }), 500
 
-@app.route('/api/camera/disconnect', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/disconnect', methods=['POST'])
 def camera_disconnect():
     """Disconnect and release camera"""
     global camera_service
@@ -3755,7 +3742,7 @@ def camera_disconnect():
         logger.error(f"Error disconnecting camera: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/camera/capture', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/capture', methods=['GET'])
 def camera_capture():
     """Capture a single frame as JPEG - uses cached frame if recent to reduce camera load"""
     if camera_service is None:
@@ -3781,7 +3768,7 @@ def camera_capture():
         logger.error(f"Error capturing frame: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/camera/crop', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/crop', methods=['GET'])
 def get_camera_crop():
     """Get current camera crop settings"""
     if camera_service is None:
@@ -3794,7 +3781,7 @@ def get_camera_crop():
         logger.error(f"Error getting crop settings: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/camera/crop', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/camera/crop', methods=['POST'])
 def set_camera_crop():
     """Set camera crop settings"""
     if camera_service is None:
@@ -3829,7 +3816,7 @@ def set_camera_crop():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/vision/roi', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/roi', methods=['GET'])
 def get_detection_roi():
     """Get current detection ROI (expected cube position) settings."""
     if camera_service is None:
@@ -3843,7 +3830,7 @@ def get_detection_roi():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/vision/roi', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/roi', methods=['POST'])
 def set_detection_roi():
     """Set detection ROI (expected cube position)."""
     if camera_service is None:
@@ -4010,7 +3997,7 @@ def hotspot_status():
         status['error'] = str(e)
         return jsonify(status), 500
 
-@app.route('/api/vision/detect-objects', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/detect-objects', methods=['POST'])
 def vision_detect_objects():
     """Run object detection on current frame"""
     if camera_service is None:
@@ -4047,7 +4034,7 @@ def vision_detect_objects():
 
 # Removed duplicate vision_detect function - using the one at line 1140 instead
 
-@app.route('/api/vision/analyze', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/analyze', methods=['POST'])
 def vision_analyze():
     """Analyze frame and return annotated image (with optional object detection)
     
@@ -4248,7 +4235,7 @@ def vision_analyze():
         logger.error(f"Error in vision analysis: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/vision/detect', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/detect', methods=['POST'])
 def vision_detect():
     """Detect objects/defects and return JSON results (no image)
     
@@ -4363,7 +4350,7 @@ def vision_detect():
         logger.error(f"Error in vision detection: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/vision/process-manual', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/process-manual', methods=['POST'])
 def vision_process_manual():
     """Manually trigger vision processing"""
     logger.info("ðŸ“¸ Manual vision processing triggered via API")
@@ -4383,7 +4370,7 @@ def vision_process_manual():
         'message': 'Vision processing started. Results will be available shortly.'
     })
 
-@app.route('/api/vision/test-color-voting', methods=['POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/test-color-voting', methods=['POST'])
 def test_color_voting():
     """Test the majority voting color detection system"""
     global latest_annotated_image, latest_annotated_mime
@@ -4423,7 +4410,7 @@ def test_color_voting():
         logger.error(f"Error in test color voting: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/vision/annotated-result')
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/annotated-result')
 def get_annotated_result():
     """Get the latest annotated voting result image"""
     try:
@@ -4454,7 +4441,7 @@ def get_annotated_result():
         logger.error(f"Error serving annotated result: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/vision/detection-enabled', methods=['GET', 'POST'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/detection-enabled', methods=['GET', 'POST'])
 def vision_detection_enabled_endpoint():
     """Enable or disable the colour-detection vision cycle (e.g. when switching to PoE CAM mode)."""
     global vision_detection_enabled
@@ -4515,7 +4502,7 @@ def poe_vision_annotated():
                     headers={'Cache-Control': 'no-store'})
 
 
-@app.route('/api/vision/latest-cycle', methods=['GET'])
+# DISABLED (USB / color-voting retired): @app.route('/api/vision/latest-cycle', methods=['GET'])
 def get_latest_vision_cycle():
     """Return latest PLC-triggered cycle summary for UI/debug."""
     global latest_plc_cycle_result, vision_handshake_processing

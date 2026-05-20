@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+ <meta charset="utf-8" />
+ <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+ <meta http-equiv="Pragma" content="no-cache" />
+ <meta http-equiv="Expires" content="0" />
+ <link rel="apple-touch-icon" sizes="76x76" href="/assets/img/apple-icon.png">
+ <link rel="icon" type="image/png" href="/assets/img/favicon.png">
+ <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+ <title>Vision System - Smart Factory</title>
+ <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+ 
+ <!-- Fonts and icons -->
+ <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css">
+ 
+ <!-- CSS Files -->
+ <link href="/assets/css/matrix-ui-template.css" rel="stylesheet" />
+ <link href="/assets/css/professional-theme.css" rel="stylesheet" />
+ <style>
+  .sf-vision-media-shell {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid var(--sf-base-300);
+    background: var(--sf-base-100);
+    max-height: 50vh;
+  }
+
+  .sf-vision-frame {
+    display: none;
+    width: 100%;
+    max-height: 50vh;
+    object-fit: contain;
+    border-radius: 1rem;
+    border: 1px solid var(--sf-base-300);
+  }
+
+  .sf-vision-frame.is-centered {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .sf-vision-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    pointer-events: none;
+    border-radius: 1rem;
+  }
+
+  .sf-vision-placeholder {
+    min-height: 50vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1.5rem;
+    text-align: center;
+  }
+
+  .sf-vision-placeholder-icon {
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-placeholder-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-placeholder-copy {
+    font-size: 0.75rem;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-help-copy {
+    margin-top: 0.625rem;
+    color: var(--sf-base-content);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .sf-vision-help-copy .sf-vision-help-gap {
+    margin-top: 0.5rem;
+  }
+
+  .sf-vision-results-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .sf-vision-result-line {
+    font-size: 0.875rem;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-result-meta {
+    font-size: 0.75rem;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-result-card {
+    padding: 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid var(--sf-base-300);
+    background: var(--sf-base-100);
+  }
+
+  .sf-vision-result-card.is-error {
+    border-color: color-mix(in srgb, var(--sf-danger-ui) 35%, var(--sf-base-300));
+    background: color-mix(in srgb, var(--sf-danger-ui) 8%, var(--sf-base-100));
+    text-align: center;
+  }
+
+  .sf-vision-result-card.is-final {
+    border-left: 6px solid var(--sf-info-ui);
+  }
+
+  .sf-vision-result-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-result-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 2px solid currentColor;
+    font-weight: 700;
+    font-size: 1.125rem;
+  }
+
+  .sf-vision-result-summary {
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--sf-base-200);
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .sf-vision-result-summary div {
+    font-size: 0.875rem;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-vote-section {
+    margin-top: 1rem;
+  }
+
+  .sf-vision-vote-title {
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--sf-warning-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .sf-vision-vote-row {
+    margin-bottom: 0.5rem;
+  }
+
+  .sf-vision-vote-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-vote-track {
+    width: 100%;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: var(--sf-base-200);
+    overflow: hidden;
+  }
+
+  .sf-vision-vote-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--sf-info-ui);
+  }
+
+  .sf-vision-object-card {
+    margin-bottom: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 1rem;
+    border-left: 4px solid var(--sf-info-ui);
+    background: var(--sf-base-200);
+  }
+
+  .sf-vision-object-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .sf-vision-object-icon {
+    font-size: 1.875rem;
+    line-height: 1;
+  }
+
+  .sf-vision-object-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--sf-base-content);
+    margin-bottom: 0.25rem;
+  }
+
+  .sf-vision-object-meta {
+    font-size: 0.75rem;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-debug-card {
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    border-left: 3px solid var(--sf-warning-ui);
+    background: var(--sf-base-200);
+  }
+
+  .sf-vision-debug-title {
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--sf-warning-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .sf-vision-debug-line {
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-camera-error {
+    text-align: center;
+  }
+
+  .sf-vision-camera-error .material-icons {
+    font-size: 3rem;
+    color: var(--sf-danger-ui);
+    margin-bottom: 0.5rem;
+  }
+
+  .sf-vision-camera-error p {
+    margin: 0.25rem 0;
+  }
+
+  .sf-vision-camera-error .sf-vision-placeholder-title {
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-inline-icon {
+    font-size: 1.25rem;
+  }
+
+  .sf-vision-inline-icon.is-large {
+    font-size: 3rem;
+  }
+
+  .sf-vision-toggle-icon {
+    font-size: 1.25rem;
+  }
+
+  .sf-vision-hidden {
+    display: none;
+  }
+
+  .sf-vision-info-grid {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-loading {
+    text-align: center;
+  }
+
+  .sf-vision-loading-spinner {
+    margin-bottom: 1rem;
+    font-size: 2rem;
+    color: var(--sf-success-ui);
+  }
+
+  .sf-vision-loading-copy {
+    font-size: 0.875rem;
+    color: var(--sf-base-muted);
+  }
+
+  .sf-vision-empty-state {
+    margin-top: 0.75rem;
+    color: var(--sf-danger-ui);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  /* Live status tiles: theme-aware (replaces hard-coded rgba in JS) */
+  .sf-vision-status-card {
+    position: relative;
+    overflow: hidden;
+    padding: 0.75rem !important;
+    border-width: 1px;
+    border-radius: 0.85rem;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .sf-vision-status-card--neutral {
+    background: color-mix(in srgb, var(--sf-base-200) 50%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-base-content) 14%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--good {
+    background: color-mix(in srgb, var(--sf-success-ui) 20%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-success-ui) 60%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--warn {
+    background: color-mix(in srgb, var(--sf-warning-ui) 20%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-warning-ui) 58%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--bad {
+    background: color-mix(in srgb, var(--sf-danger-ui) 18%, var(--sf-base-100));
+    border-color: color-mix(in srgb, var(--sf-danger-ui) 56%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: color-mix(in srgb, var(--sf-base-content) 25%, var(--sf-base-300));
+  }
+
+  .sf-vision-status-card--good::before { background: var(--sf-success-ui); }
+  .sf-vision-status-card--warn::before { background: var(--sf-warning-ui); }
+  .sf-vision-status-card--bad::before { background: var(--sf-danger-ui); }
+
+  .sf-stage-1 { padding: 0.45rem !important; }
+  .sf-stage-1 .sf-panel-head { display: none; }
+  .sf-stage-1 .flex.items-center.justify-end.mb-3 { display: none; }
+  .sf-stage-1 #statusLastRefresh { font-size: 0.66rem; }
+  .sf-stage-1 .grid {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.1rem;
+    scrollbar-width: thin;
+  }
+  .sf-stage-1 .grid > .sf-vision-status-card {
+    flex: 0 0 auto;
+    width: 154px;
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 0.35rem;
+    row-gap: 0;
+    padding: 0.35rem 0.45rem 0.35rem 0.55rem !important;
+    border-radius: 0.6rem;
+  }
+  .sf-stage-1 .sf-vision-status-card > div:first-child {
+    font-size: 0.58rem;
+    font-weight: 700;
+    margin-bottom: 0;
+    color: var(--sf-base-muted);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(2) {
+    font-size: 0.76rem !important;
+    line-height: 1.05;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .sf-stage-1 .sf-vision-status-card > div:nth-child(3) { display: none; }
+
+  .sf-title-conn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.55rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: middle;
+  }
+
+  .sf-title-conn-badge.online {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+  }
+
+  .sf-title-conn-badge.offline {
+    background: var(--status-danger-bg);
+    color: var(--status-danger);
+  }
+
+  .sf-title-conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .sf-title-conn-dot.pulse {
+    animation: sf-title-conn-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sf-title-conn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .sf-vision-quick-info {
+    margin-bottom: 0.85rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--sf-base-300);
+    border-radius: 0.75rem;
+    background: var(--sf-base-100);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .sf-vision-quick-info-copy {
+    font-size: 0.76rem;
+    color: var(--sf-base-muted);
+    margin-right: 0.35rem;
+  }
+
+  .sf-vision-info-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--sf-base-300);
+    background: var(--sf-base-200);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--sf-base-content);
+  }
+
+  .sf-vision-info-pill span {
+    color: var(--sf-base-muted);
+    font-weight: 600;
+  }
+ </style>
+ 
+ <!-- PWA Manifest -->
+ <link rel="manifest" href="/manifest.json">
+ <meta name="theme-color" content="#030c1d">
+ <meta name="mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body class="dashboard-v2 sf-page-vision sf-subpage-v2">
+  <div class="sf-shell sf-template-shell min-h-screen flex flex-col bg-base-100 text-base-content">
+    <header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
+      <div class="sf-template-header-left flex-none flex items-center gap-2">
+        <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
+          <i class="material-icons">menu</i>
+        </button>
+        <a href="/index.html" class="sf-template-logo-link flex items-center gap-2">
+          <img src="/assets/img/matrix2.png" alt="Matrix Logo" class="h-8 w-auto" />
+          <span class="sf-brand-text">Smart Factory</span>
+        </a>
+      </div>
+      <div class="sf-template-header-center flex-1 flex justify-center">
+        <span class="sf-template-shell-title">Smart Factory 2</span>
+      </div>
+      <div class="sf-template-header-right flex-none flex items-center gap-4">
+        <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+          <span class="sf-theme-toggle-icon-wrap">
+            <i class="material-icons sf-theme-icon-sun">light_mode</i>
+            <i class="material-icons sf-theme-icon-moon">dark_mode</i>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <div class="sf-template-body flex flex-1 bg-base-100 relative">
+      <div class="sf-backdrop fixed inset-0 bg-black/50 z-40 hidden transition-opacity duration-300 md:hidden" id="sfBackdrop"></div>
+
+      <aside class="sf-sidebar sf-template-sidebar fixed md:static inset-y-0 left-0 z-50 w-72 border-r border-base-300 bg-base-200 transition-all duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:block flex flex-col overflow-hidden" id="sfSidebar">
+        <div class="sf-template-sidebar-head flex items-start justify-between gap-3 p-4 border-b border-base-300 flex-shrink-0">
+          <div>
+            <p class="sf-template-sidebar-kicker">Workspace</p>
+            <strong>Smart Factory</strong>
+          </div>
+          <div class="sf-template-sidebar-actions flex items-center gap-2">
+            <button class="sf-icon-btn sf-mobile-only btn btn-ghost btn-sm btn-square md:hidden" id="sfSidebarClose" type="button" aria-label="Close navigation">
+              <i class="material-icons">close</i>
+            </button>
+            <button class="sf-icon-btn sf-desktop-only btn btn-ghost btn-sm btn-square hidden md:inline-flex" id="sfCollapseBtn" type="button" aria-label="Toggle sidebar width">
+              <i class="material-icons">left_panel_open</i>
+            </button>
+          </div>
+        </div>
+        <nav class="sf-nav sf-template-nav flex-1 overflow-y-auto overscroll-contain p-4" aria-label="Primary navigation">
+          <ul class="sf-template-menu menu gap-1" id="sidebar-menu">
+            <li class="sf-menu-title"><span>Production</span></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/index.html"><i class="material-icons">dashboard</i><span class="sf-nav-text">Dashboard</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span class="sf-nav-text">Robot Arm</span></a></li>
+              <li><a class="sf-nav-item active flex items-center gap-3 rounded-lg" href="/vision.html"><i class="material-icons">visibility</i><span class="sf-nav-text">Vision System</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/rfid.html"><i class="material-icons">nfc</i><span class="sf-nav-text">RFID Tracking</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/plc-setup.html"><i class="material-icons">analytics</i><span class="sf-nav-text">PLC Setup</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/io-link.html"><i class="material-icons">settings_input_component</i><span class="sf-nav-text">IO-Link Master</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/edge-device-stats.html"><i class="material-icons">memory</i><span class="sf-nav-text">Edge Device Stats</span></a></li>
+            <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/hotspot-status.html"><i class="material-icons">wifi</i><span class="sf-nav-text">Hotspot Status</span></a></li>
+              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/color-voting-test.html"><i class="material-icons">palette</i><span class="sf-nav-text">Color Voting Test</span></a></li>
+          </ul>
+        </nav>
+      </aside>
+
+      <div class="sf-main">
+        <div class="sf-template-pagehead">
+          <div class="sf-topbar-title-wrap">
+            <p class="sf-eyebrow">Vision Control</p>
+            <h1 class="sf-topbar-title">Vision System
+              <span id="titleConnBadge" class="sf-title-conn-badge offline">
+                <span id="titleConnDot" class="sf-title-conn-dot"></span>
+                <span id="titleConnText">Offline</span>
+              </span>
+            </h1>
+          </div>
+        </div>
+
+        <main class="sf-content">
+          <section class="sf-vision-quick-info">
+            <div class="sf-vision-quick-info-copy">Live camera, voting results, and PLC-linked bits in one view.</div>
+            <div class="sf-vision-info-pill"><span>Role</span> Production Vision</div>
+            <div class="sf-vision-info-pill"><span>Camera</span> Streaming</div>
+            <div class="sf-vision-info-pill"><span>PLC</span> Integrated</div>
+          </section>
+
+          <section class="sf-panel sf-stage sf-stage-1">
+            <header class="sf-panel-head">
+              <h3>Live Status</h3>
+              <p>Current camera, PLC, cycle, and cube bit state.</p>
+            </header>
+            <div class="flex items-center justify-end mb-3">
+              <span id="statusLastRefresh" class="text-xs text-base-content/60">Updating...</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <div id="statusPlcStartCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">PLC Start Bit</div>
+                <div id="statusPlcStartValue" class="text-lg font-bold">--</div>
+                <div id="statusPlcStartMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusCameraCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Camera</div>
+                <div id="statusCameraValue" class="text-lg font-bold">--</div>
+                <div id="statusCameraMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusVisionCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Vision Cycle</div>
+                <div id="statusVisionValue" class="text-lg font-bold">--</div>
+                <div id="statusVisionMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusUptimeCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">System Uptime</div>
+                <div id="statusUptimeValue" class="text-lg font-bold">--</div>
+                <div id="statusUptimeMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusBackendCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Backend</div>
+                <div id="statusBackendValue" class="text-lg font-bold">--</div>
+                <div id="statusBackendMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusYellowCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Yellow Bit (32.0)</div>
+                <div id="statusYellowValue" class="text-lg font-bold">--</div>
+                <div id="statusYellowMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusWhiteCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">White Bit (32.1)</div>
+                <div id="statusWhiteValue" class="text-lg font-bold">--</div>
+                <div id="statusWhiteMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusSteelCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Steel Bit (32.2)</div>
+                <div id="statusSteelValue" class="text-lg font-bold">--</div>
+                <div id="statusSteelMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+              <div id="statusAlluminiumCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
+                <div class="text-xs text-base-content/60 mb-2">Alluminium Bit (32.3)</div>
+                <div id="statusAlluminiumValue" class="text-lg font-bold">--</div>
+                <div id="statusAlluminiumMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="sf-row sf-stage sf-stage-3">
+            <article class="sf-panel">
+              <header class="sf-panel-head">
+                <h3>Camera Feed</h3>
+                <p>Live MJPEG stream from the M5Stack PoE CAM-W.</p>
+              </header>
+
+              <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">M5Stack PoE Camera</span>
+                <span id="poeCamStatusBadge" class="sf-title-conn-badge offline">
+                  <span class="sf-title-conn-dot"></span>
+                  <span id="poeCamStatusText">Disconnected</span>
+                </span>
+              </div>
+              <div id="poeCamControls" class="mb-3 p-3 rounded-box border border-info/40 bg-info/10 space-y-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
+                  <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
+                  <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
+                  </button>
+                  <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
+                    <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
+                  </button>
+                </div>
+                <div class="text-xs text-base-content/60">Enter the IP of your M5Stack PoE CAM-W. Find it from the camera serial output or your router DHCP table.</div>
+              </div>
+
+              <div class="sf-vision-media-shell">
+                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="transform: rotate(270deg);">
+                <div id="cameraPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">CAM</div>
+                  <div class="sf-vision-placeholder-title">Loading camera feed...</div>
+                </div>
+              </div>
+            </article>
+
+          </section>
+
+          <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2">
+            <header class="sf-panel-head">
+              <h3>PoE CAM — AI Cube Detection</h3>
+              <p>YOLO-based cube detection via M5Stack PoE CAM-W.</p>
+            </header>
+
+            <!-- Controls row -->
+            <div class="flex items-center gap-3 flex-wrap mb-4">
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-base-content/60 whitespace-nowrap">Confidence</label>
+                <input type="range" id="poeConfSlider" min="10" max="90" value="30" step="5"
+                       class="range range-xs range-info w-28" oninput="document.getElementById('poeConfVal').textContent=this.value+'%'">
+                <span id="poeConfVal" class="text-xs text-info font-mono w-8">30%</span>
+              </div>
+              <button class="btn btn-sm btn-info gap-1" onclick="runPoeDetection()">
+                <i class="material-icons" style="font-size:1rem;line-height:1">search</i> Detect Cubes
+              </button>
+              <button class="btn btn-sm btn-ghost gap-1" onclick="startPoeLoop()" id="poeLoopBtn">
+                <i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto
+              </button>
+              <span id="poeModelStatus" class="text-xs text-base-content/50 ml-auto"></span>
+            </div>
+
+            <!-- Two-column: annotated image + results -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Annotated image -->
+              <div class="sf-vision-media-shell" style="min-height:220px">
+                <img id="poeAnnotatedImg" class="sf-vision-frame is-centered" src="" alt="Annotated Detection" style="display:none">
+                <div id="poeAnnotatedPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">AI</div>
+                  <div class="sf-vision-placeholder-title">Press Detect Cubes</div>
+                  <div class="sf-vision-placeholder-copy">YOLO will annotate detected cubes here</div>
+                </div>
+              </div>
+
+              <!-- Detection results panel -->
+              <div class="space-y-3">
+                <!-- Dominant result badge -->
+                <div id="poeDominantBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3" style="display:none">
+                  <div id="poeDominantDot" class="w-4 h-4 rounded-full flex-shrink-0"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Dominant</div>
+                    <div id="poeDominantLabel" class="font-bold text-base-content text-base"></div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">Detections</div>
+                    <div id="poeDetCount" class="font-mono text-lg font-bold text-info">0</div>
+                  </div>
+                </div>
+
+                <!-- Detections list -->
+                <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
+
+                <!-- Model not loaded warning -->
+                <div id="poeModelMissingWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">warning</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">Model not trained yet</div>
+                    <div>Follow the <strong>CUBE_TRAINING_GUIDE.md</strong> in cube-training/ to capture images, annotate, and train the detector. Then SCP <code>cube_detector.pt</code> to the Pi.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="sf-stage sf-stage-3">
+            <article class="sf-panel sf-vision-hidden">
+              <header class="sf-panel-head">
+                <h3>Debug Console</h3>
+                <p>Checks and debug events for engineering use.</p>
+              </header>
+              <div class="flex gap-2 mb-3">
+                <button class="btn btn-sm btn-outline" onclick="runDebugChecks()">Run Checks</button>
+                <button class="btn btn-sm btn-outline" onclick="clearDebugLog()">Clear</button>
+              </div>
+              <div id="debugSummary" class="text-xs text-base-content/60 mb-2">No debug events yet.</div>
+              <pre id="debugLog" class="sf-template-code rounded-box border border-base-300 bg-base-100 p-3 max-h-56 overflow-auto text-xs leading-relaxed">(waiting)</pre>
+            </article>
+          </section>
+
+        </main>
+      </div>
+    </div>
+
+    <footer class="sf-footer-meta sf-template-footer footer footer-center p-4 bg-base-200 text-base-content border-t border-base-300">
+      <span>Matrix TSL <script>document.write(new Date().getFullYear())</script></span>
+      <a href="/">Smart Factory Home</a>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/assets/js/app-shell.js"></script>
+
+  <script>
+    const API_BASE = window.location.origin;
+    let streamInterval = null;
+    let streamReconnectTimer = null;
+    let lastFrameTime = 0;  // epoch ms of last received MJPEG frame
+    let statusInterval = null;
+    const debugLogEntries = [];
+
+    function addDebugLog(message, details = null, level = 'info') {
+      const ts = new Date().toLocaleTimeString();
+      const prefix = level.toUpperCase().padEnd(5, ' ');
+      let line = `[${ts}] ${prefix} ${message}`;
+      if (details !== null && details !== undefined) {
+        try {
+          line += ` | ${typeof details === 'string' ? details : JSON.stringify(details)}`;
+        } catch (e) {
+          line += ` | ${String(details)}`;
+        }
+      }
+      debugLogEntries.unshift(line);
+      if (debugLogEntries.length > 150) debugLogEntries.length = 150;
+
+      const logEl = document.getElementById('debugLog');
+      if (logEl) {
+        logEl.textContent = debugLogEntries.join('\n');
+      }
+      const summaryEl = document.getElementById('debugSummary');
+      if (summaryEl) {
+        summaryEl.textContent = `${debugLogEntries.length} events captured. Latest: ${message}`;
+      }
+    }
+
+    function clearDebugLog() {
+      debugLogEntries.length = 0;
+      const logEl = document.getElementById('debugLog');
+      if (logEl) logEl.textContent = '(cleared)';
+      const summaryEl = document.getElementById('debugSummary');
+      if (summaryEl) summaryEl.textContent = 'No debug events yet.';
+    }
+
+    function getCameraStreamUrl() {
+      return `${API_BASE}/api/poe-camera/stream?_=${Date.now()}`;
+    }
+
+    function _setPoeCamBadge(connected) {
+      const badge = document.getElementById('poeCamStatusBadge');
+      const dot = badge && badge.querySelector('.sf-title-conn-dot');
+      const text = document.getElementById('poeCamStatusText');
+      if (!badge) return;
+      badge.classList.toggle('online', connected);
+      badge.classList.toggle('offline', !connected);
+      if (dot) dot.classList.toggle('pulse', connected);
+      if (text) text.textContent = connected ? 'Connected' : 'Unreachable';
+    }
+
+    async function loadPoeCameraConfig() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ip) {
+            const inp = document.getElementById('poeCameraIp');
+            if (inp) inp.value = data.ip;
+          }
+          _setPoeCamBadge(data.connected);
+        }
+      } catch (e) {
+        addDebugLog('PoE camera config load failed', e.message, 'warn');
+      }
+    }
+
+    async function applyPoeCameraIp() {
+      const inp = document.getElementById('poeCameraIp');
+      const ip = (inp ? inp.value : '').trim();
+      if (!ip) { alert('Please enter the camera IP address.'); return; }
+      addDebugLog('PoE camera IP applying', ip);
+      try {
+        await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ poe_camera: { ip } })
+        });
+        await checkPoeCameraStatus();
+        stopStream();
+        setTimeout(() => updateCameraFrame(true), 100);
+      } catch (e) {
+        addDebugLog('PoE camera apply error', e.message, 'error');
+      }
+    }
+
+    async function checkPoeCameraStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(8000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          _setPoeCamBadge(data.connected);
+          addDebugLog('PoE camera status', data);
+          return data.connected;
+        }
+      } catch (e) {
+        _setPoeCamBadge(false);
+        addDebugLog('PoE camera status check failed', e.message, 'warn');
+      }
+      return false;
+    }
+
+    // PoE YOLO cube detection
+    let _poeLoopTimer = null;
+
+    const POE_CUBE_COLOURS = {
+      yellow_cube: '#f59e0b',
+      white_cube:  '#e5e7eb',
+      metal_cube:  '#6b7280',
+    };
+
+    async function runPoeDetection() {
+      const confSlider = document.getElementById('poeConfSlider');
+      const conf = confSlider ? (parseInt(confSlider.value, 10) / 100) : 0.30;
+      const ip = (document.getElementById('poeCameraIp') || {}).value || '192.168.7.6';
+
+      document.getElementById('poeModelMissingWarning').style.display = 'none';
+
+      let result;
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/detect`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ip, conf}),
+          signal: AbortSignal.timeout(10000),
+        });
+        result = await res.json();
+        if (res.status === 503) {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+          return;
+        }
+      } catch (e) {
+        addDebugLog('PoE detect request failed', e.message, 'warn');
+        return;
+      }
+
+      if (!result.ok) {
+        if (result.error === 'model_not_loaded') {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        }
+        addDebugLog('PoE detect error', result.error, 'warn');
+        return;
+      }
+
+      const img = document.getElementById('poeAnnotatedImg');
+      const ph  = document.getElementById('poeAnnotatedPlaceholder');
+      img.src   = `${API_BASE}/api/poe-vision/annotated?_=${Date.now()}`;
+      img.style.display = '';
+      if (ph) ph.style.display = 'none';
+
+      const badge  = document.getElementById('poeDominantBadge');
+      const dot    = document.getElementById('poeDominantDot');
+      const label  = document.getElementById('poeDominantLabel');
+      const count  = document.getElementById('poeDetCount');
+      if (result.dominant) {
+        badge.style.display = '';
+        dot.style.backgroundColor = POE_CUBE_COLOURS[result.dominant] || '#888';
+        label.textContent = result.dominant.replace('_', ' ');
+        count.textContent = result.count;
+      } else {
+        badge.style.display = '';
+        dot.style.backgroundColor = '#374151';
+        label.textContent = 'Nothing detected';
+        count.textContent = '0';
+      }
+
+      const list = document.getElementById('poeDetectionsList');
+      list.innerHTML = '';
+      (result.detections || []).forEach(d => {
+        const colour = POE_CUBE_COLOURS[d.class] || '#888';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-2 py-1 rounded bg-base-200 text-xs';
+        row.innerHTML = `
+          <span style="width:10px;height:10px;border-radius:50%;background:${colour};flex-shrink:0;display:inline-block"></span>
+          <span class="font-medium flex-1">${d.class.replace('_', ' ')}</span>
+          <span class="font-mono text-base-content/60">${(d.confidence*100).toFixed(0)}%</span>
+          <span class="font-mono text-base-content/40">${d.width}×${d.height}px</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function checkPoeModelStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/status`, {signal: AbortSignal.timeout(4000)});
+        const data = await res.json();
+        const el = document.getElementById('poeModelStatus');
+        if (el) {
+          el.textContent = data.model_ready
+            ? `Model ready (${(data.model_path||'').split('/').pop().split('\\').pop()})`
+            : 'Model not loaded — train first';
+          el.className = `text-xs ml-auto ${data.model_ready ? 'text-success' : 'text-warning'}`;
+        }
+        if (!data.model_ready) {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        }
+        return Boolean(data.model_ready);
+      } catch (e) { return false; }
+    }
+
+    function startPoeLoop() {
+      const btn = document.getElementById('poeLoopBtn');
+      if (_poeLoopTimer) {
+        clearInterval(_poeLoopTimer);
+        _poeLoopTimer = null;
+        if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto'; }
+      } else {
+        runPoeDetection();
+        _poeLoopTimer = setInterval(runPoeDetection, 2000);
+        if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Stop'; }
+      }
+    }
+
+    async function runDebugChecks() {
+      const endpoints = [
+        '/api/health',
+        '/api/poe-camera/status',
+        '/api/poe-vision/status',
+        '/api/plc/camera/start',
+        '/api/plc/camera/read'
+      ];
+      addDebugLog('Running manual debug checks...');
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${API_BASE}${endpoint}`, { signal: AbortSignal.timeout(6000) });
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await response.json();
+            addDebugLog(`${endpoint} -> HTTP ${response.status}`, data, response.ok ? 'info' : 'error');
+          } else {
+            const blob = await response.blob();
+            addDebugLog(`${endpoint} -> HTTP ${response.status}, ${blob.size} bytes`, null, response.ok ? 'info' : 'error');
+          }
+        } catch (error) {
+          addDebugLog(`${endpoint} request failed`, error.message, 'error');
+        }
+      }
+    }
+
+    function setStatusCardTone(cardId, tone) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+
+      card.classList.remove(
+        'sf-vision-status-card--good',
+        'sf-vision-status-card--warn',
+        'sf-vision-status-card--bad',
+        'sf-vision-status-card--neutral'
+      );
+      if (tone === 'good') {
+        card.classList.add('sf-vision-status-card--good');
+      } else if (tone === 'bad') {
+        card.classList.add('sf-vision-status-card--bad');
+      } else if (tone === 'warn') {
+        card.classList.add('sf-vision-status-card--warn');
+      } else {
+        card.classList.add('sf-vision-status-card--neutral');
+      }
+    }
+
+    function setLiveStatus(cardId, valueId, metaId, valueText, valueColor, metaText, tone = 'neutral') {
+      const valueEl = document.getElementById(valueId);
+      const metaEl = document.getElementById(metaId);
+      if (valueEl) {
+        valueEl.textContent = valueText;
+        valueEl.style.color = '';
+        valueEl.classList.remove('text-success', 'text-warning', 'text-error', 'text-base-content');
+        if (tone === 'good') {
+          valueEl.classList.add('text-success');
+        } else if (tone === 'bad') {
+          valueEl.classList.add('text-error');
+        } else if (tone === 'warn') {
+          valueEl.classList.add('text-warning');
+        } else {
+          valueEl.classList.add('text-base-content');
+        }
+      }
+      if (metaEl) {
+        metaEl.textContent = metaText;
+      }
+      setStatusCardTone(cardId, tone);
+    }
+
+    function withCacheBuster(url) {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}_=${Date.now()}`;
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+      const response = await fetch(withCacheBuster(url), {
+        signal: AbortSignal.timeout(timeoutMs),
+        cache: 'no-store'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function setTitleConnectionStatus(isOnline) {
+      const badge = document.getElementById('titleConnBadge');
+      const dot = document.getElementById('titleConnDot');
+      const text = document.getElementById('titleConnText');
+      if (!badge || !dot || !text) return;
+
+      const online = Boolean(isOnline);
+      badge.classList.toggle('online', online);
+      badge.classList.toggle('offline', !online);
+      dot.classList.toggle('pulse', online);
+      text.textContent = online ? 'Online' : 'Offline';
+    }
+
+    async function updateLiveStatus() {
+      const refreshEl = document.getElementById('statusLastRefresh');
+
+      const [plcResult, poeStatusResult, cameraDbResult, smartFactoryResult, healthResult, poeModelResult] = await Promise.allSettled([
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/start`),
+        fetchJsonWithTimeout(`${API_BASE}/api/poe-camera/status`),
+        fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/read`),
+        fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
+        fetchJsonWithTimeout(`${API_BASE}/api/health`),
+        fetchJsonWithTimeout(`${API_BASE}/api/poe-vision/status`)
+      ]);
+
+      if (plcResult.status === 'fulfilled' && plcResult.value.success) {
+        const plc = plcResult.value;
+        const plcStartOn = Boolean(plc.start);
+        setLiveStatus(
+          'statusPlcStartCard',
+          'statusPlcStartValue',
+          'statusPlcStartMeta',
+          plcStartOn ? 'TRUE (ACTIVE)' : 'FALSE (IDLE)',
+          plcStartOn ? '#4caf50' : '#ffb300',
+          `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`,
+          plcStartOn ? 'good' : 'warn'
+        );
+      } else {
+        setLiveStatus('statusPlcStartCard', 'statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit', 'bad');
+      }
+
+      if (poeStatusResult.status === 'fulfilled') {
+        const cam = poeStatusResult.value || {};
+        const connected = Boolean(cam.connected);
+        const cameraState = connected ? 'CONNECTED' : 'DISCONNECTED';
+        const ipLabel = cam.ip ? `IP ${cam.ip}` : 'IP unknown';
+        setLiveStatus(
+          'statusCameraCard',
+          'statusCameraValue',
+          'statusCameraMeta',
+          cameraState,
+          connected ? '#4caf50' : '#f44336',
+          connected ? `PoE CAM | ${ipLabel}` : `PoE CAM unreachable | ${ipLabel}`,
+          connected ? 'good' : 'bad'
+        );
+        _setPoeCamBadge(connected);
+        setTitleConnectionStatus(connected);
+      } else {
+        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read PoE camera status', 'bad');
+        _setPoeCamBadge(false);
+        setTitleConnectionStatus(false);
+      }
+
+      if (cameraDbResult.status === 'fulfilled' && cameraDbResult.value.success) {
+        const tags = cameraDbResult.value.tags || {};
+        const defectDetected = Boolean(tags.defect_detected);
+        const yellowDetected = Boolean(tags.yellow_cube_detected);
+        const whiteDetected = Boolean(tags.white_cube_detected);
+        const metalDetected = Boolean(tags.metal_cube_detected);
+        const rejectCommand = Boolean(tags.reject_command_from_plc);
+
+        const setBitStatus = (cardId, valueId, metaId, on, activeLabel) => {
+          setLiveStatus(
+            cardId,
+            valueId,
+            metaId,
+            on ? 'ON' : 'OFF',
+            on ? '#4caf50' : '#f44336',
+            on ? activeLabel : 'No detection latched',
+            on ? 'good' : 'bad'
+          );
+        };
+
+        setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', yellowDetected, 'Yellow cube detected');
+        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', whiteDetected, 'White cube detected');
+        setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', metalDetected, 'Metal cube detected');
+        setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', defectDetected, rejectCommand ? 'Reject command is active from PLC' : 'Defect detected');
+      } else {
+        setLiveStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+        setLiveStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
+      }
+
+      if (poeModelResult.status === 'fulfilled') {
+        const model = poeModelResult.value || {};
+        const ready = Boolean(model.model_ready);
+        setLiveStatus(
+          'statusVisionCard',
+          'statusVisionValue',
+          'statusVisionMeta',
+          ready ? 'MODEL READY' : 'NO MODEL',
+          ready ? '#4caf50' : '#ffb300',
+          ready ? ((model.model_path || '').split('/').pop().split('\\').pop() || 'cube_detector.pt') : 'Train cube_detector.pt and SCP to Pi',
+          ready ? 'good' : 'warn'
+        );
+      } else {
+        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'PoE vision status unavailable', 'bad');
+      }
+
+      if (smartFactoryResult.status === 'fulfilled' && smartFactoryResult.value.uptime) {
+        const uptime = smartFactoryResult.value.uptime;
+        const uptimePercent = Number(uptime.percent || 0);
+        setLiveStatus(
+          'statusUptimeCard',
+          'statusUptimeValue',
+          'statusUptimeMeta',
+          uptime.duration || '0h 0m',
+          uptimePercent > 0 ? '#4caf50' : '#f44336',
+          `${uptimePercent.toFixed(1)}% availability`,
+          uptimePercent > 0 ? 'good' : 'bad'
+        );
+      } else {
+        setLiveStatus('statusUptimeCard', 'statusUptimeValue', 'statusUptimeMeta', 'UNKNOWN', '#f44336', 'Unable to read uptime', 'bad');
+      }
+
+      if (healthResult.status === 'fulfilled' && healthResult.value.status === 'ok') {
+        const serverTimestamp = Number(healthResult.value.timestamp || 0);
+        const serverTimeLabel = serverTimestamp > 0
+          ? new Date(serverTimestamp * 1000).toLocaleTimeString()
+          : 'n/a';
+        setLiveStatus('statusBackendCard', 'statusBackendValue', 'statusBackendMeta', 'ONLINE', '#4caf50', `Server time ${serverTimeLabel}`, 'good');
+      } else {
+        setLiveStatus('statusBackendCard', 'statusBackendValue', 'statusBackendMeta', 'OFFLINE', '#f44336', 'Health endpoint unreachable', 'bad');
+      }
+
+      if (refreshEl) {
+        refreshEl.textContent = `Last refresh ${new Date().toLocaleTimeString()}`;
+      }
+    }
+
+    function startLiveStatusPolling() {
+      if (statusInterval) return;
+      updateLiveStatus().catch((error) => {
+        console.error('Error loading live status:', error);
+      });
+      statusInterval = setInterval(() => {
+        updateLiveStatus().catch((error) => {
+          console.error('Error refreshing live status:', error);
+        });
+      }, 4000);
+    }
+
+    function scheduleStreamReconnect(delayMs = 1500) {
+      if (streamReconnectTimer) return;
+      streamReconnectTimer = setTimeout(() => {
+        streamReconnectTimer = null;
+        updateCameraFrame(true);
+      }, delayMs);
+    }
+
+    function updateCameraFrame(forceReconnect = false) {
+      const frame = document.getElementById('cameraFrame');
+      const placeholder = document.getElementById('cameraPlaceholder');
+      if (!frame) return;
+
+      const streamUrl = getCameraStreamUrl();
+
+      if (!forceReconnect && frame.src && frame.src.includes('/api/poe-camera/stream')) {
+        return;
+      }
+
+      frame.onload = () => {
+        lastFrameTime = Date.now();
+        if (frame.naturalWidth > 0 && frame.naturalHeight > 0) {
+          frame.width = frame.naturalWidth;
+          frame.height = frame.naturalHeight;
+        }
+        frame.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+      };
+
+      frame.onerror = () => {
+        addDebugLog('camera stream error', 'PoE camera MJPEG disconnected, reconnecting...', 'warn');
+        frame.style.display = 'none';
+        if (placeholder) {
+          placeholder.style.display = 'flex';
+          placeholder.innerHTML = `
+            <div class="sf-vision-camera-error">
+              <i class="material-icons sf-vision-inline-icon is-large">videocam_off</i>
+              <p class="sf-vision-placeholder-title">PoE Camera Stream Unavailable</p>
+              <p class="sf-vision-placeholder-copy">Retrying automatically...</p>
+            </div>
+          `;
+        }
+        scheduleStreamReconnect(1500);
+      };
+
+      frame.src = streamUrl;
+      addDebugLog('camera stream connected', '/api/poe-camera/stream');
+    }
+
+    function startStream() {
+      if (streamInterval) return;
+      updateCameraFrame(true);
+      streamInterval = setInterval(() => {
+        const frame = document.getElementById('cameraFrame');
+        if (!frame || !frame.src || !frame.src.includes('/api/poe-camera/stream')) {
+          updateCameraFrame(true);
+          return;
+        }
+        if (lastFrameTime > 0 && (Date.now() - lastFrameTime) > 8000) {
+          addDebugLog('camera stream stall', 'No frames for 8s — reconnecting...', 'warn');
+          lastFrameTime = 0;
+          updateCameraFrame(true);
+        }
+      }, 4000);
+    }
+
+    function stopStream() {
+      if (streamInterval) {
+        clearInterval(streamInterval);
+        streamInterval = null;
+      }
+      if (streamReconnectTimer) {
+        clearTimeout(streamReconnectTimer);
+        streamReconnectTimer = null;
+      }
+      const frame = document.getElementById('cameraFrame');
+      if (frame) {
+        frame.src = '';
+      }
+    }
+
+    window.addEventListener('load', () => {
+      addDebugLog('page loaded', { apiBase: API_BASE });
+
+      loadPoeCameraConfig();
+      checkPoeModelStatus();
+
+      startLiveStatusPolling();
+      startStream();
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
