@@ -2008,29 +2008,15 @@ async function handleCommand(ws, data) {
                     await new Promise(r => setTimeout(r, STALL_POLL_MS));
                 }
 
-                // Fine-positioning creep pass — if the main move left any joint more than 8 steps
-                // short of target (due to stiction / gravity at max torque), re-issue at low speed
-                // (300 step/s) and wait up to 2s for it to creep in. This closes the last few mm
-                // without needing more torque — it exploits the fact that static friction is easier
-                // to overcome with a fresh command than during a decelerating approach.
-                if (!stallDetected) {
-                    let creepNeeded = false;
-                    try {
-                        const creepStatuses = await getAllServoStatus();
-                        const creepPositions = creepStatuses.map(s => s.position);
-                        creepNeeded = xyzAngles.some((_, ji) => {
-                            if (!servos[ji] || !creepStatuses[ji] || !creepStatuses[ji].available) return false;
-                            return Math.abs(creepPositions[ji] - targetSteps[ji]) > 8;
-                        });
-                        if (creepNeeded) {
-                            console.log(`[CREEP] Fine-positioning pass at 300 step/s`);
-                            for (let ji = 0; ji < xyzAngles.length; ji++) {
-                                if (servos[ji] !== null) await servos[ji].moveToAngle(xyzAngles[ji], 300);
-                            }
-                            await new Promise(r => setTimeout(r, 1500));
-                        }
-                    } catch (e) { /* creep pass is best-effort */ }
-                }
+                // Creep pass removed: this prototype prioritises responsiveness over
+                // sub-millimeter accuracy. The PLC auto-move declares "target reached"
+                // at 20mm Euclidean tolerance, and the per-joint POS_TOLERANCE of 20
+                // steps (~1.76°) above already keeps the TCP within a couple of cm —
+                // tighter than that requires the previous 1.5s blocking creep pass,
+                // which kept the bridge command queue locked and forced Flask to
+                // wait 1.5-2s between consecutive PLC waypoints (e.g. via-home
+                // -> final target). For this weak-joint prototype that latency was
+                // worse than the residual position error it bought.
 
                 // Single response — bridge reads this, frontend handles type
                 if (stallDetected) {
