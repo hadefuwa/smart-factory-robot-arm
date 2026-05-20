@@ -17,6 +17,20 @@ _invalid_target_timer: threading.Timer = None
 _invalid_target_lock = threading.Lock()
 _hmi_reset_prev: bool = False          # rising-edge detection for DB123.DBX0.2
 
+# --- Last-written tracking for idempotent telemetry writes ---
+# Without this, the bridge's periodic poll re-queues 7 PLC writes per call even
+# when nothing has changed, dragging plc_worker cycle time from 150ms baseline
+# to 1500-2000ms. The cache from get_plc_cache() reflects what the PLC currently
+# holds, but it lags by one read cycle and may not store every field we write,
+# so we track our own last-written values per-field here.
+_last_written_position = {'x': None, 'y': None, 'z': None}
+_last_written_faults = {
+    'fault_byte': None,
+    'max_temperature': None,
+    'min_voltage': None,
+    'max_load_pct': None,
+}
+
 
 def init_plc_worker(
     plc_ip: str,
@@ -135,15 +149,25 @@ def queue_robot_position(x: int, y: int, z: int):
         logger.warning("PLC worker not initialized")
         return
 
+    xi, yi, zi = int(x), int(y), int(z)
+    if (_last_written_position['x'] == xi and
+            _last_written_position['y'] == yi and
+            _last_written_position['z'] == zi):
+        return
+
     for field_name, value in (
-        ('x_position', x),
-        ('y_position', y),
-        ('z_position', z),
+        ('x_position', xi),
+        ('y_position', yi),
+        ('z_position', zi),
     ):
         offset = plc_worker.robot_db_tags[field_name]['byte']
         data = bytearray(2)
-        set_int(data, 0, int(value))
+        set_int(data, 0, value)
         plc_worker.queue_write(plc_worker.robot_db_number, offset, data, f"{field_name}={value}")
+
+    _last_written_position['x'] = xi
+    _last_written_position['y'] = yi
+    _last_written_position['z'] = zi
 
 
 def queue_robot_status(connected: bool = None, busy: bool = None):
@@ -305,8 +329,9 @@ def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: b
                 set_bool(fault_byte, 0, tag['bit'], bool(value))
         # All 4 fault bits are in the same byte — one write covers them all
         tag = plc_worker.robot_db_tags.get('any_moving')
-        if tag:
+        if tag and _last_written_faults['fault_byte'] != fault_byte[0]:
             plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], fault_byte, 'servo fault flags')
+            _last_written_faults['fault_byte'] = fault_byte[0]
 
         for field_name, value in (
             ('max_temperature', max_temperature),
@@ -316,9 +341,16 @@ def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: b
             tag = plc_worker.robot_db_tags.get(field_name)
             if not tag:
                 continue
+            new_val = float(value)
+            # REAL is 4-byte float; quantize to 2dp so noise in the lsb doesn't
+            # force a write every poll (load_pct & temp wobble at the 0.01 level)
+            new_quantized = round(new_val, 2)
+            if _last_written_faults[field_name] == new_quantized:
+                continue
             real_data = bytearray(4)
-            set_real(real_data, 0, float(value))
+            set_real(real_data, 0, new_val)
             plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], real_data, f'{field_name}={value}')
+            _last_written_faults[field_name] = new_quantized
     except Exception as e:
         logger.error(f"Error queueing robot faults: {e}")
 
