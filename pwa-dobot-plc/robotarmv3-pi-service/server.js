@@ -78,7 +78,7 @@ const COMMAND_WATCHDOG_MS = 20000;
 //   power cycle where the servos boot slower than the bridge process.
 const ALL_FAIL_EXIT_THRESHOLD = 10;
 const ALL_FAIL_EXIT_ENABLED = process.env.ROBOT_ALL_FAIL_EXIT_ENABLED === '1';
-const ALL_FAIL_RECOVERY_THRESHOLD = 5; // ~5s at default poll rate
+const ALL_FAIL_RECOVERY_THRESHOLD = 2; // Trigger bus recovery FAST (~1s of darkness)
 const BUS_RECOVERY_COOLDOWN_MS = 30000;
 let consecutiveAllFailCount = 0;
 let lastBusRecoveryAttemptMs = 0;
@@ -174,7 +174,7 @@ console.error = (...a) => { const s = a.join(' '); logRing('error', s); _origErr
 const servos = [];
 const servoReviveAttemptMs = new Array(JOINT_COUNT).fill(0);
 
-// Resilience against transient RS-485 bus glitches.
+// Resilience against transient half-duplex TTL bus glitches.
 // Real-world journal showed J5 hitting "Communication error: -7" (checksum
 // corruption) at a regular ~32s cadence and J2 hitting "Read timeout" in
 // bursts. The next poll always succeeded, so a *single* failure should not
@@ -674,8 +674,8 @@ async function initializeServos() {
 
         // Auto-recover from USB disconnect. The OS emits a 'close' on the
         // serialport stream when the underlying tty disappears (e.g. the
-        // USB-to-RS485 adapter is unplugged, momentarily loses power, or the
-        // CH343 chip re-enumerates). Once that happens our file handle is dead
+        // SC-B1 USB-to-TTL-half-duplex adapter is unplugged, momentarily loses
+        // power, or the CH343 chip re-enumerates). Once that happens our file handle is dead
         // — every read/write will silently fail, all servos appear unavailable,
         // and Flask sees "bridge connected but all servos unavailable" until
         // someone restarts the service. By exiting on this event we let
@@ -756,11 +756,24 @@ async function getAllServoStatus() {
     const statuses = [];
     const startAll = Date.now();
 
+    // "Dark bus" fast-fail: if one servo's status read times out, the bus is
+    // almost certainly entirely silent (broken connection, USB adapter glitch,
+    // power dip). Doing the full 3-retry + segmented-read fallback on every
+    // remaining servo would take ~720ms PER servo and lock up the bridge.
+    // Once the first timeout fires, mark the rest as unavailable for this
+    // poll. The next poll re-evaluates from scratch; bus-recovery watchdog
+    // kicks in shortly after if the darkness persists.
+    let busLikelyDark = false;
+
     for (let i = 0; i < servos.length; i++) {
         let servo = servos[i];
 
         if (servo === null) {
-            servo = await tryReviveServoSlot(i);
+            // Skip the revive attempt while the bus is dark — it would just
+            // burn another ping timeout.
+            if (!busLikelyDark) {
+                servo = await tryReviveServoSlot(i);
+            }
         }
 
         if (servo === null) {
@@ -780,7 +793,7 @@ async function getAllServoStatus() {
                 voltage: 0,
                 temperature: 0,
                 torqueEnabled: false,
-                offlineReason: off ? off.reason : 'unknown',
+                offlineReason: off ? off.reason : (busLikelyDark ? 'bus-dark' : 'unknown'),
                 offlineSource: off ? off.source : null,
                 offlineSince: off ? off.since : null,
                 error: off ? off.message : null
@@ -788,9 +801,33 @@ async function getAllServoStatus() {
             continue;
         }
 
+        // Bus has already shown silence this poll — fast-fail this servo too.
+        if (busLikelyDark) {
+            consecutiveReadFailures[i] += 1;
+            statuses.push({
+                joint: i + 1,
+                available: true,
+                degraded: true,
+                degradedReason: 'bus-dark',
+                degradedConsecutivePolls: consecutiveReadFailures[i],
+                degradedThreshold: null,
+                angleDegrees: (lastKnownGoodStatus[i] || {}).angleDegrees || 0,
+                position: (lastKnownGoodStatus[i] || {}).position || 0,
+                stepPosition: (lastKnownGoodStatus[i] || {}).stepPosition || 0,
+                speed: 0,
+                load: (lastKnownGoodStatus[i] || {}).load || 0,
+                voltage: (lastKnownGoodStatus[i] || {}).voltage || 0,
+                temperature: (lastKnownGoodStatus[i] || {}).temperature || 0,
+                isMoving: false,
+                torqueEnabled: (lastKnownGoodStatus[i] || {}).torqueEnabled || false,
+                error: 'bus-dark-skip'
+            });
+            continue;
+        }
+
         const startServo = Date.now();
 
-        // Try the bulk read with in-poll retries. RS-485 -7 (checksum) and
+        // Try the bulk read with in-poll retries. TTL-bus -7 (checksum) and
         // 120ms timeouts almost always succeed on the very next attempt; this
         // catches them inside one poll instead of dragging the joint through
         // the 5s revive cycle.
@@ -817,6 +854,13 @@ async function getAllServoStatus() {
                     await new Promise(r => setTimeout(r, READ_RETRY_GAP_MS));
                 }
             }
+        }
+
+        // After all retries: if it timed out (not a corrupt frame), the bus is
+        // likely silent. Skip the rest of this poll's servos to keep the
+        // bridge responsive instead of burning 720ms per servo.
+        if (!status && lastErrMsg && lastErrMsg.toLowerCase().includes('timeout')) {
+            busLikelyDark = true;
         }
 
         if (status) {
