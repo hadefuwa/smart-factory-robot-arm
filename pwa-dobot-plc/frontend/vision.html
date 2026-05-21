@@ -854,10 +854,17 @@
       const btn = document.getElementById('captureBtn');
       const status = document.getElementById('captureStatus');
       if (btn) btn.disabled = true;
-      if (status) { status.textContent = 'Capturing...'; status.className = 'text-xs text-info'; }
-      try {
+      if (status) { status.textContent = 'Pausing stream...'; status.className = 'text-xs text-info'; }
+
+      // M5Stack ESP32 HTTP server is single-client — stop the MJPEG proxy so
+      // the camera can answer /capture. Without this, /capture times out.
+      stopStream();
+
+      const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      async function attemptCapture() {
         const res = await fetch(`${API_BASE}/api/poe-camera/capture?_=${Date.now()}`, {
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(12000),
           cache: 'no-store'
         });
         if (!res.ok) {
@@ -865,7 +872,24 @@
           try { msg = (await res.json()).error || msg; } catch (_) {}
           throw new Error(msg);
         }
-        const blob = await res.blob();
+        return res.blob();
+      }
+
+      try {
+        // Give the proxy a moment to actually release the upstream TCP socket.
+        await waitMs(600);
+        if (status) { status.textContent = 'Capturing...'; status.className = 'text-xs text-info'; }
+
+        let blob;
+        try {
+          blob = await attemptCapture();
+        } catch (firstErr) {
+          // Single retry — camera sometimes needs a second to free the socket.
+          addDebugLog('capture retry after error', firstErr.message, 'warn');
+          await waitMs(900);
+          blob = await attemptCapture();
+        }
+
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
@@ -884,6 +908,8 @@
         addDebugLog('capture failed', e.message, 'error');
       } finally {
         if (btn) btn.disabled = false;
+        // Always resume the live preview, even on failure.
+        startStream();
       }
     }
 
