@@ -653,6 +653,14 @@
                   <div class="sf-vision-placeholder-title">Loading camera feed...</div>
                 </div>
               </div>
+
+              <div class="mt-3 flex items-center gap-2 flex-wrap">
+                <button class="btn btn-sm btn-primary gap-1" onclick="captureTrainingImage()" id="captureBtn">
+                  <i class="material-icons" style="font-size:1rem;line-height:1">photo_camera</i>
+                  Capture Training Image
+                </button>
+                <span id="captureStatus" class="text-xs text-base-content/60"></span>
+              </div>
             </article>
 
           </section>
@@ -839,6 +847,43 @@
         setTimeout(() => updateCameraFrame(true), 100);
       } catch (e) {
         addDebugLog('PoE camera apply error', e.message, 'error');
+      }
+    }
+
+    async function captureTrainingImage() {
+      const btn = document.getElementById('captureBtn');
+      const status = document.getElementById('captureStatus');
+      if (btn) btn.disabled = true;
+      if (status) { status.textContent = 'Capturing...'; status.className = 'text-xs text-info'; }
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/capture?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(10000),
+          cache: 'no-store'
+        });
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try { msg = (await res.json()).error || msg; } catch (_) {}
+          throw new Error(msg);
+        }
+        const blob = await res.blob();
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cube_${stamp}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (status) { status.textContent = `Saved cube_${stamp}.jpg (${(blob.size/1024).toFixed(0)} KB)`; status.className = 'text-xs text-success'; }
+        addDebugLog('training image saved', `${blob.size} bytes`);
+      } catch (e) {
+        if (status) { status.textContent = `Capture failed: ${e.message}`; status.className = 'text-xs text-error'; }
+        addDebugLog('capture failed', e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 

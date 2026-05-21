@@ -3515,6 +3515,32 @@ def poe_camera_stream():
         return jsonify({'error': str(exc)}), 503
 
 
+@app.route('/api/poe-camera/capture')
+def poe_camera_capture():
+    """Pull a single raw JPEG from the M5Stack PoE CAM-W /capture endpoint.
+
+    Used for AI training-image collection — returns the frame in the
+    camera's native orientation (unrotated) so it matches what
+    poe_vision_service feeds to YOLO at inference time.
+    """
+    config = load_config()
+    poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
+    if not poe_ip:
+        return jsonify({'error': 'PoE camera IP not configured.'}), 503
+    try:
+        upstream = requests.get(f'http://{poe_ip}/capture', timeout=5)
+        if upstream.status_code >= 400:
+            return jsonify({'error': f'PoE camera returned HTTP {upstream.status_code}'}), 502
+        response = Response(upstream.content, mimetype='image/jpeg')
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+    except requests.exceptions.ConnectionError:
+        return jsonify({'error': f'Cannot connect to PoE camera at {poe_ip}.'}), 503
+    except Exception as exc:
+        logger.error(f"PoE camera capture error: {exc}")
+        return jsonify({'error': str(exc)}), 503
+
+
 # DISABLED: Digital twin routes commented out to reduce CPU usage
 # def generate_digital_twin_frames():
 #     """Generator for digital twin MJPEG stream - same format as camera."""
