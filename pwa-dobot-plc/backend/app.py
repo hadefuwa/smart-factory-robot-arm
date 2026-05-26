@@ -10,6 +10,8 @@ import logging
 import math
 import os
 import time
+import socket
+import subprocess
 import threading
 import json
 import re
@@ -3506,44 +3508,67 @@ _poe_camera_probe_state = {
 # at the 2s probe interval), so a single network blip won't trip the PLC
 # alarm. Flip-to-connected is instant on any success.
 POE_CAMERA_PROBE_INTERVAL_S = 2.0
-POE_CAMERA_PROBE_TIMEOUT_S = 3.0
+POE_CAMERA_PROBE_TIMEOUT_S = 1.5
 POE_CAMERA_FAILURES_TO_DISCONNECT = 3
 
 
 def _poe_camera_probe_once() -> bool:
-    """Run one HTTP probe against the PoE camera /status endpoint. Updates
-    _poe_camera_probe_state and returns the current connected verdict
-    (after hysteresis). Never raises."""
+    """One ICMP-ping probe of the PoE camera. Updates _poe_camera_probe_state
+    and returns the current connected verdict (after hysteresis). Never raises.
+
+    Uses ICMP (shells out to /bin/ping) rather than TCP/HTTP because the
+    M5Stack's HTTP server AND its TCP accept-backlog are both single-flight:
+    while the vision pipeline is consuming /stream, no new HTTP requests and
+    no new TCP connections to port 80 succeed. ICMP echo is answered by the
+    ESP32 lwIP stack at the IP layer independently of the HTTP server state,
+    so it correctly answers 'is the camera on the network and powered?' even
+    while the camera is busy serving us video. Measured ~8ms response during
+    stream load.
+    """
     state = _poe_camera_probe_state
     state['last_probe_ts'] = time.time()
+
+    cfg = load_config()
+    poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
+    if not poe_ip:
+        state['connected'] = False
+        state['consecutive_failures'] = POE_CAMERA_FAILURES_TO_DISCONNECT
+        state['last_error'] = 'no IP configured'
+        return False
+
+    success = False
+    err_msg = None
     try:
-        cfg = load_config()
-        poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
-        if not poe_ip:
-            state['connected'] = False
-            state['consecutive_failures'] = POE_CAMERA_FAILURES_TO_DISCONNECT
-            state['last_error'] = 'no IP configured'
-            return False
-        r = requests.get(f'http://{poe_ip}/status', timeout=POE_CAMERA_PROBE_TIMEOUT_S)
-        if r.status_code < 500:
-            state['consecutive_failures'] = 0
-            state['last_success_ts'] = time.time()
-            state['last_error'] = None
-            if not state['connected']:
-                logger.info('PoE camera reachable again (status=%d)', r.status_code)
-            state['connected'] = True
+        # -c 1: one echo request. -W 2: 2-second wait for reply (per BusyBox/iputils
+        # ping; rounded up from our 1.5s budget). -n: no DNS. Use subprocess timeout
+        # as outer safety in case ping itself hangs.
+        result = subprocess.run(
+            ['ping', '-c', '1', '-W', '2', '-n', poe_ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=POE_CAMERA_PROBE_TIMEOUT_S + 1.5,
+        )
+        if result.returncode == 0:
+            success = True
         else:
-            state['consecutive_failures'] += 1
-            state['last_error'] = f'http {r.status_code}'
-            if state['connected'] and state['consecutive_failures'] >= POE_CAMERA_FAILURES_TO_DISCONNECT:
-                logger.warning(
-                    'PoE camera marked disconnected after %d consecutive failures (last: %s)',
-                    state['consecutive_failures'], state['last_error']
-                )
-                state['connected'] = False
+            err_msg = f'ping exit code {result.returncode}'
+    except subprocess.TimeoutExpired:
+        err_msg = f'ping process timeout for {poe_ip}'
+    except FileNotFoundError:
+        err_msg = "'ping' binary not found on PATH"
     except Exception as e:
+        err_msg = f'ping unexpected: {e}'
+
+    if success:
+        state['consecutive_failures'] = 0
+        state['last_success_ts'] = time.time()
+        state['last_error'] = None
+        if not state['connected']:
+            logger.info('PoE camera reachable again (icmp ping OK)')
+        state['connected'] = True
+    else:
         state['consecutive_failures'] += 1
-        state['last_error'] = str(e)
+        state['last_error'] = err_msg
         if state['connected'] and state['consecutive_failures'] >= POE_CAMERA_FAILURES_TO_DISCONNECT:
             logger.warning(
                 'PoE camera marked disconnected after %d consecutive failures (last: %s)',
@@ -3574,7 +3599,7 @@ def start_poe_camera_probe_thread():
     )
     t.start()
     logger.info(
-        'PoE camera probe thread started (interval=%ss, timeout=%ss, fail_threshold=%d)',
+        'PoE camera probe thread started (icmp ping, interval=%ss, timeout=%ss, fail_threshold=%d)',
         POE_CAMERA_PROBE_INTERVAL_S, POE_CAMERA_PROBE_TIMEOUT_S, POE_CAMERA_FAILURES_TO_DISCONNECT,
     )
 
