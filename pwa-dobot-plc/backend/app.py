@@ -1049,6 +1049,19 @@ def _position_logger_loop():
                                 resp = send_robot_arm_command({'command': 'getStatus'})
                                 xyz = resp.get('currentXYZ') or {}
                                 ax, ay, az = xyz.get('x'), xyz.get('y'), xyz.get('z')
+                                # Push fresh XYZ back to PLC DB125 so the auto-move
+                                # loop's tolerance check sees the arm's real position.
+                                # Without this, DB125 only updates when a browser polls
+                                # /api/robot-arm/status — so headless operation leaves
+                                # cache_xyz stale and the loop either thinks the arm
+                                # is always there (instant false success) or never
+                                # there (15s timeout → invalid_target). queue_robot_position
+                                # is idempotent (no-op if values unchanged).
+                                if ax is not None and ay is not None and az is not None:
+                                    try:
+                                        queue_robot_position(int(round(ax)), int(round(ay)), int(round(az)))
+                                    except Exception as qe:
+                                        logger.debug(f'position-logger PLC write skipped: {qe}')
                             finally:
                                 ws.settimeout(3)
                 except Exception:
