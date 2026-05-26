@@ -29,6 +29,7 @@ import struct
 import snap7.util
 import plc_integration
 from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position
+from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
 import poe_vision_service
@@ -334,7 +335,9 @@ def _send_safety_torque_off(reason: str):
     """
     if _safety_interlock['torque_killed']:
         return  # already killed — don't repeat unless state cleared
-    logger.warning('SAFETY INTERLOCK: %s — disabling robot arm torque', reason)
+    log_event('safety', 'interlock_triggered',
+              f'SAFETY INTERLOCK: {reason} — disabling robot arm torque',
+              severity=SEVERITY_WARN, reason=reason)
     _safety_interlock['torque_killed'] = True
     _safety_interlock['last_reason'] = reason
     try:
@@ -487,7 +490,9 @@ def _legacy_plc_auto_backend_tick_unused():
 
     # Safety cleared — reset interlock so we log again if it trips again later
     if _safety_interlock['torque_killed']:
-        logger.info('SAFETY INTERLOCK cleared (safety_ok=%s, arm_connected=%s)', safety_ok, arm_connected)
+        log_event('safety', 'interlock_cleared',
+                  f'safety interlock cleared (safety_ok={safety_ok}, arm_connected={arm_connected})',
+                  severity=SEVERITY_INFO, safety_ok=safety_ok, arm_connected=arm_connected)
         _safety_interlock['torque_killed'] = False
         _safety_interlock['last_reason'] = None
     # ─────────────────────────────────────────────────────────────────────────
@@ -602,7 +607,9 @@ def plc_auto_backend_tick():
         return
 
     if _safety_interlock['torque_killed']:
-        logger.info('SAFETY INTERLOCK cleared (safety_ok=%s, arm_connected=%s)', safety_ok, arm_connected)
+        log_event('safety', 'interlock_cleared',
+                  f'safety interlock cleared (safety_ok={safety_ok}, arm_connected={arm_connected})',
+                  severity=SEVERITY_INFO, safety_ok=safety_ok, arm_connected=arm_connected)
         _safety_interlock['torque_killed'] = False
         _safety_interlock['last_reason'] = None
 
@@ -648,7 +655,11 @@ def plc_auto_backend_tick():
 
     if active_target_key == target_key:
         if _target_position_reached(cache, x, y, z):
-            logger.info('PLC auto-move backend: target reached x=%s y=%s z=%s', x, y, z)
+            elapsed = time.time() - float(plc_auto_backend_state.get('active_target_set_at') or 0.0)
+            log_event('auto_move', 'target_reached',
+                      f'arm reached target x={x} y={y} z={z}',
+                      severity=SEVERITY_INFO, x=x, y=y, z=z, elapsed_sec=round(elapsed, 2),
+                      via_home=via_home)
             plc_auto_backend_state['active_target_key'] = None
             plc_auto_backend_state['active_target_set_at'] = 0.0
         else:
@@ -666,12 +677,16 @@ def plc_auto_backend_tick():
                     _dist = math.sqrt((float(_cx)-float(x))**2 + (float(_cy)-float(y))**2 + (float(_cz)-float(z))**2)
                 except Exception:
                     _dist = -1.0
-                logger.warning(
-                    'PLC auto-move backend: target x=%s y=%s z=%s did not reach tolerance '
-                    '(%.1fs > %.1fs timeout) — cache_xyz=(%s,%s,%s) dist=%.2fmm tol=%dmm — marking invalid_target',
-                    x, y, z, time.time() - set_at, PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S,
-                    _cx, _cy, _cz, _dist, PLC_AUTO_TARGET_TOLERANCE_MM
-                )
+                log_event('auto_move', 'target_timeout',
+                          f'arm did not reach target x={x} y={y} z={z} within {PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S}s',
+                          severity=SEVERITY_WARN,
+                          x=x, y=y, z=z,
+                          cache_x=_cx, cache_y=_cy, cache_z=_cz,
+                          distance_mm=round(_dist, 2),
+                          tolerance_mm=PLC_AUTO_TARGET_TOLERANCE_MM,
+                          elapsed_sec=round(time.time() - set_at, 2),
+                          via_home=via_home,
+                          marked_invalid_target=True)
                 plc_auto_backend_state['active_target_key'] = None
                 plc_auto_backend_state['active_target_set_at'] = 0.0
                 try:
@@ -752,15 +767,16 @@ def plc_auto_backend_tick():
                     except Exception:
                         pass
                     if via_home:
-                        logger.info(
-                            'PLC auto-move backend: routing via HOME (%s,%s,%s) en route to final (%s,%s,%s) speed=%s -> %s',
-                            x, y, z, x_final, y_final, z_final, speed, resp_type
-                        )
+                        log_event('auto_move', 'move_sent_via_home',
+                                  f'routing via HOME ({x},{y},{z}) en route to final ({x_final},{y_final},{z_final})',
+                                  severity=SEVERITY_INFO,
+                                  x=x, y=y, z=z, final_x=x_final, final_y=y_final, final_z=z_final,
+                                  speed=speed, response_type=resp_type)
                     else:
-                        logger.info(
-                            'PLC auto-move backend: sent target x=%s y=%s z=%s speed=%s -> %s',
-                            x, y, z, speed, resp_type
-                        )
+                        log_event('auto_move', 'move_sent',
+                                  f'sent target x={x} y={y} z={z}',
+                                  severity=SEVERITY_INFO,
+                                  x=x, y=y, z=z, speed=speed, response_type=resp_type)
                 except Exception as e:
                     plc_auto_backend_state['active_target_key'] = None
                     plc_auto_backend_state['active_target_set_at'] = 0.0
@@ -2284,12 +2300,19 @@ def close_robot_arm_bridge():
             ws.close()
         except Exception:
             pass
+    was_connected = bool(robot_arm_bridge_state.get('connected'))
     robot_arm_bridge_state['ws'] = None
     robot_arm_bridge_state['connected'] = False
     try:
         queue_robot_status(connected=False, busy=False)
     except Exception:
         pass
+    if was_connected:
+        log_event('robot', 'bridge_disconnected',
+                  'robot arm bridge WebSocket closed',
+                  severity=SEVERITY_WARN,
+                  host=robot_arm_bridge_state.get('host'),
+                  port=robot_arm_bridge_state.get('port'))
 
 
 def open_robot_arm_bridge(host: str, port: int):
@@ -2313,6 +2336,9 @@ def open_robot_arm_bridge(host: str, port: int):
         queue_robot_status(connected=True)
     except Exception:
         pass
+    log_event('robot', 'bridge_connected',
+              f'robot arm bridge connected to {host}:{port}',
+              severity=SEVERITY_INFO, host=host, port=port)
     return ws
 
 
@@ -2453,8 +2479,17 @@ def robot_arm_manual_override():
         enabled = bool(data.get('enabled', False))
         duration_sec = int(data.get('duration_sec') or 600)
         duration_sec = max(1, min(3600, duration_sec))
+        was_active = _manual_override_active()
         plc_manual_override_state['until'] = (time.time() + duration_sec) if enabled else 0.0
         plc_manual_override_state['source'] = 'web' if enabled else None
+        if enabled and not was_active:
+            log_event('manual', 'override_enabled',
+                      f'PLC auto-move paused for {duration_sec}s (source=web)',
+                      severity=SEVERITY_INFO, duration_sec=duration_sec, source='web')
+        elif not enabled and was_active:
+            log_event('manual', 'override_disabled',
+                      'PLC auto-move resumed (manual override cancelled)',
+                      severity=SEVERITY_INFO)
 
     return jsonify({
         'success': True,
@@ -3564,16 +3599,17 @@ def _poe_camera_probe_once() -> bool:
         state['last_success_ts'] = time.time()
         state['last_error'] = None
         if not state['connected']:
-            logger.info('PoE camera reachable again (icmp ping OK)')
+            log_event('camera', 'camera_reachable', 'PoE camera reachable again (icmp ping OK)',
+                      severity=SEVERITY_INFO, ip=poe_ip)
         state['connected'] = True
     else:
         state['consecutive_failures'] += 1
         state['last_error'] = err_msg
         if state['connected'] and state['consecutive_failures'] >= POE_CAMERA_FAILURES_TO_DISCONNECT:
-            logger.warning(
-                'PoE camera marked disconnected after %d consecutive failures (last: %s)',
-                state['consecutive_failures'], state['last_error']
-            )
+            log_event('camera', 'camera_disconnected',
+                      f'PoE camera marked disconnected after {state["consecutive_failures"]} consecutive failures',
+                      severity=SEVERITY_WARN, ip=poe_ip, last_error=state['last_error'],
+                      consecutive_failures=state['consecutive_failures'])
             state['connected'] = False
     return state['connected']
 
@@ -3610,6 +3646,34 @@ def _poe_camera_connected_provider() -> bool:
     probe thread doesn't trip a false alarm; the probe-thread loop has its
     own exception handling and a missing thread would show in journal."""
     return bool(_poe_camera_probe_state.get('connected', True))
+
+
+@app.route('/api/events')
+def get_events():
+    """Recent structured events from /home/pi/sf2/logs/events-*.jsonl.
+
+    Query params (all optional):
+      limit:    max rows to return (default 200, cap 2000)
+      since:    epoch seconds; rows with ts_epoch >= since are returned
+      category: filter to one category (camera, robot, plc, auto_move, safety, manual, system)
+      severity: filter to one severity (info, warn, error)
+
+    Returns newest-first."""
+    try:
+        limit = min(int(request.args.get('limit', 200)), 2000)
+    except Exception:
+        limit = 200
+    try:
+        since = float(request.args.get('since')) if request.args.get('since') else None
+    except Exception:
+        since = None
+    category = request.args.get('category') or None
+    severity = request.args.get('severity') or None
+    try:
+        events = read_recent_events(limit=limit, since_epoch=since, category=category, severity=severity)
+        return jsonify({'success': True, 'count': len(events), 'events': events})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/poe-camera/status')
@@ -6363,6 +6427,11 @@ if __name__ == '__main__':
         logger.info("HTTP only (no SSL certs - run deploy/generate_ssl_cert.sh for HTTPS)")
     
     logger.info(f"Starting server on port {port}")
+    # Marker so the event log timeline always shows when the backend (re)started —
+    # useful when diagnosing a sequence of incidents that may straddle a restart.
+    log_event('system', 'service_started',
+              f'smart-factory backend listening on port {port}',
+              severity=SEVERITY_INFO, port=port, https=bool(run_kwargs.get('ssl_context')))
     # Serve with Flask threaded WSGI for robust HTTP handling of long-lived MJPEG streams.
     # Socket.IO endpoints remain defined but are not used for transport in this mode.
     app.run(threaded=True, **run_kwargs)

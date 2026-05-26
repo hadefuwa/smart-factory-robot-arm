@@ -18,6 +18,14 @@ import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
+
+try:
+    from event_logger import log_event, SEVERITY_INFO, SEVERITY_WARN
+except Exception:  # pragma: no cover — keep worker importable if module missing
+    def log_event(*_args, **_kwargs):
+        pass
+    SEVERITY_INFO = 'info'
+    SEVERITY_WARN = 'warn'
 import snap7
 from snap7.util import get_bool, get_int, get_real, set_bool, set_real
 
@@ -706,6 +714,9 @@ class PLCWorker:
 
                 # Fire reconnect callback on False→True transition
                 if not _prev_plc_connected:
+                    log_event('plc', 'plc_connected',
+                              f'PLC reachable at {self.plc_ip}',
+                              severity=SEVERITY_INFO, ip=self.plc_ip, rack=self.rack, slot=self.slot)
                     if callable(self.on_plc_reconnect):
                         try:
                             self.on_plc_reconnect()
@@ -728,6 +739,10 @@ class PLCWorker:
                 except Exception as e:
                     logger.error(f"PLC DB read error: {e}", exc_info=True)
                     self.stats['read_errors'] += 1
+                    if _prev_plc_connected:
+                        log_event('plc', 'plc_disconnected',
+                                  f'PLC DB read failed at {self.plc_ip}',
+                                  severity=SEVERITY_WARN, ip=self.plc_ip, error=str(e))
                     # Mark as disconnected so the reconnect callback fires when reads recover
                     _prev_plc_connected = False
                     self._drop_client()
@@ -779,11 +794,17 @@ class PLCWorker:
                     descs = ''
                     if _write_qlen > 0:
                         descs = ' | ' + ', '.join(getattr(w, 'description', '?') or '?' for w in _writes_snapshot)
-                    logger.warning(
-                        f"Slow PLC cycle: {cycle_time_ms:.1f}ms "
-                        f"(reads={reads_ms:.0f} connstat={connstat_ms:.0f} "
-                        f"vision={vision_ms:.0f} writes={writes_ms:.0f}ms qlen={_write_qlen}){descs}"
-                    )
+                    log_event('plc', 'slow_cycle',
+                              f'PLC cycle {cycle_time_ms:.0f}ms (target {self.cycle_time_ms}ms)',
+                              severity=SEVERITY_WARN,
+                              cycle_time_ms=round(cycle_time_ms, 1),
+                              target_ms=self.cycle_time_ms,
+                              reads_ms=round(reads_ms, 0),
+                              connstat_ms=round(connstat_ms, 0),
+                              vision_ms=round(vision_ms, 0),
+                              writes_ms=round(writes_ms, 0),
+                              write_queue_len=_write_qlen,
+                              writes=descs.strip(' |'))
 
                 # 7. SLEEP TO MAINTAIN DETERMINISTIC CYCLE TIME
                 sleep_time = self.cycle_time_sec - (cycle_end - cycle_start)
