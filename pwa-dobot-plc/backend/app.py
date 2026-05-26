@@ -657,10 +657,18 @@ def plc_auto_backend_tick():
             # and applies exponential backoff so we don't busy-loop on it.
             set_at = float(plc_auto_backend_state.get('active_target_set_at') or 0.0)
             if set_at and (time.time() - set_at) > PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S:
+                _cx = cache.get('db125_x_position')
+                _cy = cache.get('db125_y_position')
+                _cz = cache.get('db125_z_position')
+                try:
+                    _dist = math.sqrt((float(_cx)-float(x))**2 + (float(_cy)-float(y))**2 + (float(_cz)-float(z))**2)
+                except Exception:
+                    _dist = -1.0
                 logger.warning(
                     'PLC auto-move backend: target x=%s y=%s z=%s did not reach tolerance '
-                    '(%.1fs > %.1fs timeout) — marking invalid_target',
-                    x, y, z, time.time() - set_at, PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S
+                    '(%.1fs > %.1fs timeout) — cache_xyz=(%s,%s,%s) dist=%.2fmm tol=%dmm — marking invalid_target',
+                    x, y, z, time.time() - set_at, PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S,
+                    _cx, _cy, _cz, _dist, PLC_AUTO_TARGET_TOLERANCE_MM
                 )
                 plc_auto_backend_state['active_target_key'] = None
                 plc_auto_backend_state['active_target_set_at'] = 0.0
