@@ -3648,6 +3648,86 @@ def _poe_camera_connected_provider() -> bool:
     return bool(_poe_camera_probe_state.get('connected', True))
 
 
+@app.route('/api/system/time', methods=['GET'])
+def get_system_time():
+    """Return the Pi's current system time. The Pi 5 has no battery-backed RTC
+    and the production network is air-gapped (no NTP reach to internet), so the
+    clock resets to a stale value at every boot. Dev UI uses this to detect
+    drift and prompt the operator to push browser time via /api/system/set-time."""
+    now = time.time()
+    return jsonify({
+        'success': True,
+        'epoch': now,
+        'iso': datetime.fromtimestamp(now).isoformat(timespec='seconds'),
+        'tz': time.tzname[0],
+    })
+
+
+@app.route('/api/system/set-time', methods=['POST'])
+def set_system_time():
+    """Set the Pi's system clock from a value provided by the browser.
+
+    Body: {"epoch": 1779260000.0}  OR  {"iso": "2026-05-26T12:58:00"}
+
+    Sanity-checks the value (must be between 2025 and 2050) and rejects nonsense
+    so a buggy caller can't pin the clock to 1970 or 9999. Requires sudoers
+    NOPASSWD entry for /usr/bin/date (deployed alongside this code via
+    deploy/sf2-clock-sudoers)."""
+    data = request.get_json(silent=True) or {}
+    epoch = data.get('epoch')
+    iso = data.get('iso')
+    if epoch is None and not iso:
+        return jsonify({'success': False, 'error': 'provide epoch or iso'}), 400
+    try:
+        if epoch is not None:
+            target_epoch = float(epoch)
+        else:
+            # Parse ISO 8601 / RFC 3339, allow Z suffix.
+            s = str(iso).replace('Z', '+00:00')
+            target_epoch = datetime.fromisoformat(s).timestamp()
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'unparseable time: {e}'}), 400
+
+    # Sanity window: 2025-01-01 to 2050-01-01 epoch range.
+    if not (1735689600 < target_epoch < 2524608000):
+        return jsonify({'success': False, 'error': 'time out of sane range (2025-2050)'}), 400
+
+    target_iso = datetime.fromtimestamp(target_epoch).strftime('%Y-%m-%d %H:%M:%S')
+    old_epoch = time.time()
+    try:
+        # -u/--utc would be ambiguous; we set local time in the Pi's configured TZ.
+        # sudo -n: fail rather than prompt if sudoers isn't set up.
+        result = subprocess.run(
+            ['sudo', '-n', '/usr/bin/date', '-s', target_iso],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return jsonify({
+                'success': False,
+                'error': f'date -s failed (exit {result.returncode})',
+                'stderr': result.stderr.strip(),
+                'hint': 'sudoers entry missing — see deploy/sf2-clock-sudoers',
+            }), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'date command timed out'}), 500
+    except FileNotFoundError:
+        return jsonify({'success': False, 'error': 'date binary not found'}), 500
+
+    log_event('system', 'clock_set',
+              f'Pi clock manually set to {target_iso} (delta {target_epoch - old_epoch:+.1f}s)',
+              severity=SEVERITY_INFO,
+              old_epoch=round(old_epoch, 1),
+              new_epoch=round(target_epoch, 1),
+              delta_sec=round(target_epoch - old_epoch, 1),
+              source=request.headers.get('User-Agent', 'unknown')[:80])
+    return jsonify({
+        'success': True,
+        'new_epoch': target_epoch,
+        'new_iso': datetime.fromtimestamp(target_epoch).isoformat(timespec='seconds'),
+        'delta_sec': round(target_epoch - old_epoch, 1),
+    })
+
+
 @app.route('/api/events')
 def get_events():
     """Recent structured events from /home/pi/sf2/logs/events-*.jsonl.

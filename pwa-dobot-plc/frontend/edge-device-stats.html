@@ -370,6 +370,33 @@
             <article class="sf-panel sf-edge-data-card">
               <header class="sf-panel-head">
                 <div>
+                  <h3>System Clock</h3>
+                  <p>Pi 5 has no battery-backed RTC and the 192.168.7.x network is air-gapped. Push your browser time after each reboot.</p>
+                </div>
+              </header>
+              <div class="sf-edge-summary-grid">
+                <div class="sf-edge-stat-chip">
+                  <span>Pi Time</span>
+                  <strong id="piClockTime">-</strong>
+                </div>
+                <div class="sf-edge-stat-chip">
+                  <span>Browser Time</span>
+                  <strong id="browserClockTime">-</strong>
+                </div>
+                <div class="sf-edge-stat-chip">
+                  <span>Offset</span>
+                  <strong id="clockOffset">-</strong>
+                </div>
+              </div>
+              <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center;">
+                <button id="syncClockBtn" class="btn btn-primary">Sync Pi clock to browser time</button>
+                <span id="syncClockStatus" style="font-size: 0.85em; color: #666;"></span>
+              </div>
+            </article>
+
+            <article class="sf-panel sf-edge-data-card">
+              <header class="sf-panel-head">
+                <div>
                   <h3>Detailed Runtime Stats</h3>
                   <p>Expanded CPU and memory information from the same edge device endpoint.</p>
                 </div>
@@ -495,6 +522,74 @@
 
     fetchStats();
     setInterval(fetchStats, 2000);
+
+    // ─── System clock panel ────────────────────────────────────────────────
+    // Pi 5 has no battery-backed RTC. After each reboot the clock starts at
+    // some stale value. Compare Pi time to browser time, surface the offset,
+    // and provide a one-click push so today's event log timestamps are right.
+    function formatOffset(seconds) {
+      var abs = Math.abs(seconds);
+      var sign = seconds >= 0 ? "+" : "-";
+      if (abs < 60) return sign + abs.toFixed(1) + "s";
+      if (abs < 3600) return sign + Math.floor(abs / 60) + "m " + Math.floor(abs % 60) + "s";
+      var hours = Math.floor(abs / 3600);
+      return sign + hours + "h " + Math.floor((abs % 3600) / 60) + "m";
+    }
+
+    function fetchPiClock() {
+      fetch("/api/system/time")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.success) return;
+          var piDate = new Date(data.epoch * 1000);
+          var now = new Date();
+          var offsetSec = (data.epoch * 1000 - now.getTime()) / 1000;
+          document.getElementById("piClockTime").textContent = piDate.toLocaleString();
+          document.getElementById("browserClockTime").textContent = now.toLocaleString();
+          var offsetEl = document.getElementById("clockOffset");
+          offsetEl.textContent = formatOffset(offsetSec);
+          // Visually flag drift > 5s — invisible above that, red below.
+          offsetEl.style.color = Math.abs(offsetSec) > 5 ? "#c0392b" : "";
+        })
+        .catch(function(e) {
+          document.getElementById("piClockTime").textContent = "err";
+        });
+    }
+
+    document.getElementById("syncClockBtn").addEventListener("click", function() {
+      var btn = this;
+      var statusEl = document.getElementById("syncClockStatus");
+      btn.disabled = true;
+      statusEl.textContent = "Syncing…";
+      statusEl.style.color = "#666";
+      fetch("/api/system/set-time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epoch: Date.now() / 1000 }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.success) {
+            statusEl.textContent = "OK — delta " + data.delta_sec + "s";
+            statusEl.style.color = "#27ae60";
+            fetchPiClock();
+          } else {
+            statusEl.textContent = "Failed: " + (data && data.error ? data.error : "unknown");
+            statusEl.style.color = "#c0392b";
+          }
+        })
+        .catch(function(e) {
+          statusEl.textContent = "Request failed: " + e.message;
+          statusEl.style.color = "#c0392b";
+        })
+        .finally(function() {
+          btn.disabled = false;
+          setTimeout(function() { statusEl.textContent = ""; }, 6000);
+        });
+    });
+
+    fetchPiClock();
+    setInterval(fetchPiClock, 2000);
   </script>
 </body>
 </html>

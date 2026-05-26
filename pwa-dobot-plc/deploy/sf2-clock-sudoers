@@ -1,0 +1,9 @@
+# Allow the pi user to set the system clock without a password prompt.
+# Required by /api/system/set-time so the dev UI can push browser time to
+# the Pi after each reboot (Pi 5 has no battery-backed RTC and the
+# 192.168.7.x network has no internet NTP source).
+#
+# Install with:
+#   sudo install -m 0440 -o root -g root sf2-clock-sudoers /etc/sudoers.d/sf2-clock
+#   sudo visudo -c -f /etc/sudoers.d/sf2-clock   # syntax-check
+pi ALL=(root) NOPASSWD: /usr/bin/date -s *
