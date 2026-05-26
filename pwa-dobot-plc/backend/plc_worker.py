@@ -238,6 +238,10 @@ class PLCWorker:
         # Called with no args whenever the PLC reconnects after a dropout
         self.on_plc_reconnect = None
         self.robot_connected_provider = None
+        # Optional callable: returns True/False for camera reachability.
+        # When set, overrides the legacy USB-camera isOpened() check below —
+        # the production camera is the PoE CAM-W, not a local USB device.
+        self.camera_connected_provider = None
 
         # Statistics
         self.stats = {
@@ -914,13 +918,18 @@ class PLCWorker:
 
     def _update_camera_connected(self):
         """Update camera connected status in PLC"""
-        if self.camera_service is None:
-            return
-
         try:
-            # Check actual camera status
             camera_connected = False
-            if hasattr(self.camera_service, 'lock') and hasattr(self.camera_service, 'camera'):
+            if callable(self.camera_connected_provider):
+                # PoE-camera path (production). The provider does its own
+                # throttling so this stays cheap on every PLC cycle.
+                try:
+                    camera_connected = bool(self.camera_connected_provider())
+                except Exception as e:
+                    logger.debug(f"camera_connected_provider raised: {e}")
+                    camera_connected = False
+            elif self.camera_service is not None and hasattr(self.camera_service, 'lock') and hasattr(self.camera_service, 'camera'):
+                # Legacy USB-camera fallback (kept for when USB is re-enabled).
                 with self.camera_service.lock:
                     camera_connected = (
                         self.camera_service.camera is not None

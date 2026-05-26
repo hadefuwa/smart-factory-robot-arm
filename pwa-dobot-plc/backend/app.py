@@ -1880,6 +1880,7 @@ def init_clients():
             db125_config=get_robot_db_config(config)
         )
         plc_worker.robot_connected_provider = lambda: bool(robot_arm_bridge_state.get('connected'))
+        plc_worker.camera_connected_provider = _make_poe_camera_reachability_probe()
         # Try to establish robot-arm bridge at startup so DB125.DBX0.0
         # can reflect real bridge connectivity even before UI polling starts.
         try:
@@ -3455,6 +3456,33 @@ def camera_stream():
     response.headers['Expires'] = '0'
     response.headers['X-Accel-Buffering'] = 'no'
     return response
+
+
+def _make_poe_camera_reachability_probe(ttl_sec: float = 5.0, http_timeout_sec: float = 1.5):
+    """Factory for a throttled PoE-camera reachability checker the PLC worker can
+    poll cheaply every cycle. Does a real HTTP probe at most once per ttl_sec;
+    in between, returns the cached result. Used to drive the camera-connected
+    bit in DB124."""
+    state = {'last_check': 0.0, 'connected': False}
+
+    def _probe():
+        now = time.time()
+        if now - state['last_check'] < ttl_sec:
+            return state['connected']
+        state['last_check'] = now
+        try:
+            cfg = load_config()
+            poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
+            if not poe_ip:
+                state['connected'] = False
+                return False
+            r = requests.get(f'http://{poe_ip}/status', timeout=http_timeout_sec)
+            state['connected'] = r.status_code < 500
+        except Exception:
+            state['connected'] = False
+        return state['connected']
+
+    return _probe
 
 
 @app.route('/api/poe-camera/status')
