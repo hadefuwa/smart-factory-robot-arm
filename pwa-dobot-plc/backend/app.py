@@ -1013,6 +1013,67 @@ def _ensure_position_log_initialised():
         logger.warning(f'Position log init failed: {e}')
 
 
+def _writeback_bridge_status_to_plc(response: dict) -> None:
+    """Mirror a bridge getStatus response into PLC DB125 — position, fault
+    aggregates, and the connected bit. The product runs headless (no browser),
+    so this writeback MUST be driven by a backend thread, not by frontend polling.
+    Called by both the position-logger thread (2 Hz, headless source of truth)
+    and the /api/robot-arm/status route (dev UI), so the route's writeback is
+    pure redundancy — closing the browser doesn't break production behaviour.
+
+    All queue_* helpers are idempotent (skip enqueue when values unchanged),
+    so calling this on every tick adds no PLC writes when nothing has changed."""
+    if not isinstance(response, dict):
+        return
+    joints = response.get('joints') or []
+    available_joints = [j for j in joints if j.get('available', False)]
+
+    # 1. Connected bit: bridge WebSocket up but ALL servos silent → mark
+    # disconnected so the PLC's safety interlock can react. Otherwise refresh
+    # connected=True so a PLC reboot doesn't leave the bit stuck at 0.
+    try:
+        if len(joints) > 0 and len(available_joints) == 0:
+            queue_robot_status(connected=False, busy=False)
+        else:
+            queue_robot_status(connected=True)
+    except Exception as e:
+        logger.debug(f'status writeback skipped: {e}')
+
+    # 2. Fault aggregates from available joints only — unavailable servos
+    # report 0V/0°C and would skew min/max.
+    try:
+        cfg = load_config().get('robot_arm_faults', {})
+        temp_max = float(cfg.get('temp_max_c', 60))
+        volt_min = float(cfg.get('voltage_min_v', 7.0))
+        load_max = float(cfg.get('load_max_pct', 80))
+        any_moving    = any(j.get('isMoving', False) for j in available_joints)
+        any_overtemp  = any(j.get('temperature', 0) > temp_max for j in available_joints)
+        any_undervolt = any(j.get('voltage', 99) < volt_min for j in available_joints)
+        any_overload  = any(j.get('load', 0) > load_max for j in available_joints)
+        max_temperature_value = max((float(j.get('temperature', 0.0) or 0.0) for j in available_joints), default=0.0)
+        min_voltage_value     = min((float(j.get('voltage', 0.0) or 0.0) for j in available_joints), default=0.0)
+        max_load_pct_value    = max((float(j.get('load', 0.0) or 0.0) for j in available_joints), default=0.0)
+        queue_robot_faults(
+            any_moving=any_moving,
+            any_overload=any_overload,
+            any_undervoltage=any_undervolt,
+            any_overtemp=any_overtemp,
+            max_temperature=max_temperature_value,
+            min_voltage=min_voltage_value,
+            max_load_pct=max_load_pct_value,
+        )
+    except Exception as fe:
+        logger.debug(f'fault writeback skipped: {fe}')
+
+    # 3. Current XYZ — the input the auto-move tolerance check reads from cache.
+    try:
+        xyz = response.get('currentXYZ') or {}
+        if xyz.get('x') is not None and xyz.get('y') is not None and xyz.get('z') is not None:
+            queue_robot_position(int(round(xyz['x'])), int(round(xyz['y'])), int(round(xyz['z'])))
+    except Exception as pe:
+        logger.debug(f'position writeback skipped: {pe}')
+
+
 def _position_logger_loop():
     """Background thread: append a CSV row (PLC target vs arm current XYZ + distance)
     every _POSITION_LOG_INTERVAL_S seconds. The CSV file lives at
@@ -1049,19 +1110,10 @@ def _position_logger_loop():
                                 resp = send_robot_arm_command({'command': 'getStatus'})
                                 xyz = resp.get('currentXYZ') or {}
                                 ax, ay, az = xyz.get('x'), xyz.get('y'), xyz.get('z')
-                                # Push fresh XYZ back to PLC DB125 so the auto-move
-                                # loop's tolerance check sees the arm's real position.
-                                # Without this, DB125 only updates when a browser polls
-                                # /api/robot-arm/status — so headless operation leaves
-                                # cache_xyz stale and the loop either thinks the arm
-                                # is always there (instant false success) or never
-                                # there (15s timeout → invalid_target). queue_robot_position
-                                # is idempotent (no-op if values unchanged).
-                                if ax is not None and ay is not None and az is not None:
-                                    try:
-                                        queue_robot_position(int(round(ax)), int(round(ay)), int(round(az)))
-                                    except Exception as qe:
-                                        logger.debug(f'position-logger PLC write skipped: {qe}')
+                                # Headless source of truth for PLC writeback —
+                                # position, faults, connected bit. See
+                                # _writeback_bridge_status_to_plc for rationale.
+                                _writeback_bridge_status_to_plc(resp)
                             finally:
                                 ws.settimeout(3)
                 except Exception:
@@ -2439,10 +2491,13 @@ def robot_arm_status():
 
             joints = response.get('joints', [])
             available_joints = [joint for joint in joints if joint.get('available', False)]
+
+            # Mirror bridge status into PLC DB125 (position, faults, connected bit).
+            # The position-logger thread does the same on a 2 Hz tick — this call
+            # is redundancy for the dev UI path. All queue_* are idempotent.
+            _writeback_bridge_status_to_plc(response)
+
             if len(joints) > 0 and len(available_joints) == 0:
-                # Bridge websocket is still up, but no servo status is readable.
-                # Treat this as a disconnected robot state for API consumers.
-                queue_robot_status(connected=False, busy=False)
                 robot_arm_bridge_state['last_error'] = 'Robot arm bridge connected but all servos unavailable'
                 return jsonify({
                     'success': False,
@@ -2454,54 +2509,6 @@ def robot_arm_status():
                     'manual_override_active': _manual_override_active(),
                     'manual_override_remaining_seconds': _manual_override_remaining_seconds(),
                 }), 503
-
-            # Compute servo fault aggregates and push to PLC
-            try:
-                cfg = load_config().get('robot_arm_faults', {})
-                temp_max   = float(cfg.get('temp_max_c',    60))
-                volt_min   = float(cfg.get('voltage_min_v', 7.0))
-                load_max   = float(cfg.get('load_max_pct',  80))
-                available = available_joints
-
-                any_moving    = any(j.get('isMoving', False) for j in available)
-                any_overtemp  = any(j.get('temperature', 0) > temp_max for j in available)
-                any_undervolt = any(j.get('voltage', 99) < volt_min for j in available)
-                any_overload  = any(j.get('load', 0) > load_max for j in available)
-
-                max_temperature_value = max((float(j.get('temperature', 0.0) or 0.0) for j in available), default=0.0)
-                min_voltage_value = min((float(j.get('voltage', 0.0) or 0.0) for j in available), default=0.0)
-                max_load_pct_value = max((float(j.get('load', 0.0) or 0.0) for j in available), default=0.0)
-
-                queue_robot_faults(
-                    any_moving=any_moving,
-                    any_overload=any_overload,
-                    any_undervoltage=any_undervolt,
-                    any_overtemp=any_overtemp,
-                    max_temperature=max_temperature_value,
-                    min_voltage=min_voltage_value,
-                    max_load_pct=max_load_pct_value,
-                )
-            except Exception as fe:
-                logger.warning(f"Fault aggregation error: {fe}")
-
-            # Refresh connected bit on every successful poll so a PLC reset
-            # doesn't leave it stuck at 0 (PLC DB125 resets to zeros on reboot)
-            try:
-                queue_robot_status(connected=True)
-            except Exception:
-                pass
-
-            # Write current XYZ position (bytes 16/18/20) to DB125
-            try:
-                xyz = response.get('currentXYZ') or {}
-                if xyz.get('x') is not None:
-                    queue_robot_position(
-                        int(round(xyz['x'])),
-                        int(round(xyz['y'])),
-                        int(round(xyz['z'])),
-                    )
-            except Exception as pe:
-                logger.warning(f"Position write to PLC failed: {pe}")
 
             return jsonify({
                 'success': True,
