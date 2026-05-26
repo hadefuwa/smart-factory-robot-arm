@@ -1953,7 +1953,10 @@ def init_clients():
             db125_config=get_robot_db_config(config)
         )
         plc_worker.robot_connected_provider = lambda: bool(robot_arm_bridge_state.get('connected'))
-        plc_worker.camera_connected_provider = _make_poe_camera_reachability_probe()
+        # Start the PoE-camera probe thread BEFORE wiring the provider so the
+        # first PLC cycle reads a real verdict rather than the initial default.
+        start_poe_camera_probe_thread()
+        plc_worker.camera_connected_provider = _poe_camera_connected_provider
         # Try to establish robot-arm bridge at startup so DB125.DBX0.0
         # can reflect real bridge connectivity even before UI polling starts.
         try:
@@ -3486,47 +3489,124 @@ def camera_stream():
     return response
 
 
-def _make_poe_camera_reachability_probe(ttl_sec: float = 5.0, http_timeout_sec: float = 1.5):
-    """Factory for a throttled PoE-camera reachability checker the PLC worker can
-    poll cheaply every cycle. Does a real HTTP probe at most once per ttl_sec;
-    in between, returns the cached result. Used to drive the camera-connected
-    bit in DB124."""
-    state = {'last_check': 0.0, 'connected': False}
+# PoE-camera reachability state — updated by a dedicated background thread,
+# read non-blockingly by the PLC worker every cycle. Keeping the HTTP probe
+# OFF the PLC worker thread is critical: a synchronous probe in-cycle blocked
+# the 100ms PLC loop for the full HTTP timeout (~1.5s) whenever the camera
+# was momentarily busy serving its MJPEG stream, causing PLC-cycle stalls
+# and false camera-disconnect flips.
+_poe_camera_probe_state = {
+    'connected': True,           # Start optimistic — flips false only after consecutive failures
+    'consecutive_failures': 0,
+    'last_success_ts': 0.0,
+    'last_probe_ts': 0.0,
+    'last_error': None,
+}
+# Tunables. Flip-to-disconnected requires 3 consecutive misses (~6s window
+# at the 2s probe interval), so a single network blip won't trip the PLC
+# alarm. Flip-to-connected is instant on any success.
+POE_CAMERA_PROBE_INTERVAL_S = 2.0
+POE_CAMERA_PROBE_TIMEOUT_S = 3.0
+POE_CAMERA_FAILURES_TO_DISCONNECT = 3
 
-    def _probe():
-        now = time.time()
-        if now - state['last_check'] < ttl_sec:
-            return state['connected']
-        state['last_check'] = now
-        try:
-            cfg = load_config()
-            poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
-            if not poe_ip:
-                state['connected'] = False
-                return False
-            r = requests.get(f'http://{poe_ip}/status', timeout=http_timeout_sec)
-            state['connected'] = r.status_code < 500
-        except Exception:
+
+def _poe_camera_probe_once() -> bool:
+    """Run one HTTP probe against the PoE camera /status endpoint. Updates
+    _poe_camera_probe_state and returns the current connected verdict
+    (after hysteresis). Never raises."""
+    state = _poe_camera_probe_state
+    state['last_probe_ts'] = time.time()
+    try:
+        cfg = load_config()
+        poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
+        if not poe_ip:
             state['connected'] = False
-        return state['connected']
+            state['consecutive_failures'] = POE_CAMERA_FAILURES_TO_DISCONNECT
+            state['last_error'] = 'no IP configured'
+            return False
+        r = requests.get(f'http://{poe_ip}/status', timeout=POE_CAMERA_PROBE_TIMEOUT_S)
+        if r.status_code < 500:
+            state['consecutive_failures'] = 0
+            state['last_success_ts'] = time.time()
+            state['last_error'] = None
+            if not state['connected']:
+                logger.info('PoE camera reachable again (status=%d)', r.status_code)
+            state['connected'] = True
+        else:
+            state['consecutive_failures'] += 1
+            state['last_error'] = f'http {r.status_code}'
+            if state['connected'] and state['consecutive_failures'] >= POE_CAMERA_FAILURES_TO_DISCONNECT:
+                logger.warning(
+                    'PoE camera marked disconnected after %d consecutive failures (last: %s)',
+                    state['consecutive_failures'], state['last_error']
+                )
+                state['connected'] = False
+    except Exception as e:
+        state['consecutive_failures'] += 1
+        state['last_error'] = str(e)
+        if state['connected'] and state['consecutive_failures'] >= POE_CAMERA_FAILURES_TO_DISCONNECT:
+            logger.warning(
+                'PoE camera marked disconnected after %d consecutive failures (last: %s)',
+                state['consecutive_failures'], state['last_error']
+            )
+            state['connected'] = False
+    return state['connected']
 
-    return _probe
+
+def _poe_camera_probe_loop():
+    """Background thread that probes the PoE camera every
+    POE_CAMERA_PROBE_INTERVAL_S seconds and updates _poe_camera_probe_state.
+    The PLC worker's camera_connected_provider just reads state['connected']
+    — sub-microsecond, never blocks the PLC cycle."""
+    while True:
+        try:
+            _poe_camera_probe_once()
+        except Exception as e:
+            logger.warning('PoE camera probe loop iteration crashed: %s', e)
+        time.sleep(POE_CAMERA_PROBE_INTERVAL_S)
+
+
+def start_poe_camera_probe_thread():
+    t = threading.Thread(
+        target=_poe_camera_probe_loop,
+        daemon=True,
+        name='poe-camera-probe',
+    )
+    t.start()
+    logger.info(
+        'PoE camera probe thread started (interval=%ss, timeout=%ss, fail_threshold=%d)',
+        POE_CAMERA_PROBE_INTERVAL_S, POE_CAMERA_PROBE_TIMEOUT_S, POE_CAMERA_FAILURES_TO_DISCONNECT,
+    )
+
+
+def _poe_camera_connected_provider() -> bool:
+    """Non-blocking read of the latest probe verdict — safe to call from the
+    PLC worker every cycle. Returns True even after staleness so a crashed
+    probe thread doesn't trip a false alarm; the probe-thread loop has its
+    own exception handling and a missing thread would show in journal."""
+    return bool(_poe_camera_probe_state.get('connected', True))
 
 
 @app.route('/api/poe-camera/status')
 def poe_camera_status():
-    """Check M5Stack PoE CAM-W connectivity and return saved config."""
+    """Return the camera-reachability verdict from the background probe thread.
+    Does NOT do its own HTTP call — the probe thread is the single source of
+    truth so this endpoint never blocks and never disagrees with what the PLC
+    sees in DB124."""
     config = load_config()
     poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
     if not poe_ip:
         return jsonify({'configured': False, 'connected': False, 'ip': ''})
-    connected = False
-    try:
-        r = requests.get(f'http://{poe_ip}/capture', timeout=3)
-        connected = r.status_code < 500
-    except Exception:
-        pass
-    return jsonify({'configured': True, 'connected': connected, 'ip': poe_ip})
+    state = _poe_camera_probe_state
+    return jsonify({
+        'configured': True,
+        'connected': bool(state.get('connected', False)),
+        'ip': poe_ip,
+        'consecutive_failures': int(state.get('consecutive_failures', 0)),
+        'last_success_age_sec': round(time.time() - float(state.get('last_success_ts') or 0.0), 2) if state.get('last_success_ts') else None,
+        'last_probe_age_sec': round(time.time() - float(state.get('last_probe_ts') or 0.0), 2) if state.get('last_probe_ts') else None,
+        'last_error': state.get('last_error'),
+    })
 
 
 @app.route('/api/poe-camera/stream')
