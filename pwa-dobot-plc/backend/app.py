@@ -223,6 +223,19 @@ POE_DEBOUNCE_CYCLES    = 2         # consecutive cycles required before PLC bits
 _poe_dominant_streak = {'yellow_cube': 0, 'purple_cube': 0, 'metal_cube': 0, None: 0}
 _poe_confirmed_dominant = None
 
+# Shared state between the frame-pump thread and the inference thread.
+# The pump owns the M5Stack's single-client HTTP slot and pushes the latest
+# cropped+unmasked frame here; the inference thread snapshots it, masks +
+# runs YOLO, and writes the resulting detections back. The pump then
+# overlays those (potentially stale by up to ~POE_LOOP_INTERVAL_S) on every
+# fresh raw frame it caches — so the HMI stream visually updates at pump
+# cadence (~3-5 Hz) while detection accuracy stays identical to the old
+# single-threaded loop.
+_poe_frame_lock         = threading.Lock()
+_poe_latest_unmasked    = None      # numpy BGR array, cropped, no mask applied
+_poe_latest_detections  = []        # last detection list from inference thread
+_poe_pump_thread        = None
+
 
 def _cached_mjpeg_generator(get_jpeg, idle_sleep_s: float = 0.1, keepalive_max_s: float = 5.0):
     """Yield multipart/x-mixed-replace frames from a cached-jpeg getter.
@@ -5044,71 +5057,116 @@ def poe_vision_annotated():
                     headers={'Cache-Control': 'no-store'})
 
 
-def _poe_detection_loop():
-    """Always-on YOLO detection loop. Runs on a daemon thread.
+def _poe_pump_loop():
+    """Frame-pump thread. Owns the M5Stack's single-client HTTP slot.
 
-    Pulls a frame from the M5Stack PoE CAM every POE_LOOP_INTERVAL_S seconds,
-    runs the cube detector, caches the raw + annotated JPEGs and the JSON
-    result, and queues PLC DB124 cube-detected bits (yellow / purple / metal)
-    based on the dominant class.
+    Hammers /capture back-to-back (paced only by HTTP latency and a tiny
+    floor sleep) and pushes:
+      * the cropped+unmasked frame into _poe_latest_unmasked for the
+        inference thread to pick up,
+      * the masked JPEG into _poe_loop_raw_jpeg (training-data cache —
+        deliberately masked so Capture Training Image matches the pixels
+        YOLO actually sees),
+      * the unmasked frame with the last inference's detection boxes
+        re-drawn on top, encoded as _poe_loop_anno_jpeg (HMI stream).
 
-    Owns the camera's single-client HTTP slot — other handlers read caches.
-    Honours the _poe_loop_pause_until epoch-seconds gate so /api/poe-camera/
-    capture can briefly cut in for a fresh raw frame.
+    Detection accuracy is unaffected because YOLO still runs on the masked
+    frame in the inference thread at POE_LOOP_INTERVAL_S cadence. The boxes
+    overlaid here lag by up to one inference cycle.
     """
-    global _poe_loop_result, _poe_loop_raw_jpeg, _poe_loop_anno_jpeg
-    logger.info("PoE detection loop starting (interval=%.1fs)", POE_LOOP_INTERVAL_S)
-    # Give the YOLO model load thread a head start.
+    global _poe_loop_raw_jpeg, _poe_loop_anno_jpeg, _poe_latest_unmasked
+    logger.info("PoE frame-pump starting")
+    # Give the inference thread + YOLO model load a head start.
+    time.sleep(0.5)
+
+    while True:
+        cycle_start = time.time()
+        try:
+            now = time.time()
+            if now < _poe_loop_pause_until:
+                time.sleep(min(0.5, _poe_loop_pause_until - now))
+                continue
+
+            cfg    = load_config()
+            poe_ip = str(cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
+
+            frame = poe_vision_service.fetch_frame(poe_ip, timeout=4)
+            if frame is None:
+                # Camera unreachable — back off a bit so we don't spin.
+                time.sleep(0.5)
+                continue
+
+            frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
+            frame_unmasked = frame.copy()
+
+            mask_cfg = cfg.get('poe_camera', {}).get('mask')
+            frame_masked = poe_vision_service.apply_mask(frame_unmasked, mask_cfg)
+
+            # Hand the unmasked frame to the inference thread.
+            with _poe_frame_lock:
+                _poe_latest_unmasked = frame_unmasked
+                cached_detections = list(_poe_latest_detections)
+
+            # Raw cache (masked) for Capture Training Image.
+            ok_raw, raw_buf = cv2.imencode('.jpg', frame_masked, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            if ok_raw:
+                with _poe_loop_lock:
+                    _poe_loop_raw_jpeg = bytes(raw_buf)
+
+            # Annotated cache (unmasked + most-recent detection boxes) for HMI stream.
+            annotated = poe_vision_service.draw_detections(frame_unmasked, cached_detections)
+            ok_anno, anno_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            if ok_anno:
+                with _poe_loop_lock:
+                    _poe_loop_anno_jpeg = bytes(anno_buf)
+
+        except Exception as e:
+            logger.warning(f"PoE pump iteration failed: {e}")
+
+        # Floor sleep so we never busy-loop when the camera responds
+        # instantly. M5Stack /capture latency typically gates this naturally.
+        elapsed = time.time() - cycle_start
+        time.sleep(max(0.05, 0.15 - elapsed))
+
+
+def _poe_detection_loop():
+    """YOLO inference thread. Reads the latest unmasked frame from the
+    pump's shared state, masks + runs YOLO at POE_LOOP_INTERVAL_S cadence,
+    and writes detections back for the pump to overlay on each new frame.
+
+    Also owns: PLC DB124 cube-detected bits + debounce, JSON result cache.
+    Does NOT touch the camera directly — only the pump fetches from /capture
+    — so the M5Stack's single-client HTTP slot only ever has one consumer.
+    """
+    global _poe_loop_result, _poe_latest_detections
+    logger.info("PoE inference loop starting (interval=%.1fs)", POE_LOOP_INTERVAL_S)
+    # Give the model load thread a head start.
     time.sleep(2.0)
 
     while True:
         loop_started = time.time()
         try:
-            now = time.time()
-            if now < _poe_loop_pause_until:
-                time.sleep(min(POE_LOOP_INTERVAL_S, _poe_loop_pause_until - now))
-                continue
+            cfg  = load_config()
+            conf = float(cfg.get('poe_camera', {}).get('conf', 0.30))
 
-            cfg     = load_config()
-            poe_ip  = str(cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
-            conf    = float(cfg.get('poe_camera', {}).get('conf', 0.30))
+            with _poe_frame_lock:
+                unmasked = _poe_latest_unmasked
+                if unmasked is not None:
+                    unmasked = unmasked.copy()
 
-            frame = poe_vision_service.fetch_frame(poe_ip, timeout=4)
-            if frame is None:
+            if unmasked is None:
+                # Pump hasn't produced a frame yet — surface a hint and back off.
                 with _poe_loop_lock:
                     _poe_loop_result = {
                         'ok': False, 'error': 'camera_unreachable',
                         'detections': [], 'timestamp': time.time(),
                     }
-                time.sleep(POE_LOOP_INTERVAL_S)
+                time.sleep(0.5)
                 continue
 
-            # Crop BEFORE everything downstream — annotated frame, raw cache,
-            # YOLO input. config.poe_camera.crop drives the trim percentages.
-            frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
-            # Snapshot the cropped-but-unmasked frame. The mask is an inference
-            # preprocessing trick (kills false positives over the sorted-cube
-            # row); the HMI stream and the raw cache shouldn't have the black
-            # bar burned in. We keep this for the annotated-cache draw_on so
-            # the HMI sees the full camera view + bounding boxes.
-            frame_unmasked = frame.copy()
-            # Mask paints solid colour over edges WITHOUT changing dimensions —
-            # use this instead of crop when you want to hide a region without
-            # disturbing the trained model's expected aspect ratio.
             mask_cfg = cfg.get('poe_camera', {}).get('mask')
-            frame = poe_vision_service.apply_mask(frame, mask_cfg)
-            # Keep-box drops detections whose centre is in the masked region
-            # — kills phantom detections that fit to the hard mask boundary.
-            keep_box = poe_vision_service.keep_box_from_mask(frame.shape, mask_cfg)
-
-            # Raw cache stays masked deliberately: the Capture Training Image
-            # button serves this jpeg, and training images need to match the
-            # exact pixels YOLO sees in production. The annotated cache uses
-            # draw_on=frame_unmasked below so the HMI stream is mask-free.
-            ok_raw, raw_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
-            if ok_raw:
-                with _poe_loop_lock:
-                    _poe_loop_raw_jpeg = bytes(raw_buf)
+            masked = poe_vision_service.apply_mask(unmasked, mask_cfg)
+            keep_box = poe_vision_service.keep_box_from_mask(masked.shape, mask_cfg)
 
             if not poe_vision_service.is_ready():
                 if not poe_vision_service.load_model():
@@ -5122,16 +5180,14 @@ def _poe_detection_loop():
 
             class_conf = cfg.get('poe_camera', {}).get('class_conf') or None
             result    = poe_vision_service.detect_cubes(
-                frame, conf=conf, keep_box=keep_box, class_conf=class_conf,
-                draw_on=frame_unmasked,
+                masked, conf=conf, keep_box=keep_box, class_conf=class_conf,
             )
-            annotated = result.pop('annotated', None)
+            # Drop the inline annotated frame — the pump owns the cache.
+            result.pop('annotated', None)
 
-            if annotated is not None:
-                ok_anno, anno_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
-                if ok_anno:
-                    with _poe_loop_lock:
-                        _poe_loop_anno_jpeg = bytes(anno_buf)
+            # Publish the fresh detection list so the pump can overlay it.
+            with _poe_frame_lock:
+                _poe_latest_detections = list(result.get('detections', []))
 
             result['timestamp'] = time.time()
 
@@ -5175,12 +5231,21 @@ def _poe_detection_loop():
 
 
 def start_poe_detection_loop():
-    """Spawn the always-on PoE detection loop daemon thread (idempotent)."""
-    global _poe_loop_thread
-    if _poe_loop_thread is not None and _poe_loop_thread.is_alive():
-        return
-    _poe_loop_thread = threading.Thread(target=_poe_detection_loop, daemon=True, name='poe-detect-loop')
-    _poe_loop_thread.start()
+    """Spawn the PoE frame-pump and inference daemon threads (idempotent).
+
+    Two threads:
+      * pump  — fetches /capture as fast as possible, refreshes the raw +
+                annotated JPEG caches at camera HTTP cadence (~3-5 Hz).
+      * infer — runs YOLO on the latest pumped frame every
+                POE_LOOP_INTERVAL_S and publishes detections back to the pump.
+    """
+    global _poe_loop_thread, _poe_pump_thread
+    if _poe_pump_thread is None or not _poe_pump_thread.is_alive():
+        _poe_pump_thread = threading.Thread(target=_poe_pump_loop, daemon=True, name='poe-pump-loop')
+        _poe_pump_thread.start()
+    if _poe_loop_thread is None or not _poe_loop_thread.is_alive():
+        _poe_loop_thread = threading.Thread(target=_poe_detection_loop, daemon=True, name='poe-detect-loop')
+        _poe_loop_thread.start()
 
 
 # DISABLED (USB / color-voting retired): @app.route('/api/vision/latest-cycle', methods=['GET'])

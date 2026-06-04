@@ -211,6 +211,36 @@ def keep_box_from_mask(frame_shape, mask_cfg):
     )
 
 
+def draw_detections(frame, detections):
+    """Draw bounding boxes for a list of detections onto a copy of `frame`.
+
+    Each detection is expected to look like the dicts returned by
+    detect_cubes: keys x, y, width, height, class, confidence. Used by the
+    frame-pump thread to overlay the most-recent inference result onto each
+    freshly-pulled raw frame, so the HMI stream updates at pump cadence
+    even while inference cadence stays at POE_LOOP_INTERVAL_S.
+    """
+    import cv2
+    out = frame.copy()
+    if not detections:
+        return out
+    for d in detections:
+        x1 = int(d.get('x', 0))
+        y1 = int(d.get('y', 0))
+        x2 = x1 + int(d.get('width', 0))
+        y2 = y1 + int(d.get('height', 0))
+        label = str(d.get('class', ''))
+        conf_v = float(d.get('confidence', 0.0))
+        colour = CUBE_COLOURS.get(label, (0, 255, 0))
+        cv2.rectangle(out, (x1, y1), (x2, y2), colour, 2)
+        text = f"{label} {conf_v:.0%}"
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw + 4, y1), colour, -1)
+        cv2.putText(out, text, (x1 + 2, y1 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1)
+    return out
+
+
 # ── Inference ─────────────────────────────────────────────────────────────────
 def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None, class_conf=None, draw_on=None):
     """
