@@ -946,6 +946,31 @@
       const ip = (document.getElementById('poeCameraIp') || {}).value || '192.168.7.6';
 
       document.getElementById('poeModelMissingWarning').style.display = 'none';
+      const _showDetectError = (msg) => {
+        const ph = document.getElementById('poeAnnotatedPlaceholder');
+        const img = document.getElementById('poeAnnotatedImg');
+        if (img) img.style.display = 'none';
+        if (ph) {
+          ph.style.display = 'flex';
+          ph.innerHTML = `
+            <div class="sf-vision-camera-error">
+              <i class="material-icons sf-vision-inline-icon is-large">videocam_off</i>
+              <p class="sf-vision-placeholder-title">${msg.title}</p>
+              <p class="sf-vision-placeholder-copy">${msg.copy}</p>
+            </div>
+          `;
+        }
+      };
+
+      // M5Stack ESP32 HTTP server is single-client. While /stream is open the
+      // backend's /capture call inside run_on_poe_cam() will time out as
+      // "camera_unreachable". Stop the live preview, run detect, then resume.
+      // _poeLoopTimer presence signals the Auto loop is driving — in that case
+      // the loop manages stream pause/resume itself.
+      const _autoMode = Boolean(_poeLoopTimer);
+      if (!_autoMode) stopStream();
+      const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+      if (!_autoMode) await waitMs(450);
 
       let result;
       try {
@@ -953,23 +978,40 @@
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ip, conf}),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(12000),
         });
         result = await res.json();
         if (res.status === 503) {
           document.getElementById('poeModelMissingWarning').style.display = '';
+          if (!_autoMode) startStream();
           return;
         }
       } catch (e) {
         addDebugLog('PoE detect request failed', e.message, 'warn');
+        _showDetectError({
+          title: 'Detect request failed',
+          copy: e.message + ' — backend may be down or request timed out.'
+        });
+        if (!_autoMode) startStream();
         return;
       }
 
       if (!result.ok) {
         if (result.error === 'model_not_loaded') {
           document.getElementById('poeModelMissingWarning').style.display = '';
+        } else if (result.error === 'camera_unreachable') {
+          _showDetectError({
+            title: 'PoE Camera busy',
+            copy: 'The camera is already serving another HTTP client (likely the live stream). Try again — the page now pauses the stream before each detect.'
+          });
+        } else {
+          _showDetectError({
+            title: 'Detect failed',
+            copy: result.error || 'Unknown error from /api/poe-vision/detect.'
+          });
         }
         addDebugLog('PoE detect error', result.error, 'warn');
+        if (!_autoMode) startStream();
         return;
       }
 
@@ -978,6 +1020,9 @@
       img.src   = `${API_BASE}/api/poe-vision/annotated?_=${Date.now()}`;
       img.style.display = '';
       if (ph) ph.style.display = 'none';
+      // Resume the live preview after a one-shot detect; the Auto loop keeps
+      // it paused for the duration of the loop.
+      if (!_autoMode) startStream();
 
       const badge  = document.getElementById('poeDominantBadge');
       const dot    = document.getElementById('poeDominantDot');
@@ -1034,10 +1079,17 @@
       if (_poeLoopTimer) {
         clearInterval(_poeLoopTimer);
         _poeLoopTimer = null;
+        // Auto stopped — bring the live preview back.
+        startStream();
         if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto'; }
       } else {
-        runPoeDetection();
+        // Pause the live MJPEG preview for the duration of the loop so each
+        // detect's /capture call can win the M5Stack single-client slot.
+        stopStream();
+        // Mark loop active BEFORE the first detect so runPoeDetection's
+        // _autoMode check sees it.
         _poeLoopTimer = setInterval(runPoeDetection, 2000);
+        runPoeDetection();
         if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Stop'; }
       }
     }
