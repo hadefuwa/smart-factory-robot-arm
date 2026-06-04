@@ -212,7 +212,7 @@ def keep_box_from_mask(frame_shape, mask_cfg):
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
-def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None):
+def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None, class_conf=None):
     """
     Run YOLO inference on a frame (numpy BGR array).
     Returns a dict with detections and an annotated frame.
@@ -220,16 +220,34 @@ def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, ke
     keep_box: optional (x_min, y_min, x_max, y_max). Detections whose centre
     falls outside this region are dropped from both the detections list and
     the drawn annotation — used to ignore mask-edge hallucinations.
+
+    class_conf: optional dict {class_name: min_confidence} for per-class
+    thresholds (e.g. {"yellow_cube": 0.35, "purple_cube": 0.50,
+    "metal_cube": 0.60}). Lets you be permissive on a class the model
+    consistently under-confidently detects and strict on a class that
+    produces frequent false positives. When given, YOLO's own `conf`
+    floor is set to the LOWEST per-class threshold so every candidate
+    gets through to the post-filter; detections whose confidence is
+    below their class's threshold are then dropped.
     """
     if not _model_ready:
         return {"ok": False, "error": "model_not_loaded", "detections": []}
 
     import cv2
 
+    # Use the lowest per-class threshold as YOLO's floor so we don't reject
+    # candidates we want to keep for a class with a low threshold.
+    yolo_floor = conf
+    if class_conf:
+        try:
+            yolo_floor = min(min(class_conf.values()), conf)
+        except ValueError:
+            pass
+
     with _model_lock:
         results = _model.predict(
             source=frame,
-            conf=conf,
+            conf=yolo_floor,
             iou=iou,
             verbose=False,
         )
@@ -247,6 +265,12 @@ def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, ke
             h = y2 - y1
             cx = x1 + w // 2
             cy = y1 + h // 2
+
+            # Per-class confidence filter (post-NMS).
+            if class_conf is not None:
+                class_threshold = float(class_conf.get(label, conf))
+                if conf_v < class_threshold:
+                    continue
 
             # Drop detections whose centre is outside the un-masked region.
             if keep_box is not None:

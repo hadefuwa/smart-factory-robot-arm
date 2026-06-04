@@ -5027,7 +5027,10 @@ def _poe_detection_loop():
                     time.sleep(POE_LOOP_INTERVAL_S)
                     continue
 
-            result    = poe_vision_service.detect_cubes(frame, conf=conf, keep_box=keep_box)
+            class_conf = cfg.get('poe_camera', {}).get('class_conf') or None
+            result    = poe_vision_service.detect_cubes(
+                frame, conf=conf, keep_box=keep_box, class_conf=class_conf
+            )
             annotated = result.pop('annotated', None)
 
             if annotated is not None:

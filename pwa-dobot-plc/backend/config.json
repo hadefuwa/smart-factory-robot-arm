@@ -200,6 +200,12 @@
   "poe_camera": {
     "ip": "192.168.7.6",
     "conf": 0.5,
+    "class_conf": {
+      "yellow_cube": 0.35,
+      "purple_cube": 0.50,
+      "metal_cube": 0.60
+    },
+    "class_conf_note": "Per-class minimum confidence. Yellow is permissive because the trained model under-detects it; metal is strict because it produces frequent false positives at low confidence. Tune from the Vision page sliders.",
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
     "crop": {
       "enabled": false,
