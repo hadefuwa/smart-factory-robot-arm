@@ -223,6 +223,54 @@ POE_DEBOUNCE_CYCLES    = 2         # consecutive cycles required before PLC bits
 _poe_dominant_streak = {'yellow_cube': 0, 'purple_cube': 0, 'metal_cube': 0, None: 0}
 _poe_confirmed_dominant = None
 
+
+def _cached_mjpeg_generator(get_jpeg, idle_sleep_s: float = 0.1, keepalive_max_s: float = 5.0):
+    """Yield multipart/x-mixed-replace frames from a cached-jpeg getter.
+
+    Used by /api/poe-camera/capture?stream=1 and /api/poe-vision/annotated?
+    stream=1 to feed the PLC HMI a continuous stream without competing with
+    the detection loop for the M5Stack's single-client HTTP slot — both
+    just push whatever the loop has already pulled and cached.
+
+    Pushes only when the cache changes, but emits a keep-alive re-send of
+    the last frame at least every keepalive_max_s seconds so Siemens HMI
+    iframes don't time out mid-stream when nothing has changed.
+    """
+    last_id = None
+    last_jpeg = None
+    last_emit = 0.0
+    while True:
+        jpeg = get_jpeg()
+        now = time.time()
+        if jpeg is not None and id(jpeg) != last_id:
+            last_id = id(jpeg)
+            last_jpeg = jpeg
+            last_emit = now
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   + f'Content-Length: {len(jpeg)}\r\n\r\n'.encode('ascii')
+                   + jpeg + b'\r\n')
+        elif last_jpeg is not None and (now - last_emit) >= keepalive_max_s:
+            last_emit = now
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   + f'Content-Length: {len(last_jpeg)}\r\n\r\n'.encode('ascii')
+                   + last_jpeg + b'\r\n')
+        time.sleep(idle_sleep_s)
+
+
+def _mjpeg_response(generator):
+    """Wrap an MJPEG generator with HMI-friendly headers (CORS, no-cache,
+    X-Accel-Buffering off, iframe-embeddable). Mirrors the legacy headers."""
+    response = Response(generator, mimetype='multipart/x-mixed-replace; boundary=frame')
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
+
 # RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
 robot_arm_bridge_lock = threading.Lock()
 robot_arm_bridge_state = {
@@ -3939,7 +3987,18 @@ def poe_camera_capture():
     If the cache is empty (loop hasn't run yet, e.g. on first boot before the
     camera is reachable), falls back to a one-shot direct fetch after briefly
     pausing the loop so the request can't race.
+
+    With ?stream=1, returns a multipart/x-mixed-replace MJPEG stream of the
+    cached raw frames. Intended for the PLC HMI — pushes whatever the
+    detection loop has already pulled, so it never competes with the loop
+    for the M5Stack's single-client HTTP slot.
     """
+    if request.args.get('stream', '').lower() in ('1', 'true', 'yes'):
+        def _get_raw():
+            with _poe_loop_lock:
+                return _poe_loop_raw_jpeg
+        return _mjpeg_response(_cached_mjpeg_generator(_get_raw))
+
     with _poe_loop_lock:
         cached = _poe_loop_raw_jpeg
     if cached is not None:
@@ -4947,7 +5006,19 @@ def poe_vision_latest_result():
 @app.route('/api/poe-vision/annotated', methods=['GET'])
 def poe_vision_annotated():
     """Return the most-recent annotated frame as a JPEG image (from the
-    backend detection loop)."""
+    backend detection loop).
+
+    With ?stream=1, returns a multipart/x-mixed-replace MJPEG stream of the
+    cached annotated frames. Intended for the PLC HMI — pushes whatever the
+    loop has already produced, so it never competes with the loop for the
+    M5Stack's single-client HTTP slot. Frame rate = loop cadence (~1 FPS).
+    """
+    if request.args.get('stream', '').lower() in ('1', 'true', 'yes'):
+        def _get_anno():
+            with _poe_loop_lock:
+                return _poe_loop_anno_jpeg
+        return _mjpeg_response(_cached_mjpeg_generator(_get_anno))
+
     with _poe_loop_lock:
         jpeg = _poe_loop_anno_jpeg
     if jpeg is None:
