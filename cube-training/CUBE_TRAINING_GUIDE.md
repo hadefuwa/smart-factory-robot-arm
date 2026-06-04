@@ -1,14 +1,14 @@
 # Cube Detector Training Guide
 
-Train a YOLOv11n model to detect **yellow_cube**, **white_cube**, and **metal_cube** on the factory conveyor using the M5Stack PoE CAM-W.
+Train a YOLO11n model to detect **yellow_cube**, **purple_cube**, and **metal_cube** on the factory conveyor using the M5Stack PoE CAM-W.
 
 ---
 
 ## Overview of steps
 
 1. Install requirements (Windows PC)
-2. Capture training images
-3. Annotate images (Roboflow)
+2. Capture training images (vision.html Capture button)
+3. Annotate images (CVAT)
 4. Organise dataset
 5. Train the model
 6. Deploy to the Pi
@@ -31,65 +31,54 @@ pip install ultralytics opencv-python
 
 ## 2 — Capture training images
 
-Make sure the PoE CAM is live at `192.168.7.6` (or your configured IP), then:
+Open the production vision page on the Pi:
 
 ```
-python capture_cube_images.py
+https://192.168.7.5:8080/vision.html
 ```
 
-Optional flags:
-```
-python capture_cube_images.py --ip 192.168.7.6   # default
-python capture_cube_images.py --usb               # use USB camera instead
-```
+Click the **Capture Training Image** button on the AI Cube Detection panel. The browser downloads the loop's most recent cached raw JPEG — already cropped and masked exactly the same way YOLO sees it in production.
 
-Controls in the OpenCV window:
-| Key | Action |
-|-----|--------|
-| `SPACE` | Save current frame |
-| `R` | Refresh (re-fetch from PoE CAM) |
-| `Q` | Quit |
-
-Images are saved to `cube-training/cube_images/` as `cube_0001.jpg`, `cube_0002.jpg`, etc.
+Save the file into `cube-training/cube_images/` and rename it to describe what's in it. Suggested naming so they group cleanly when you scroll:
+```
+yellow_cube_01.jpg, yellow_cube_02.jpg, ...
+purple_cube_01.jpg, purple_cube_02.jpg, ...
+metal_cube_01.jpg, metal_cube_02.jpg, ...
+no_cube_01.jpg, no_cube_02.jpg, ...
+```
 
 **Tips for good data:**
 - Aim for **50+ images per cube class** (more = better accuracy)
-- Capture from multiple angles and distances
+- Capture from multiple angles and positions on the conveyor
 - Include different lighting conditions (bright, dim, shadows)
 - Mix single cubes and multiple cubes in the same frame
-- Put the conveyor background in most shots — that is what the model will see in production
+- **Capture plenty of empty-conveyor `no_cube` shots** — these become negative examples and are the single biggest lever for cutting false positives
+- If you have an off-spec colour (e.g. green) the model should never classify, capture it as `no_cube_*` so the model learns to reject it
+
+**Why the captured image has a black bar on the right:** the mask blanks out the sorted-cube row before YOLO inference so background cubes don't trigger detections. Training on masked images keeps your dataset consistent with production inference — keep the mask in the saved file.
 
 ---
 
-## 3 — Annotate images (Roboflow)
+## 3 — Annotate images (CVAT)
 
-This is the most important step. Each image needs bounding boxes drawn around every cube.
+Each image needs bounding boxes drawn around every cube. We use [CVAT](https://www.cvat.ai/) (free, self-hosted Docker or `app.cvat.ai`).
 
-1. Go to [roboflow.com](https://roboflow.com) and create a free account
-2. Create a new project: **Object Detection**
-3. Upload all images from `cube-training/cube_images/`
-4. For each image, draw bounding boxes and assign these class names **exactly**:
-   - `yellow_cube` → class ID **0**
-   - `white_cube`  → class ID **1**
-   - `metal_cube`  → class ID **2**
-5. When done, click **Export Dataset**
-6. Choose format: **YOLOv8** (compatible with YOLOv11)
-7. Download the ZIP, extract it, and copy the `.txt` label files into:
+1. Create a new project. Add three labels **in this exact order** (the order sets the class IDs):
+   - `yellow_cube` (id 0)
+   - `purple_cube` (id 1)
+   - `metal_cube` (id 2)
+2. Upload everything from `cube-training/cube_images/`.
+3. Draw tight bounding boxes around every cube.
+4. **Skip cubes inside the black masked region.** Those pixels are zero by the time YOLO sees them, so teaching the model to detect "cubes" there only causes hallucinations at the mask edge. If a cube straddles the mask line, clip the box to the visible side.
+5. For `no_cube_*` images, leave them with zero boxes — CVAT will export an empty `.txt` for each, which is the correct way to feed negative examples to YOLO.
+6. Once everything is annotated, **Export Dataset** → format **`Ultralytics YOLO Detection 1.0`** → download the ZIP.
+7. Extract the ZIP and copy every `.txt` label file into:
    ```
    cube-training/cube_labels/
    ```
-   Each `.txt` file must have the same base name as its image (e.g. `cube_0001.txt` for `cube_0001.jpg`).
+   Each `.txt` must have the same base name as its image (e.g. `purple_cube_01.txt` for `purple_cube_01.jpg`).
 
-> **Important:** The class IDs in `cube-data.yaml` are fixed at 0/1/2. Make sure Roboflow's class order matches (yellow=0, white=1, metal=2). If it doesn't, rename them in Roboflow's class manager.
-
-**Alternative: LabelImg (offline)**
-
-```
-pip install labelImg
-labelImg cube_images/ cube_labels/
-```
-
-Select YOLO format in the tool and save labels to `cube_labels/`.
+> **Class-ID check:** open one `.txt` and confirm the first number on each line matches the class you'd expect (0 yellow, 1 purple, 2 metal). If CVAT exported the IDs in a different order, fix the order in CVAT's label manager and re-export rather than rewriting files by hand.
 
 ---
 
@@ -124,7 +113,7 @@ python train_cube_detector.py
 - Saves the best checkpoint to `runs/detect/cube_train/weights/best.pt`
 - Copies it as `cube_detector.pt` in the same folder
 
-**GPU acceleration (optional):**  
+**GPU acceleration (optional):**
 If your PC has an NVIDIA GPU, edit `train_cube_detector.py` and change:
 ```python
 device="cpu"   →   device="0"
@@ -155,8 +144,7 @@ scp runs/detect/cube_train/weights/cube_detector.pt pi@192.168.7.5:/home/pi/cube
 Then restart the smart-factory backend service on the Pi:
 
 ```
-ssh pi@192.168.7.5
-sudo systemctl restart smart-factory
+ssh pi@192.168.7.5 'sudo systemctl restart smart-factory'
 ```
 
 The backend (`poe_vision_service.py`) searches for the model in this order:
@@ -169,13 +157,12 @@ The backend (`poe_vision_service.py`) searches for the model in this order:
 
 ## 7 — Test in the browser
 
-1. Open `vision-system-new.html`
-2. Switch source to **PoE Cam** (toggle top-right of Camera Feed panel)
-3. In the **PoE CAM — AI Cube Detection** panel, press **Detect Cubes**
-4. The annotated image appears on the left, detected cubes listed on the right
-5. Use the **Auto** button to run detection every 2 seconds continuously
+1. Open `https://192.168.7.5:8080/vision.html`
+2. The AI Cube Detection panel runs the always-on backend loop — annotated frames refresh automatically once a cube enters the conveyor.
+3. The three confidence sliders (yellow / purple / metal) on the page POST back to `config.poe_camera.class_conf`. Per-class thresholds let you be permissive on a class the model under-detects and strict on a class that produces false positives — start at the current defaults (yellow 0.35, purple 0.50, metal 0.60) and tune from there.
+4. The vision page shows the photoelectric sensor (%I0.5) state alongside the AI. If the sensor sees an object but the AI doesn't, an "AI missed the object" warning lights up — that's a sign you need more training data of whatever class was on the belt at that moment.
 
-The **confidence slider** (10–90%) controls the detection threshold — lower = more detections but more false positives; higher = fewer but more confident.
+PLC bits are only asserted while %I0.5 is high — the AI's confirmed colour is the value, the sensor is the gate. Detection accuracy still shows in the JSON regardless.
 
 ---
 
@@ -184,10 +171,12 @@ The **confidence slider** (10–90%) controls the detection threshold — lower 
 | Problem | Fix |
 |---------|-----|
 | "Model not trained yet" warning | Complete steps 3–6 above |
-| Low accuracy on cubes | Add more varied training images; re-annotate carefully |
-| Wrong class predicted | Check class order in Roboflow matches 0=yellow, 1=white, 2=metal |
-| `ultralytics` not found | `pip install ultralytics` in the backend Python environment |
-| Camera unreachable | Check PoE CAM is at `192.168.7.6`, power is on, Ethernet connected |
+| Low accuracy on a class | Capture 20–30 more images of that class in varied positions; re-annotate; retrain |
+| Wrong class predicted | Open a `.txt` label file and confirm class IDs (0 yellow, 1 purple, 2 metal). If wrong, fix CVAT's label order and re-export |
+| Lots of false positives on empty conveyor | Add more `no_cube_*` images and retrain |
+| Phantom detection at the mask edge | The keep-box filter already drops these post-NMS, but if it persists, make sure you didn't annotate any cubes inside the masked region |
+| `ultralytics` not found | `pip install ultralytics` in the training Python environment |
+| Capture button downloads a stale image | The loop refreshes its cache every ~1 s. Wait a moment between captures, or check that the M5Stack camera is reachable |
 
 ---
 
@@ -196,7 +185,7 @@ The **confidence slider** (10–90%) controls the detection threshold — lower 
 ```
 cube-training/
 ├── cube_images/               ← captured training images (you fill this)
-├── cube_labels/               ← YOLO .txt annotations from Roboflow (you fill this)
+├── cube_labels/               ← YOLO .txt annotations from CVAT (you fill this)
 ├── dataset/                   ← auto-generated by organize_cube_dataset.py
 │   ├── images/train|val/
 │   └── labels/train|val/
@@ -205,7 +194,6 @@ cube-training/
 │       ├── best.pt
 │       └── cube_detector.pt   ← deploy this to the Pi
 ├── cube-data.yaml             ← dataset config (do not edit class IDs)
-├── capture_cube_images.py     ← step 2
 ├── organize_cube_dataset.py   ← step 4
 ├── train_cube_detector.py     ← step 5
 └── CUBE_TRAINING_GUIDE.md     ← this file
