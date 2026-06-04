@@ -601,7 +601,7 @@
                 <div id="statusYellowMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
               <div id="statusWhiteCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
-                <div class="text-xs text-base-content/60 mb-2">White Bit (32.1)</div>
+                <div class="text-xs text-base-content/60 mb-2">Purple Bit (32.1)</div>
                 <div id="statusWhiteValue" class="text-lg font-bold">--</div>
                 <div id="statusWhiteMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
@@ -936,7 +936,7 @@
 
     const POE_CUBE_COLOURS = {
       yellow_cube: '#f59e0b',
-      white_cube:  '#e5e7eb',
+      purple_cube: '#a855f7',
       metal_cube:  '#6b7280',
     };
 
@@ -1196,7 +1196,7 @@
         const tags = cameraDbResult.value.tags || {};
         const defectDetected = Boolean(tags.defect_detected);
         const yellowDetected = Boolean(tags.yellow_cube_detected);
-        const whiteDetected = Boolean(tags.white_cube_detected);
+        const purpleDetected = Boolean(tags.purple_cube_detected);
         const metalDetected = Boolean(tags.metal_cube_detected);
         const rejectCommand = Boolean(tags.reject_command_from_plc);
 
@@ -1213,7 +1213,7 @@
         };
 
         setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', yellowDetected, 'Yellow cube detected');
-        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', whiteDetected, 'White cube detected');
+        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', purpleDetected, 'Purple cube detected');
         setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', metalDetected, 'Metal cube detected');
         setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', defectDetected, rejectCommand ? 'Reject command is active from PLC' : 'Defect detected');
       } else {

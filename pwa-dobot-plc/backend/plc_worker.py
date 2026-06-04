@@ -90,7 +90,7 @@ CAMERA_DB_DEFAULTS = {
     'defect_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
     'reject_command_from_plc': {'byte': 0, 'bit': 5, 'kind': 'bool'},
     'yellow_cube_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
-    'white_cube_detected': {'byte': 0, 'bit': 7, 'kind': 'bool'},
+    'purple_cube_detected': {'byte': 0, 'bit': 7, 'kind': 'bool'},
     'metal_cube_detected': {'byte': 1, 'bit': 0, 'kind': 'bool'},
 }
 
@@ -416,7 +416,7 @@ class PLCWorker:
             'defect_detected': False,
             'reject_command_from_plc': False,
             'yellow_cube_detected': False,
-            'white_cube_detected': False,
+            'purple_cube_detected': False,
             'metal_cube_detected': False,
 
             # Robot arm PLC DB125
@@ -618,7 +618,7 @@ class PLCWorker:
             set_bool(status_byte, 0, self.camera_db_tags['completed']['bit'], True)
             set_bool(status_byte, 0, self.camera_db_tags['defect_detected']['bit'], result['defect_detected'])
             set_bool(status_byte, 0, self.camera_db_tags['yellow_cube_detected']['bit'], result['yellow'])
-            set_bool(status_byte, 0, self.camera_db_tags['white_cube_detected']['bit'], result['white'])
+            set_bool(status_byte, 0, self.camera_db_tags['purple_cube_detected']['bit'], result['white'])
             self.queue_write(self.camera_db_number, status_byte_offset, status_byte, "Vision status")
 
             metal_byte_offset = self.camera_db_tags['metal_cube_detected']['byte']
@@ -901,7 +901,7 @@ class PLCWorker:
             self.cache['defect_detected'] = self._camera_bit(data, 'defect_detected')
             self.cache['reject_command_from_plc'] = self._camera_bit(data, 'reject_command_from_plc')
             self.cache['yellow_cube_detected'] = self._camera_bit(data, 'yellow_cube_detected')
-            self.cache['white_cube_detected'] = self._camera_bit(data, 'white_cube_detected')
+            self.cache['purple_cube_detected'] = self._camera_bit(data, 'purple_cube_detected')
             self.cache['metal_cube_detected'] = self._camera_bit(data, 'metal_cube_detected')
 
     def _decode_robot_db(self, data: bytearray):

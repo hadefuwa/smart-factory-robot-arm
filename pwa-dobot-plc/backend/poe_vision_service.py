@@ -7,7 +7,7 @@ It is activated when the frontend switches to PoE CAM mode.
 
 Classes detected:
     0 = yellow_cube
-    1 = white_cube
+    1 = purple_cube
     2 = metal_cube
 
 Model search order (first found wins):
@@ -33,10 +33,10 @@ _model_lock  = threading.Lock()
 _model_path  = None
 _model_ready = False
 
-CUBE_CLASSES = {0: "yellow_cube", 1: "white_cube", 2: "metal_cube"}
+CUBE_CLASSES = {0: "yellow_cube", 1: "purple_cube", 2: "metal_cube"}
 CUBE_COLOURS = {
     "yellow_cube": (0,   200, 255),   # BGR
-    "white_cube":  (255, 255, 255),
+    "purple_cube": (240, 32,  160),
     "metal_cube":  (180, 180, 180),
 }
 

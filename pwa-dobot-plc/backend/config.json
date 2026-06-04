@@ -107,7 +107,7 @@
         "defect_detected": { "byte": 0, "bit": 4 },
         "reject_command_from_plc": { "byte": 0, "bit": 5 },
         "yellow_cube_detected": { "byte": 0, "bit": 6 },
-        "white_cube_detected": { "byte": 0, "bit": 7 },
+        "purple_cube_detected": { "byte": 0, "bit": 7 },
         "metal_cube_detected": { "byte": 1, "bit": 0 }
       }
     },

@@ -1089,7 +1089,7 @@
       setText('liveCameraDetail', `Start ${formatBoolLabel(cameraStart)} • Busy ${formatBoolLabel(cameraBusy)} • Done ${formatBoolLabel(cameraCompleted)}`);
 
       const yellow = Boolean(cameraTags.yellow_cube_detected);
-      const white = Boolean(cameraTags.white_cube_detected);
+      const white = Boolean(cameraTags.purple_cube_detected);
       const metal = Boolean(cameraTags.metal_cube_detected);
       const reject = Boolean(cameraTags.reject_command_from_plc || cameraTags.defect_detected);
       let detectionState = 'None Active';
@@ -1204,7 +1204,7 @@
       { key: 'defect_detected', label: 'Defect Detected', type: 'bool', defaultByte: 0, defaultBit: 4 },
       { key: 'reject_command_from_plc', label: 'Reject Command From PLC', type: 'bool', defaultByte: 0, defaultBit: 5 },
       { key: 'yellow_cube_detected', label: 'Yellow Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 6 },
-      { key: 'white_cube_detected', label: 'White Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 7 },
+      { key: 'purple_cube_detected', label: 'Purple Cube Detected', type: 'bool', defaultByte: 0, defaultBit: 7 },
       { key: 'metal_cube_detected', label: 'Metal Cube Detected', type: 'bool', defaultByte: 1, defaultBit: 0 }
     ];
 

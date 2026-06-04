@@ -1,6 +1,6 @@
 """
 YOLOv11n Training Script - Cube Detection
-Trains a model to detect yellow, white, and metal cubes on the factory conveyor.
+Trains a model to detect yellow, purple, and metal cubes on the factory conveyor.
 Run this on your Windows PC (or a machine with a decent GPU for speed).
 
 Requirements:
@@ -30,7 +30,7 @@ print(f"  Base model  : {MODEL_BASE}")
 print(f"  Dataset     : {DATA_YAML}")
 print(f"  Output      : {OUTPUT_DIR}/best.pt")
 print()
-print("  Classes: 0=yellow_cube  1=white_cube  2=metal_cube")
+print("  Classes: 0=yellow_cube  1=purple_cube  2=metal_cube")
 print()
 
 # Load base model

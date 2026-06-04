@@ -361,7 +361,7 @@ def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool
 
     Args:
         yellow: Yellow cube detected (DBX32.0)
-        white: White cube detected (DBX32.1)
+        white: Purple cube detected (DBX32.1)
         steel: Steel cube detected (DBX32.2)
         aluminum: Aluminum cube detected (DBX32.3)
     """
@@ -372,7 +372,7 @@ def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool
     status_offset = plc_worker.camera_db_tags['yellow_cube_detected']['byte']
     status_byte = bytearray(1)
     set_bool(status_byte, 0, plc_worker.camera_db_tags['yellow_cube_detected']['bit'], yellow)
-    set_bool(status_byte, 0, plc_worker.camera_db_tags['white_cube_detected']['bit'], white)
+    set_bool(status_byte, 0, plc_worker.camera_db_tags['purple_cube_detected']['bit'], white)
     plc_worker.queue_write(plc_worker.camera_db_number, status_offset, status_byte, "Cube colors")
 
     metal_offset = plc_worker.camera_db_tags['metal_cube_detected']['byte']
@@ -444,7 +444,7 @@ class PLCClientCompatWrapper:
             'defect_detected': cache.get('defect_detected', False),
             'reject_command_from_plc': cache.get('reject_command_from_plc', False),
             'yellow_cube_detected': cache.get('yellow_cube_detected', False),
-            'white_cube_detected': cache.get('white_cube_detected', False),
+            'purple_cube_detected': cache.get('purple_cube_detected', False),
             'metal_cube_detected': cache.get('metal_cube_detected', False),
         }
 
@@ -554,7 +554,7 @@ class PLCClientCompatWrapper:
                     self.worker.camera_db_tags['defect_detected']['bit']: 'defect_detected',
                     self.worker.camera_db_tags['reject_command_from_plc']['bit']: 'reject_command_from_plc',
                     self.worker.camera_db_tags['yellow_cube_detected']['bit']: 'yellow_cube_detected',
-                    self.worker.camera_db_tags['white_cube_detected']['bit']: 'white_cube_detected',
+                    self.worker.camera_db_tags['purple_cube_detected']['bit']: 'purple_cube_detected',
                 }
                 if bit_offset in bit_map:
                     return cache.get(bit_map[bit_offset], False)

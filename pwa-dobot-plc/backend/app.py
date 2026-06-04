@@ -4800,7 +4800,8 @@ def poe_vision_detect():
     """
     global _poe_latest_result
     data     = request.get_json(silent=True) or {}
-    poe_ip   = data.get('ip', config.get('poe_camera', {}).get('ip', '192.168.7.6'))
+    cfg      = load_config()
+    poe_ip   = data.get('ip', cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
     conf     = float(data.get('conf', 0.30))
 
     if not poe_vision_service.is_ready():
@@ -4861,7 +4862,7 @@ def read_camera_db_tags():
         'defect_detected': False,
         'reject_command_from_plc': False,
         'yellow_cube_detected': False,
-        'white_cube_detected': False,
+        'purple_cube_detected': False,
         'metal_cube_detected': False
     }
 
