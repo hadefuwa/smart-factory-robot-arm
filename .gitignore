@@ -1,6 +1,20 @@
 # Claude Code SDK runtime
 .claude/
 
+# Local-only working files
+git.txt
+
+# Cube-training data + generated artifacts (the trained .pt model gets
+# SCP'd directly to the Pi, never tracked here)
+cube-training/cube_images/
+cube-training/cube_labels/
+cube-training/cube_labels.cvat_backup/
+cube-training/dataset/
+cube-training/runs/
+cube-training/sidelined/
+cube-training/train.log
+cube-training/yolo11n.pt
+
 # Dependencies
 node_modules/
 client/node_modules/
