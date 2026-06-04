@@ -205,7 +205,7 @@
       "top_pct": 20,
       "bottom_pct": 0,
       "left_pct": 0,
-      "right_pct": 20,
+      "right_pct": 30,
       "note": "Trim percentages applied to the raw frame before YOLO sees it. Removes the robot arm and the sorted-cube row at the top/right so the model's field of view is just the active conveyor zone."
     }
   },
