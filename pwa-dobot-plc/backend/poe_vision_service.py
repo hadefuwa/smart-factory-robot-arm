@@ -110,6 +110,38 @@ def fetch_frame(poe_ip: str, timeout: int = 4):
         return None
 
 
+def apply_crop(frame, crop_cfg):
+    """Trim percentages off each edge of `frame` and return the cropped view.
+
+    `crop_cfg` is an optional dict of the form
+        {"enabled": True, "top_pct": 20, "bottom_pct": 0, "left_pct": 0, "right_pct": 20}
+    Percentages are of the corresponding dimension; missing keys default to 0.
+    Returns the original frame unchanged when crop_cfg is falsy or disabled,
+    or when the resulting region would be empty.
+
+    Cropping happens BEFORE inference so YOLO never sees the trimmed region —
+    cleaner than relying on the model to learn to ignore it. The cropped
+    frame also flows through to /api/poe-vision/annotated and
+    /api/poe-camera/capture, so training data captured via the page is
+    automatically in the same field of view as production inference.
+    """
+    if not crop_cfg or not crop_cfg.get('enabled'):
+        return frame
+    h, w = frame.shape[:2]
+    top    = max(0.0, min(100.0, float(crop_cfg.get('top_pct',    0))))
+    bottom = max(0.0, min(100.0, float(crop_cfg.get('bottom_pct', 0))))
+    left   = max(0.0, min(100.0, float(crop_cfg.get('left_pct',   0))))
+    right  = max(0.0, min(100.0, float(crop_cfg.get('right_pct',  0))))
+    y1 = int(h * top    / 100.0)
+    y2 = int(h * (1.0 - bottom / 100.0))
+    x1 = int(w * left   / 100.0)
+    x2 = int(w * (1.0 - right  / 100.0))
+    if y2 - y1 < 8 or x2 - x1 < 8:
+        # Crop would collapse the frame — bail out and use the full view.
+        return frame
+    return frame[y1:y2, x1:x2]
+
+
 # ── Inference ─────────────────────────────────────────────────────────────────
 def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU):
     """

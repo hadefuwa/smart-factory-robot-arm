@@ -199,7 +199,15 @@
   },
   "poe_camera": {
     "ip": "192.168.7.6",
-    "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream"
+    "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
+    "crop": {
+      "enabled": true,
+      "top_pct": 20,
+      "bottom_pct": 0,
+      "left_pct": 0,
+      "right_pct": 20,
+      "note": "Trim percentages applied to the raw frame before YOLO sees it. Removes the robot arm and the sorted-cube row at the top/right so the model's field of view is just the active conveyor zone."
+    }
   },
   "enable_digital_twin_stream": false,
   "digital_twin_width": 320,

@@ -4991,6 +4991,10 @@ def _poe_detection_loop():
                 time.sleep(POE_LOOP_INTERVAL_S)
                 continue
 
+            # Crop BEFORE everything downstream — annotated frame, raw cache,
+            # YOLO input. config.poe_camera.crop drives the trim percentages.
+            frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
+
             ok_raw, raw_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_raw:
                 with _poe_loop_lock:
