@@ -202,7 +202,7 @@
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
     "crop": {
       "enabled": true,
-      "top_pct": 20,
+      "top_pct": 0,
       "bottom_pct": 0,
       "left_pct": 0,
       "right_pct": 30,
