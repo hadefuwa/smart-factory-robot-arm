@@ -212,7 +212,7 @@ _poe_loop_raw_jpeg     = None      # bytes — last raw frame from the camera (f
 _poe_loop_anno_jpeg    = None      # bytes — last annotated frame (for /annotated)
 _poe_loop_thread       = None
 _poe_loop_pause_until  = 0.0       # epoch seconds; loop sleeps while now() < this
-POE_LOOP_INTERVAL_S    = 2.0       # one detection every 2 seconds
+POE_LOOP_INTERVAL_S    = 1.0       # one detection every 1 second
 POE_DEBOUNCE_CYCLES    = 2         # consecutive cycles required before PLC bits change
 
 # Debounce state — counts consecutive cycles where each class (or None) was
