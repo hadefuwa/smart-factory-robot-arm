@@ -1024,7 +1024,9 @@
       const img = document.getElementById('poeAnnotatedImg');
       const ph  = document.getElementById('poeAnnotatedPlaceholder');
       img.src   = `${API_BASE}/api/poe-vision/annotated?_=${Date.now()}`;
-      img.style.display = '';
+      // CSS default for .sf-vision-frame is display:none, so we must set an
+      // explicit visible value rather than clearing the inline override.
+      img.style.display = 'block';
       if (ph) ph.style.display = 'none';
       // Resume the live preview after a one-shot detect; the Auto loop keeps
       // it paused for the duration of the loop.
