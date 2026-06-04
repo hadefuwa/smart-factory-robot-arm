@@ -690,6 +690,7 @@
             <button type="button" class="plc-page-tab" data-panel="robot"><i class="material-icons">precision_manufacturing</i>DB125 Robot</button>
             <button type="button" class="plc-page-tab" data-panel="edge"><i class="material-icons">memory</i>DB126 Edge Stats</button>
             <button type="button" class="plc-page-tab" data-panel="iolink"><i class="material-icons">settings_input_component</i>DB127 IO-Link</button>
+            <button type="button" class="plc-page-tab" data-panel="rawio"><i class="material-icons">cable</i>Raw I/O</button>
           </section>
 
           <section class="plc-panel active" data-panel="connection">
@@ -979,6 +980,71 @@
             </div>
           </section>
 
+          <section class="plc-panel" data-panel="rawio">
+            <div class="plc-panel-header">
+              <div class="plc-panel-copy">
+                <h3>Raw %I / %Q I/O</h3>
+                <p>Live values read directly from the PLC process-input (%I) and process-output (%Q) areas via snap7 <code>read_area()</code> — not from any DB. Refreshes twice a second on the backend; this page polls every 1 s.</p>
+              </div>
+              <div class="plc-save-message" id="rawIoStatusMessage"></div>
+            </div>
+
+            <div class="plc-sheet">
+              <div class="plc-sheet-scroll">
+                <h4 style="margin:0 0 0.5rem 0;">Digital inputs</h4>
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 14%;">Tag</th>
+                      <th style="width: 14%;">Address</th>
+                      <th style="width: 16%;">Value</th>
+                      <th style="width: 56%;">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rawIoInputsBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="plc-sheet" style="margin-top:1rem;">
+              <div class="plc-sheet-scroll">
+                <h4 style="margin:0 0 0.5rem 0;">Digital outputs</h4>
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 14%;">Tag</th>
+                      <th style="width: 14%;">Address</th>
+                      <th style="width: 16%;">Value</th>
+                      <th style="width: 56%;">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rawIoOutputsBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="plc-sheet" style="margin-top:1rem;">
+              <div class="plc-sheet-scroll">
+                <h4 style="margin:0 0 0.5rem 0;">Analog inputs</h4>
+                <table class="plc-sheet-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 14%;">Tag</th>
+                      <th style="width: 14%;">Address</th>
+                      <th style="width: 16%;">Value</th>
+                      <th style="width: 56%;">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rawIoAnalogBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="plc-sheet-toolbar" style="margin-top:0.75rem;">
+              <div class="plc-sheet-note">Reads are taken from the <code>%I</code> (PE) and <code>%Q</code> (PA) areas — these are the PLC's process image, refreshed each scan cycle, not the live electrical state.</div>
+            </div>
+          </section>
+
         </main>
       </div>
     </div>
@@ -1113,6 +1179,70 @@
 
       setText('liveRobotPose', `X ${robotTags.x_position ?? '-'}, Y ${robotTags.y_position ?? '-'}, Z ${robotTags.z_position ?? '-'}`);
       setText('liveRobotPoseDetail', `Speed ${robotTags.speed ?? '-'} • Target X ${robotTags.target_x ?? '-'}, Y ${robotTags.target_y ?? '-'}, Z ${robotTags.target_z ?? '-'}`);
+    }
+
+    function _ioValueCell(on) {
+      const dot = on
+        ? '<span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#4caf50;margin-right:0.5rem;vertical-align:middle;"></span>'
+        : '<span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#9e9e9e;margin-right:0.5rem;vertical-align:middle;"></span>';
+      const text = on
+        ? '<strong style="color:#4caf50">ON</strong>'
+        : '<span style="color:var(--sf-base-muted)">OFF</span>';
+      return dot + text;
+    }
+
+    function _renderIoRows(tbodyId, ordered, valueMap, nameMap, addressPrefix) {
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
+      const rows = ordered.map((key) => {
+        const value = Boolean(valueMap?.[key]);
+        const desc  = nameMap?.[key] || '—';
+        const addr  = `%${key}`;
+        return `<tr><td><code>${key}</code></td><td><code>${addr}</code></td><td>${_ioValueCell(value)}</td><td>${desc}</td></tr>`;
+      });
+      tbody.innerHTML = rows.join('');
+    }
+
+    function _renderAnalogRows(snap) {
+      const tbody = document.getElementById('rawIoAnalogBody');
+      if (!tbody) return;
+      const order = ['IW64', 'IW66'];
+      const rows = order.map((key) => {
+        const value = snap?.analog_inputs?.[key];
+        const desc  = snap?.analog_names?.[key] || '—';
+        const display = (value === null || value === undefined) ? '—' : `<strong>${value}</strong>`;
+        return `<tr><td><code>${key}</code></td><td><code>%${key}</code></td><td>${display}</td><td>${desc}</td></tr>`;
+      });
+      tbody.innerHTML = rows.join('');
+    }
+
+    async function refreshRawIo() {
+      const msg = document.getElementById('rawIoStatusMessage');
+      try {
+        const res = await fetch(`${API_BASE}/api/plc/io/read`, { signal: AbortSignal.timeout(4000), cache: 'no-store' });
+        if (!res.ok) {
+          if (msg) msg.textContent = `Read failed: HTTP ${res.status}`;
+          return;
+        }
+        const snap = await res.json();
+        const inputOrder = ['I0.0','I0.1','I0.2','I0.3','I0.4','I0.5','I0.6','I0.7','I1.0','I1.1','I1.2','I1.3','I1.4','I1.5'];
+        const outputOrder = ['Q0.0','Q0.1','Q0.2','Q0.3','Q0.4','Q0.5','Q0.6','Q0.7','Q1.0','Q1.1'];
+        _renderIoRows('rawIoInputsBody',  inputOrder,  snap.inputs,  snap.input_names);
+        _renderIoRows('rawIoOutputsBody', outputOrder, snap.outputs, snap.output_names);
+        _renderAnalogRows(snap);
+        if (msg) {
+          if (snap.error) {
+            msg.textContent = `PLC read error: ${snap.error}`;
+            msg.style.color = '#f44336';
+          } else {
+            const age = snap.timestamp ? Math.max(0, Math.round(Date.now()/1000 - snap.timestamp)) : '?';
+            msg.textContent = `Updated ${age}s ago`;
+            msg.style.color = '';
+          }
+        }
+      } catch (e) {
+        if (msg) msg.textContent = `Poll failed: ${e.message}`;
+      }
     }
 
     async function refreshLivePlcSummary() {
@@ -1793,6 +1923,8 @@
       loadDbConfigs();
       setInterval(refreshPlcConnectionBadge, 4000);
       setInterval(refreshLivePlcSummary, 5000);
+      refreshRawIo();
+      setInterval(refreshRawIo, 1000);
     });
   </script>
 </body>

@@ -421,6 +421,13 @@ def get_plc_stats():
     return plc_worker.get_stats()
 
 
+def get_plc_io_snapshot():
+    """Return the latest raw I/O snapshot from the PLC worker, or None."""
+    if plc_worker is None:
+        return None
+    return plc_worker.get_io_snapshot()
+
+
 def is_plc_connected():
     """Check if PLC is connected"""
     if plc_worker is None:

@@ -28,7 +28,7 @@ from datetime import datetime
 import struct
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, get_plc_io_snapshot
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -5069,6 +5069,22 @@ def get_latest_vision_cycle():
     except Exception as e:
         logger.error(f"Error serving latest vision cycle: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/plc/io/read', methods=['GET'])
+def read_plc_io():
+    """Return the latest raw I/O snapshot from the PLC worker.
+
+    %I0.0..I1.5 (digital inputs), %Q0.0..Q1.1 (digital outputs), and the two
+    analog inputs IW64 / IW66. Driven by plc_worker._refresh_raw_io which
+    reads the PE / PA areas via snap7 read_area() on a half-second cadence.
+    The response includes a tag-name map so the HMI can show 'EStop Channel 1'
+    next to the raw '%I0.0' address.
+    """
+    snap = get_plc_io_snapshot()
+    if snap is None:
+        return jsonify({'success': False, 'error': 'PLC worker not initialised'}), 503
+    return jsonify({'success': True, **snap})
+
 
 @app.route('/api/plc/db124/read', methods=['GET'])
 @app.route('/api/plc/camera/read', methods=['GET'])

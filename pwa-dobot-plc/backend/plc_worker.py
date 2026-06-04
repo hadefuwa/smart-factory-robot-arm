@@ -31,6 +31,49 @@ from snap7.util import get_bool, get_int, get_real, set_bool, set_real
 
 logger = logging.getLogger(__name__)
 
+# Raw I/O layout — reads %I and %Q directly from the PE / PA areas so we can
+# surface the wired hardware state without round-tripping through a DB. Names
+# come from the TIA project IO table — keep these in sync if pinout changes.
+PE_DIGITAL_BYTES = 2     # %I0 (byte 0) and %I1 (byte 1) — 8 bits each
+PA_DIGITAL_BYTES = 2     # %Q0 (byte 0) and %Q1 (byte 1) — 8 bits each
+PE_ANALOG_START  = 64    # %IW64 starts at byte 64 of PE
+PE_ANALOG_BYTES  = 4     # %IW64 (bytes 64-65) + %IW66 (bytes 66-67)
+IO_READ_INTERVAL_S = 0.5 # raw I/O is for display only — slow poll is fine
+
+# Friendly names from the TIA project — keep these aligned with the IO table.
+RAW_INPUT_NAMES = {
+    'I0.0': 'EStop Channel 1',
+    'I0.1': 'EStop Channel 2',
+    'I0.2': 'Blue Reset Button [NO]',
+    'I0.3': 'Green Start Button [NO]',
+    'I0.4': 'Red Stop Button [NC]',
+    'I0.5': 'Light Sensor 1',
+    'I0.6': 'Light Sensor 2',
+    'I0.7': 'Light Sensor 3',
+    'I1.0': 'Inductive Proxy',
+    'I1.1': 'Capacitive Proxy',
+    'I1.2': 'Gantry Limit Switch Low',
+    'I1.3': 'Gantry Limit Switch High',
+    'I1.4': 'Quarantine Switch',
+    'I1.5': 'Fault Override',
+}
+RAW_OUTPUT_NAMES = {
+    'Q0.0': 'Stepper Pulse',
+    'Q0.1': 'Stepper Direction',
+    'Q0.2': 'Plunger Down',
+    'Q0.3': 'Plunger Up',
+    'Q0.4': 'Pneumatic Vacuum',
+    'Q0.5': 'Gate',
+    'Q0.6': 'Reject',
+    'Q0.7': 'Reset Linear Actuator',
+    'Q1.0': 'Conveyor 1',
+    'Q1.1': 'Conveyor 2',
+}
+RAW_ANALOG_NAMES = {
+    'IW64': 'AnalogIn_0',
+    'IW66': 'AnalogIn_1',
+}
+
 MAIN_DB_DEFAULTS = {
     'hmi_start': {'byte': 0, 'bit': 0, 'kind': 'bool'},
     'hmi_stop': {'byte': 0, 'bit': 1, 'kind': 'bool'},
@@ -259,6 +302,17 @@ class PLCWorker:
             'avg_cycle_time_ms': 0.0,
             'max_cycle_time_ms': 0.0,
         }
+
+        # Raw I/O cache — populated by _refresh_raw_io() at IO_READ_INTERVAL_S
+        # cadence during the main cycle. Read-only for callers.
+        self.io_cache = {
+            'inputs': {},
+            'outputs': {},
+            'analog_inputs': {},
+            'timestamp': 0.0,
+            'error': None,
+        }
+        self._io_last_read = 0.0
 
     def update_db_configs(self, main_db_config: Dict[str, Any], camera_db_config: Dict[str, Any], robot_db_config: Dict[str, Any]):
         """Update runtime DB mappings used by the worker."""
@@ -757,6 +811,11 @@ class PLCWorker:
                 self._update_robot_connected()
                 _t_connstat_done = time.perf_counter()
 
+                # 3b. RAW I/O snapshot — throttled, just for display.
+                if time.time() - self._io_last_read >= IO_READ_INTERVAL_S:
+                    self._refresh_raw_io()
+                    self._io_last_read = time.time()
+
                 # 4. VISION HANDSHAKE STATE MACHINE
                 self._process_vision_handshake()
 
@@ -1104,3 +1163,61 @@ class PLCWorker:
     def get_stats(self) -> Dict[str, Any]:
         """Get worker statistics"""
         return self.stats.copy()
+
+    def _refresh_raw_io(self):
+        """Read %I and %Q directly from the PE / PA areas and decode into
+        named bits + analog words. Lives off the main cycle thread (snap7
+        isn't thread-safe), throttled to IO_READ_INTERVAL_S. Errors are
+        swallowed and surfaced via io_cache['error'] so a hiccup here
+        doesn't stop the DB reads in the same cycle.
+        """
+        try:
+            pe_digital = self.client.read_area(snap7.types.Areas.PE, 0, 0, PE_DIGITAL_BYTES)
+            pa_digital = self.client.read_area(snap7.types.Areas.PA, 0, 0, PA_DIGITAL_BYTES)
+            pe_analog  = self.client.read_area(snap7.types.Areas.PE, 0, PE_ANALOG_START, PE_ANALOG_BYTES)
+
+            inputs = {}
+            for byte_idx in range(PE_DIGITAL_BYTES):
+                for bit_idx in range(8):
+                    key = f"I{byte_idx}.{bit_idx}"
+                    inputs[key] = bool(get_bool(pe_digital, byte_idx, bit_idx))
+
+            outputs = {}
+            for byte_idx in range(PA_DIGITAL_BYTES):
+                for bit_idx in range(8):
+                    key = f"Q{byte_idx}.{bit_idx}"
+                    outputs[key] = bool(get_bool(pa_digital, byte_idx, bit_idx))
+
+            analog_inputs = {
+                'IW64': int(get_int(pe_analog, 0)),
+                'IW66': int(get_int(pe_analog, 2)),
+            }
+
+            self.io_cache = {
+                'inputs': inputs,
+                'outputs': outputs,
+                'analog_inputs': analog_inputs,
+                'timestamp': time.time(),
+                'error': None,
+            }
+        except Exception as e:
+            self.io_cache['error'] = str(e)
+            self.io_cache['timestamp'] = time.time()
+            logger.debug(f"raw I/O read failed: {e}")
+
+    def get_io_snapshot(self) -> Dict[str, Any]:
+        """Return a shallow copy of the cached raw I/O snapshot, decorated with
+        TIA-project tag names so the HMI can show 'EStop Channel 1' alongside
+        '%I0.0' without baking the name table into the frontend.
+        """
+        snap = {
+            'inputs': dict(self.io_cache.get('inputs', {})),
+            'outputs': dict(self.io_cache.get('outputs', {})),
+            'analog_inputs': dict(self.io_cache.get('analog_inputs', {})),
+            'timestamp': self.io_cache.get('timestamp', 0.0),
+            'error': self.io_cache.get('error'),
+            'input_names': RAW_INPUT_NAMES,
+            'output_names': RAW_OUTPUT_NAMES,
+            'analog_names': RAW_ANALOG_NAMES,
+        }
+        return snap
