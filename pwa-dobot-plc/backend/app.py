@@ -5210,16 +5210,33 @@ def _poe_detection_loop():
                     _poe_dominant_streak[key] = 0
             if _poe_dominant_streak[dominant] >= POE_DEBOUNCE_CYCLES:
                 _poe_confirmed_dominant = dominant
-            queue_cube_detection_bits(
-                yellow=(_poe_confirmed_dominant == 'yellow_cube'),
-                purple=(_poe_confirmed_dominant == 'purple_cube'),
-                metal =(_poe_confirmed_dominant == 'metal_cube'),
-            )
+
+            # Gate PLC writes on the photoelectric sensor at %I0.5. YOLO sees
+            # a cube well before it reaches the sensor (the conveyor moves it
+            # through frame), so writing bits the moment we see colour would
+            # make the PLC act on a cube that isn't physically in pick
+            # position yet. Only assert the colour bit when the sensor
+            # confirms "there is something here". Falsy sensor / missing
+            # snapshot -> send all-off so a broken read can't strand a
+            # stale colour bit high.
+            io_snap = get_plc_io_snapshot() or {}
+            sensor_present = bool(io_snap.get('inputs', {}).get('I0.5', False))
+            if sensor_present:
+                queue_cube_detection_bits(
+                    yellow=(_poe_confirmed_dominant == 'yellow_cube'),
+                    purple=(_poe_confirmed_dominant == 'purple_cube'),
+                    metal =(_poe_confirmed_dominant == 'metal_cube'),
+                )
+            else:
+                queue_cube_detection_bits(yellow=False, purple=False, metal=False)
+
             # Surface the debounce state in the JSON so the HMI can show
             # "pending confirmation" hints instead of looking frozen.
             result['confirmed_dominant'] = _poe_confirmed_dominant
             result['streak'] = _poe_dominant_streak.get(dominant, 0)
             result['debounce_cycles'] = POE_DEBOUNCE_CYCLES
+            result['sensor_present'] = sensor_present
+            result['plc_bits_gated'] = not sensor_present
             with _poe_loop_lock:
                 _poe_loop_result = result
 
