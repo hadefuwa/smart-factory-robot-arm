@@ -5086,6 +5086,12 @@ def _poe_detection_loop():
             # Crop BEFORE everything downstream — annotated frame, raw cache,
             # YOLO input. config.poe_camera.crop drives the trim percentages.
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
+            # Snapshot the cropped-but-unmasked frame. The mask is an inference
+            # preprocessing trick (kills false positives over the sorted-cube
+            # row); the HMI stream and the raw cache shouldn't have the black
+            # bar burned in. We keep this for the annotated-cache draw_on so
+            # the HMI sees the full camera view + bounding boxes.
+            frame_unmasked = frame.copy()
             # Mask paints solid colour over edges WITHOUT changing dimensions —
             # use this instead of crop when you want to hide a region without
             # disturbing the trained model's expected aspect ratio.
@@ -5095,6 +5101,10 @@ def _poe_detection_loop():
             # — kills phantom detections that fit to the hard mask boundary.
             keep_box = poe_vision_service.keep_box_from_mask(frame.shape, mask_cfg)
 
+            # Raw cache stays masked deliberately: the Capture Training Image
+            # button serves this jpeg, and training images need to match the
+            # exact pixels YOLO sees in production. The annotated cache uses
+            # draw_on=frame_unmasked below so the HMI stream is mask-free.
             ok_raw, raw_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_raw:
                 with _poe_loop_lock:
@@ -5112,7 +5122,8 @@ def _poe_detection_loop():
 
             class_conf = cfg.get('poe_camera', {}).get('class_conf') or None
             result    = poe_vision_service.detect_cubes(
-                frame, conf=conf, keep_box=keep_box, class_conf=class_conf
+                frame, conf=conf, keep_box=keep_box, class_conf=class_conf,
+                draw_on=frame_unmasked,
             )
             annotated = result.pop('annotated', None)
 

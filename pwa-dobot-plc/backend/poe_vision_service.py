@@ -212,7 +212,7 @@ def keep_box_from_mask(frame_shape, mask_cfg):
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
-def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None, class_conf=None):
+def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None, class_conf=None, draw_on=None):
     """
     Run YOLO inference on a frame (numpy BGR array).
     Returns a dict with detections and an annotated frame.
@@ -229,6 +229,11 @@ def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, ke
     floor is set to the LOWEST per-class threshold so every candidate
     gets through to the post-filter; detections whose confidence is
     below their class's threshold are then dropped.
+
+    draw_on: optional numpy BGR array of the same shape as `frame`. When
+    provided, bounding boxes are drawn onto a copy of this image instead
+    of the inference frame — used to hide the preprocessing mask from
+    the cached annotated JPEG that feeds the PLC HMI stream.
     """
     if not _model_ready:
         return {"ok": False, "error": "model_not_loaded", "detections": []}
@@ -253,7 +258,10 @@ def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, ke
         )
 
     detections = []
-    annotated  = frame.copy()
+    if draw_on is not None and draw_on.shape == frame.shape:
+        annotated = draw_on.copy()
+    else:
+        annotated = frame.copy()
 
     for r in results:
         for box in r.boxes:
