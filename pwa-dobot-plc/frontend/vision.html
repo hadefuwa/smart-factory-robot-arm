@@ -710,6 +710,30 @@
                   </div>
                 </div>
 
+                <!-- Photoelectric sensor (%I0.5 Light Sensor 1) — cross-check
+                     against the AI. When the sensor sees something but the AI
+                     says nothing, an "AI MISSED IT" warning lights up below. -->
+                <div id="poeSensorBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3">
+                  <div id="poeSensorDot" class="w-4 h-4 rounded-full flex-shrink-0" style="background:#9e9e9e"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Light Sensor 1 (%I0.5)</div>
+                    <div id="poeSensorLabel" class="font-bold text-base-content text-base">—</div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">PLC read</div>
+                    <div id="poeSensorAge" class="font-mono text-xs text-base-content/60">—</div>
+                  </div>
+                </div>
+
+                <!-- Mismatch warning -->
+                <div id="poeMismatchWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">priority_high</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">AI missed the object</div>
+                    <div>Photoelectric sensor reports an object on the conveyor but YOLO returned zero detections. Likely an untrained class (e.g. a green cube) or low confidence — capture and label more training data.</div>
+                  </div>
+                </div>
+
                 <!-- Detections list -->
                 <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
 
@@ -949,6 +973,60 @@
     // Detection is run by the BACKEND loop in app.py (start_poe_detection_loop),
     // which executes whether or not this page is open and writes the PLC DB124
     // cube bits directly. The page just polls the cached result for display.
+    // Track latest sensor + detection count so the mismatch warning fires
+    // even when the two pollers tick out of step.
+    let _lastSensorState = null;   // true = object present, false = clear
+    let _lastDetectionCount = null;
+
+    function _updateMismatchWarning() {
+      const el = document.getElementById('poeMismatchWarning');
+      if (!el) return;
+      // Only show when sensor explicitly reports an object AND we have a
+      // recent AI result that found zero cubes. Suppress when either signal
+      // is unknown.
+      const sensorOn = _lastSensorState === true;
+      const aiSawNothing = _lastDetectionCount === 0;
+      el.style.display = (sensorOn && aiSawNothing) ? '' : 'none';
+    }
+
+    async function pollPlcSensor() {
+      const dot   = document.getElementById('poeSensorDot');
+      const label = document.getElementById('poeSensorLabel');
+      const age   = document.getElementById('poeSensorAge');
+      try {
+        const res = await fetch(`${API_BASE}/api/plc/io/read?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(4000),
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          if (label) label.textContent = `PLC HTTP ${res.status}`;
+          _lastSensorState = null;
+          _updateMismatchWarning();
+          return;
+        }
+        const snap = await res.json();
+        if (snap.error) {
+          if (label) label.textContent = `PLC read error`;
+          _lastSensorState = null;
+          _updateMismatchWarning();
+          return;
+        }
+        const on = Boolean(snap?.inputs?.['I0.5']);
+        _lastSensorState = on;
+        if (dot)   dot.style.background = on ? '#4caf50' : '#9e9e9e';
+        if (label) label.textContent    = on ? 'OBJECT DETECTED' : 'No object';
+        if (age && snap.timestamp) {
+          const sec = Math.max(0, Math.round(Date.now()/1000 - snap.timestamp));
+          age.textContent = sec + 's ago';
+        }
+        _updateMismatchWarning();
+      } catch (e) {
+        if (label) label.textContent = `Poll failed: ${e.message}`;
+        _lastSensorState = null;
+        _updateMismatchWarning();
+      }
+    }
+
     async function runPoeDetection() {
       document.getElementById('poeModelMissingWarning').style.display = 'none';
       const _showDetectError = (msg) => {
@@ -1025,6 +1103,8 @@
       const dot    = document.getElementById('poeDominantDot');
       const label  = document.getElementById('poeDominantLabel');
       const count  = document.getElementById('poeDetCount');
+      _lastDetectionCount = Number(result.count || 0);
+      _updateMismatchWarning();
       if (result.dominant) {
         badge.style.display = '';
         dot.style.backgroundColor = POE_CUBE_COLOURS[result.dominant] || '#888';
@@ -1421,6 +1501,12 @@
       setTimeout(() => {
         if (!_poeLoopTimer) startPoeLoop();
       }, 400);
+
+      // Photoelectric sensor (%I0.5) — independent of the detect loop so the
+      // mismatch warning ("sensor sees something, AI sees nothing") stays
+      // current even if the AI poll falls behind.
+      pollPlcSensor();
+      setInterval(pollPlcSensor, 1000);
     });
   </script>
 </body>
