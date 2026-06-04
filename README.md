@@ -12,7 +12,7 @@ A comprehensive smart factory automation system featuring Dobot Magician robot c
 - [Usage](#-usage)
 - [Key Features](#-key-features)
 - [Recent: Robot Arm Latency Overhaul (2026-05-20)](#-recent-robot-arm-latency-overhaul-2026-05-20)
-- [Recent Vision System Work (2026-02-26)](#-recent-vision-system-work-2026-02-26)
+- [Recent: Vision Pipeline Overhaul (2026-06-04)](#-recent-vision-pipeline-overhaul-2026-06-04)
 - [Documentation](#-documentation)
 - [Testing](#-testing)
 - [Troubleshooting](#-troubleshooting)
@@ -203,13 +203,12 @@ All devices run on the `192.168.7.x` industrial subnet. No Windows PC is require
 
 This project allows you to:
 
-- **Control a Dobot Magician robot arm** through a web interface
-- **Integrate with Siemens S7-1200 PLC** for automated control
-- **Monitor robot position** in real-time
-- **Clear robot alarms automatically** (this was a key fix!)
-- **Control robot movements** manually or via PLC commands
-- **Use as a Progressive Web App (PWA)** - install it on your phone or desktop
-- **Stream live vision** from a USB camera or M5Stack PoE CAM-W (toggleable in UI)
+- **Drive a 6-DOF ST3215 robot arm** from a Siemens S7-1200 PLC over the integrated Flask + Node.js bridge
+- **Integrate with the PLC** for closed-loop conveyor / sort / pick-and-place control
+- **Monitor robot position, raw I/O, and PLC bits** in real-time from a web UI
+- **Run YOLO cube detection on the backend** every second, write classification bits straight to the PLC, no browser required
+- **Use as a Progressive Web App (PWA)** — install it on your phone or desktop
+- **Capture training data through the production camera pipeline** so the dataset and inference share the exact same field of view
 
 ---
 
@@ -217,33 +216,40 @@ This project allows you to:
 
 ```
 smart-factory-robot-arm/
-├── pwa-dobot-plc/                  # Main application (robot, PLC, vision, camera)
+├── pwa-dobot-plc/                  # Main application (robot, PLC, vision)
 │   ├── backend/
-│   │   ├── app.py                  # Flask entry point (HTTPS, port 8080)
-│   │   ├── config.json             # All hardware config — edit here for IP/port changes
-│   │   ├── plc_integration.py      # PLC polling thread, DB read/write
-│   │   ├── plc_client.py           # snap7 wrapper
-│   │   ├── dobot_client.py         # Dobot Magician USB control
-│   │   ├── camera_service.py       # USB camera + PoE CAM proxy routes
-│   │   ├── vision_service.py       # YOLO + HSV cube detection
+│   │   ├── app.py                  # Flask entry point (HTTPS, port 8080).
+│   │   │                           # Hosts the always-on YOLO detection loop +
+│   │   │                           # the PLC auto-move backend.
+│   │   ├── config.json             # All hardware config — single source of truth
+│   │   ├── plc_worker.py           # snap7 worker (DB reads/writes + raw PE/PA)
+│   │   ├── plc_integration.py      # Idempotent PLC write helpers
+│   │   ├── poe_vision_service.py   # YOLO model load + inference helpers
+│   │   ├── camera_service.py       # USB camera (legacy, disabled)
+│   │   ├── vision_service.py       # HSV colour voting (legacy, disabled)
 │   │   └── ssl/                    # Self-signed certs (generated, not in git)
 │   ├── frontend/
-│   │   ├── vision-system-new.html  # Active vision page (USB ↔ PoE CAM toggle)
-│   │   ├── robot-arm.html
-│   │   ├── plc-setup.html
-│   │   ├── io-link.html
-│   │   └── ...
+│   │   ├── vision.html             # PRODUCTION vision page — polls the backend
+│   │   ├── plc-setup.html          # DB editors + Raw I/O tab
+│   │   ├── robot-arm.html, rfid.html, io-link.html, ...
+│   │   └── assets/js/app-shell.js
+│   ├── robotarmv3-pi-service/      # Node.js arm bridge (ST3215, port 8090)
 │   └── deploy/
 │       ├── ecosystem.config.js     # PM2 config
 │       └── generate_ssl_cert.sh    # HTTPS certificate generator
-├── poe-camera-firmware/            # M5Stack PoE CAM-W Arduino firmware
+├── poe-camera-firmware/
 │   ├── M5PoECAM_SmartFactory/
 │   │   └── M5PoECAM_SmartFactory.ino  # v1.1.0 — ETH.h, static 192.168.7.6
-│   └── FIRMWARE_CHANGELOG.md       # Root cause analysis + flash procedure
-├── raspberry-pi-control-st3215/    # Robot arm servo/joint control
-├── docs/                           # Guides, API docs, solution notes
-├── Documentation/                  # Deployment and troubleshooting docs
-└── CLAUDE.md                       # Claude Code context (AI assistant instructions)
+│   └── FIRMWARE_CHANGELOG.md
+├── cube-training/                  # Local-only training workflow (gitignored)
+│   ├── CUBE_TRAINING_GUIDE.md      # Capture → CVAT → organise → train → SCP
+│   ├── capture_cube_images.py, organize_cube_dataset.py, train_cube_detector.py
+│   └── cube-data.yaml              # 0=yellow_cube, 1=purple_cube, 2=metal_cube
+├── archive/                        # Historic Dobot / USB-camera / old docs
+├── raspberry-pi-control-st3215/    # Robot arm servo/joint control (low-level)
+├── docs/                           # Active guides + investigations
+├── CLAUDE.md                       # Claude Code / AI assistant context
+└── README.md
 ```
 
 ---
@@ -398,20 +404,15 @@ python3 app.py
 
 ## ✨ Key Features
 
-- ✅ **Dobot Movement Control** - Full robot arm control via web interface
-- ✅ **Automatic Alarm Clearing** - Robot alarms are cleared automatically on startup (key fix!)
-- ✅ **PLC Integration** - Siemens S7-1200 communication for automated control
-- ✅ **Real-time Monitoring** - Live position and status updates via REST polling and stream endpoints
-- ✅ **Settings Management** - Web-based configuration interface
-- ✅ **Emergency Stop** - Safety controls for immediate shutdown
-- ✅ **Progressive Web App** - Install and use offline
-- ✅ **Vision System** - YOLO counter detection, HSV color detection (Yellow/White/Metal cubes), continuous 10-vote analysis cycles, multiple detection methods
-- ✅ **Color Detection with Voting** - Majority voting system (10 snapshots) for reliable cube color detection
-- ✅ **Annotated Results** - Visual feedback with bounding boxes and color labels on detected cubes
-- ✅ **Real-time Parameter Controls** - Adjust detection confidence, IOU, cropping, edge sensitivity from the UI
-- ✅ **Camera Support** - Multiple MJPEG streams for raw feed, analyzed image, and annotated results
-- ✅ **HTTPS for WinCC** - Self-signed SSL for embedding camera in WinCC Unified HMI (run `deploy/generate_ssl_cert.sh`)
-- ✅ **WinCC HMI Support** - Camera streams can be embedded in Siemens Unified Panels
+- ✅ **PLC-driven arm motion** — PLC sets `DB125.target_xyz`, backend dispatches to the ST3215 bridge with home-waypoint routing and 20 mm tolerance
+- ✅ **Always-on YOLO cube detection** — runs on the backend every 1 s, writes `yellow_cube_detected` / `purple_cube_detected` / `metal_cube_detected` straight into DB124. No browser required.
+- ✅ **N-consecutive-cycles debounce + per-class confidence thresholds** — single-cycle blips never reach the PLC; permissive thresholds for classes the model under-detects, strict for classes it over-detects
+- ✅ **Raw `%I` / `%Q` PLC reads** exposed via `/api/plc/io/read` and surfaced in a dedicated tab on `plc-setup.html` (EStop, Light Sensors, Conveyor outputs, etc. with TIA-project names)
+- ✅ **Light-sensor cross-check on the vision page** — when `%I0.5` reports an object but YOLO returned zero detections, an "AI missed it" warning lights up. Catches untrained classes (e.g. a green cube) and low-confidence misses.
+- ✅ **Capture Training Image button** — downloads the loop's most recent raw JPEG so training data and inference always share the same field of view
+- ✅ **PLC worker idempotency** — write-side helpers skip no-op writes, keeping the worker cycle around its 100 ms target
+- ✅ **Progressive Web App** — installable on phone or desktop
+- ✅ **HTTPS for WinCC** — self-signed SSL for embedding annotated frames in WinCC Unified HMI (run `deploy/generate_ssl_cert.sh`)
 
 ---
 
@@ -450,129 +451,52 @@ Tagged as `v5.1.0`. The arm now responds to a PLC HMI target change in well unde
 
 ---
 
-## 🔧 Recent Vision System Work (2026-02-26)
+## 🎯 Recent: Vision Pipeline Overhaul (2026-06-04)
 
-This section documents the latest production changes made to the vision pipeline and UI so the current behavior is clear and repeatable.
+The vision system has been fully rebuilt around the M5Stack PoE CAM-W + a custom-trained YOLO11n cube detector. The USB camera and the old HSV colour-voting cycle have been retired — they're left in the tree for reference but every route is commented out.
 
-### 1. Vision page migration and menu consistency
+### What the production pipeline looks like
 
-- `vision-system-new.html` is the active Vision System page.
-- Sidebar links across pages now point to `/vision-system-new.html`.
-- The new page sidebar was aligned with the full standard menu used by other pages (Dashboard, Robot Arm, Vision, RFID, Digital Twin, PLC Diagnostics, IO-Link).
+1. **Always-on backend loop** (`app.py:_poe_detection_loop`, daemon thread, 1 Hz). Runs whether or not the web UI is open.
+2. **Fetch** a raw JPEG from `http://192.168.7.6/capture` via `poe_vision_service.fetch_frame()`.
+3. **Cache** the raw frame for the Capture Training Image button (training data ≤ 1 s old).
+4. **Crop** + **Mask** the frame via config-driven helpers. The mask paints solid black over the right 30% by default, preserving the original 800×600 aspect ratio so the trained model's input shape isn't disturbed.
+5. **YOLO inference** with **per-class confidence thresholds** (`config.poe_camera.class_conf`): yellow 0.35 (permissive), purple 0.50, metal 0.60 (strict). YOLO's own `conf` floor is set to the minimum across classes so every candidate makes it through to the post-filter.
+6. **Keep-box filter** drops detections whose centre falls in the masked region — kills the "object edge" hallucinations YOLO produces on the mask boundary.
+7. **N-consecutive-cycles debounce** (default N=2). The PLC bit only changes after the same class has won the dominant slot for N cycles in a row. Single-cycle false positives never reach the PLC. `None` is a valid streak key so removing the cube also takes N cycles to confirm.
+8. **PLC bit write** via `queue_cube_detection_bits(yellow, purple, metal)` — idempotent; skips no-op writes.
 
-### 2. Live status dashboard rework
+### DB124 cube bits (renamed)
 
-The top status area now behaves like a true runtime dashboard with green/red/warn tones and frequent polling:
+| Tag | Address | Notes |
+|---|---|---|
+| `yellow_cube_detected` | `DB124.DBX0.6` | Set when YOLO confirms a yellow cube |
+| `purple_cube_detected` | `DB124.DBX0.7` | **Renamed** from `white_cube_detected`. The TIA byte/bit offset is unchanged so the PLC project doesn't need editing. |
+| `metal_cube_detected` | `DB124.DBX1.0` | Set when YOLO confirms a metal cube |
 
-- PLC Start Bit status
-- Camera status
-- Vision Cycle status (running/last result)
-- System uptime
-- Backend health
-- Cube color PLC bits (DB123.DBX32.0..32.3): yellow, white, steel, alluminium
+The factory cube set is now yellow / purple / metal. Anything else (e.g. a green cube) won't match a class and the AI-missed-it warning on `vision.html` lights up to flag the gap.
 
-### 3. Continuous analysis logic (current runtime mode)
+### Raw `%I` / `%Q` reads via snap7
 
-Backend behavior is currently set to always-running cycles:
+`plc_worker._refresh_raw_io()` reads the PE and PA areas directly every 500 ms inside the main worker cycle (snap7 isn't thread-safe). Surfaced at `GET /api/plc/io/read` with TIA-project friendly names attached. The vision page polls it to drive the **Light Sensor 1 (%I0.5)** badge and the "AI missed the object" warning.
 
-- 10-vote color analysis runs continuously.
-- A new cycle starts only after the previous cycle finishes.
-- PLC start bit is still read/shown in live status, but cycle triggering is currently forced on in backend (`start_bit = True` in poll loop).
-- Re-enable PLC start-bit gating by restoring the commented conditional in `poll_loop()`.
+Available addresses: digital inputs `%I0.0..%I1.5` (EStops, Reset / Start / Stop buttons, Light Sensors 1–3, Inductive / Capacitive Proxies, Gantry Limit Switches, Quarantine Switch, Fault Override), analog inputs `%IW64` and `%IW66`, digital outputs `%Q0.0..%Q1.1` (Stepper Pulse / Direction, Plunger Down / Up, Pneumatic Vacuum, Gate, Reject, Reset Linear Actuator, Conveyor 1, Conveyor 2).
 
-### 4. Results visibility and debug instrumentation
+### Frontend (`vision.html`)
 
-- Added/expanded debug console on the vision page for API/status/error traces.
-- Added backend endpoint for latest PLC-triggered cycle summary: `GET /api/vision/latest-cycle`
-- Final annotated image retrieval hardened using:
-  - `GET /api/vision/annotated-result` (single latest image)
-  - `GET /api/vision/annotated-result?stream=1` (MJPEG stream)
-- Frontend now uses latest-cycle + annotated-result flow so Final Result updates reliably.
+Now a passive monitor. It polls `/api/poe-vision/latest-result` and `/api/plc/io/read` once a second and renders. The page-side `Live` / `Pause display` button only toggles the display refresh — the backend loop and PLC bits keep running regardless.
 
-### 5. Detection ROI and parameter persistence
+Per-class confidence sliders write their values back to `/api/config` with a 400 ms debounce so the backend loop picks them up within the next cycle.
 
-Persistence across restart was fixed and verified:
+### Training pipeline (`cube-training/`)
 
-- Camera crop (`/api/camera/crop`) persists in `backend/config.json`.
-- Detection ROI (`/api/vision/roi`) persists in `backend/config.json` and is now loaded on backend startup.
-- Quick Test now explicitly sends the active ROI in request payload so detection honors "Expected Cube Position".
-- Min/Max area settings persist in `backend/config.json` under `camera.object_params` and are loaded on page start.
+Local-only workflow. Capture data via the Capture Training Image button on `vision.html` (gets the loop's cached raw JPEG, so training data and inference share the same field of view). Annotate in **CVAT** using the **Ultralytics YOLO Detection 1.0** export format with classes in order yellow_cube → purple_cube → metal_cube. Drop labels into `cube_labels/`. Run `python organize_cube_dataset.py` then `python train_cube_detector.py` (CPU-only by default, ~10 min for 20-ish images, more for larger sets). SCP the resulting `cube_detector.pt` to `pi@192.168.7.5:/home/pi/cube_detector.pt` and restart `smart-factory`.
 
-### 6. PLC cube color bit write logic (DB123)
+See `cube-training/CUBE_TRAINING_GUIDE.md` for the full procedure.
 
-Cube color handoff to PLC now uses one-hot bits in DB123 byte 32:
+### Camera firmware (unchanged)
 
-- `yellow_cube_detected` -> `DB123.DBX32.0`
-- `white_cube_detected` -> `DB123.DBX32.1`
-- `steel_cube_detected` -> `DB123.DBX32.2`
-- `alluminium_cube_detected` -> `DB123.DBX32.3`
-
-Write sequence on detection:
-
-1. Clear bits `32.0..32.3`
-2. Set exactly one bit for detected color
-
-Clear sequence:
-
-- On PLC Completed Command, bits are cleared for next cube.
-
-### 7. PLC mapping conflict fix for byte 32
-
-A tag conflict was discovered and fixed:
-
-- Byte 32 was previously overlapping with a robot status/error mapping in cache logic.
-- Conflict removed by moving that read mapping away from DB123 byte 32 (`error_code` moved to byte 34 in config/cache path), leaving byte 32 dedicated to cube color bits.
-
-### 8. Color bit hold/latch timing
-
-To make PLC/HMI reads reliable, color bits are latched:
-
-- Color bit hold time is currently `3.0s`.
-- Clear requests during hold are deferred until hold expires.
-- This prevents the white/yellow/etc. bit from turning off too quickly to be observed.
-
-### 9. UI simplification
-
-- Removed the separate "Detected Cubes / Analyzed Image" panel from `vision-system-new.html`.
-- Final result rendering remains in the `Final Result` section with live updates.
-
-### 10. Checkpoint tags created
-
-Working checkpoints were tagged in Git:
-
-- `vision-checkpoint-2026-02-24`
-- `vision-checkpoint-2026-02-24-plc-color-latch`
-
-### 11. Digital twin stream behavior (current)
-
-- Digital twin stream startup is disabled by default.
-- Enable by setting `enable_digital_twin_stream: true` in `pwa-dobot-plc/backend/config.json`, or by env var `ENABLE_DIGITAL_TWIN_STREAM=1`.
-- Current local capture target uses `digital-twin.html` (single interactive simulation source for HMI snapshot stream).
-
-### 12. Camera stability hotfix (2026-03-04)
-
-A camera disconnect issue was traced to USB/UVC transport errors on Raspberry Pi, not to frontend logic:
-
-- Kernel errors observed during failure:
-  - `uvcvideo ... Failed to set UVC probe control : -71`
-  - `usb ... Failed to suspend device, error -32`
-  - Camera node temporarily disappeared from `/dev/video0`.
-- Root effect:
-  - `/api/camera/status` reported `connected=false` / `can_read=false`.
-  - `/api/vision/annotated-result?stream=1` fell back to placeholder/no fresh image.
-- Persistent fix applied:
-  - Added `usbcore.autosuspend=-1` to `/boot/firmware/cmdline.txt`.
-  - Reboot required after editing boot cmdline.
-- Post-fix verification:
-  - `/dev/video0` and `/dev/video1` returned.
-  - `GET /api/camera/status` returned `connected=true`, `can_read=true`.
-  - `GET /api/vision/annotated-result?stream=1` served live MJPEG again.
-
-Recommended operational notes:
-
-- Keep camera on a stable USB connection (short, good-quality cable).
-- If stream stalls, first check `journalctl -k | grep -i uvc`.
-- If needed, reboot Pi to force clean UVC re-enumeration.
+M5Stack PoE CAM-W at `192.168.7.6`, firmware v1.1.0 (ETH.h driver, SVGA 800×600, JPEG quality 12, USB 5 V power via G5V pin). The HTTP server is single-client — the backend detection loop owns the slot; `/api/poe-camera/capture` and `/api/poe-vision/annotated` serve cached frames rather than racing the loop.
 
 ---
 
@@ -580,71 +504,48 @@ Recommended operational notes:
 
 ### Quick Start Guides
 
-- **[Quick Start Guide](docs/guides/QUICK_START_ON_PI.md)** - Get started quickly on Raspberry Pi
 - **[Deployment Guide](docs/guides/DEPLOY_TO_PI.md)** - Full deployment instructions
 - **[PLC Setup Guide](docs/guides/PLC_DB1_Setup_Guide.md)** - Setting up PLC communication
 - **[PLC Robot Control](docs/guides/PLC_Robot_Control_Guide.md)** - Using PLC to control robot
 - **[PLC Settings Guide](docs/guides/PLC_Settings_Guide.md)** - Configuring PLC settings
 
-### Problem Solutions
+### Robot Arm
 
-- **[Solution Summary](docs/solutions/SOLUTION_SUMMARY.md)** - **Main fix documentation** (read this first!)
-- **[Bugfix Summary](docs/solutions/BUGFIX_SUMMARY.md)** - Summary of bugs fixed
-- **[Implementation Summary](docs/solutions/IMPLEMENTATION_SUMMARY.md)** - Implementation details
-- **[Complete Documentation](docs/solutions/DOBOT_FIX_COMPLETE_DOCUMENTATION.md)** - Full technical documentation
+- **[J5 wrist-pitch bus corruption investigation](docs/J5_WRIST_PITCH_BUS_CORRUPTION.md)** — diagnosis + fix for the ST3215 bus issue that drove the 1 Mbps → 500 kbps baud drop.
+- **[robotarmv3-pi-service README](pwa-dobot-plc/robotarmv3-pi-service/README.md)** — bridge queue, watchdog, USB-disconnect auto-recovery.
 
-### API Documentation
+### Archive
 
-- **[API Migration Plan](docs/api/DOBOT_API_MIGRATION_PLAN.md)** - API migration information
-- **[Official API Migration Guide](docs/api/OFFICIAL_API_MIGRATION_GUIDE.md)** - Official API guide
-- **[API Quick Reference](docs/api/OFFICIAL_API_QUICK_REFERENCE.md)** - Quick API reference
-- **[API Commands Reference](docs/api/DOBOT_API_COMMANDS_REFERENCE.md)** - Complete command reference
-
-### Documentation Index
-
-For a complete overview, see **[Documentation Index](DOCUMENTATION_INDEX.md)**
+Historic Dobot Magician fix notes and superseded migration plans live in [`archive/`](archive/). The current arm is the 6-DOF ST3215; the Dobot path is no longer in use.
 
 ---
 
 ## 🧪 Testing
 
-### Main Test (Alarm Clearing Fix)
+There is no dedicated automated test harness for the live arm at the moment — verification is done end-to-end against the real PLC + arm rig.
 
-Test the improved Dobot client with alarm clearing:
-
-```bash
-python3 scripts/testing/test_improved_client.py
-```
-
-### pydobot Library Tests
-
-Test basic Dobot functionality:
+### Smoke checks
 
 ```bash
-python3 tests/pydobot/test_dobot_simple.py
-python3 tests/pydobot/test_dobot_speed.py
-python3 tests/pydobot/test_dobot_home.py
-python3 tests/pydobot/test_dobot_ptp_params.py
-python3 tests/pydobot/test_dobot_go_lock.py
+# PLC reachable
+ssh pi@192.168.7.5 'curl -sk https://localhost:8080/api/plc/db125/read | python3 -m json.tool'
+
+# Arm bridge reachable and servos responding
+ssh pi@192.168.7.5 'curl -sk https://localhost:8080/api/robot-arm/status | python3 -m json.tool'
+
+# Both services up
+ssh pi@192.168.7.5 'sudo systemctl is-active smart-factory.service robotarmv3-pi.service'
+
+# Live log stream
+ssh pi@192.168.7.5 'sudo journalctl -u smart-factory.service -u robotarmv3-pi.service -f'
+
+# Position-vs-target CSV (writes every 0.5s)
+ssh pi@192.168.7.5 'tail -f /home/pi/sf2/logs/plc_vs_arm_positions.csv'
 ```
 
-### Official API Tests
+### Archived Dobot tests
 
-Test official Dobot API (if using):
-
-```bash
-python3 tests/official_api/test_official_api_connection.py
-python3 tests/official_api/test_official_api_movement.py
-python3 tests/official_api/test_official_api_peripherals.py
-```
-
-### Alarm Clearing Test
-
-Test alarm clearing functionality:
-
-```bash
-python3 scripts/testing/test_alarm_clear.py
-```
+The earlier `tests/pydobot/` and `tests/official_api/` directories targeted the Dobot Magician and are kept under [`archive/tests/`](archive/tests/) for reference.
 
 ---
 
@@ -683,7 +584,7 @@ newgrp dialout
 
 **Verify fix is applied:**
 - Check that `dobot_client.py` includes alarm clearing in the `connect()` method
-- See [Solution Summary](docs/solutions/SOLUTION_SUMMARY.md) for details
+- Historical Dobot fix notes (no longer in use; current arm is the ST3215) live in [`archive/docs/solutions/`](archive/docs/solutions/).
 
 ### PLC Not Connecting
 
@@ -761,31 +662,29 @@ ls -la /dev/ttyACM*
 
 ## 🚀 Deployment
 
-### Quick Deployment Script
+### Standard deployment
 
-Use the automated deployment script:
+The production setup runs both services under systemd (see the [Autostart on Boot](#-autostart-on-boot) section above). The day-to-day deploy flow is:
 
 ```bash
-./scripts/deployment/setup.sh
+# From your dev machine — push code, then SCP individual files / git pull on the Pi
+git push origin main
+ssh pi@192.168.7.5 'cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service robotarmv3-pi.service'
 ```
 
-### Full Deployment with PM2 (Recommended)
+### PM2 (alternative)
 
-PM2 keeps the application running automatically and restarts it if it crashes:
+If you prefer PM2 over systemd for the Flask backend:
 
 ```bash
-# Install PM2 globally
 npm install -g pm2
-
-# Run full deployment script
-./scripts/deployment/FINAL_DEPLOYMENT.sh
-
-# Or manually:
 cd ~/sf2/pwa-dobot-plc
 pm2 start deploy/ecosystem.config.js
 pm2 save
 pm2 startup  # Follow instructions to enable auto-start on boot
 ```
+
+Earlier Dobot-era deployment scripts (`FINAL_DEPLOYMENT.sh`, `setup.sh`, `deploy_official_api.sh`, etc.) live in [`archive/scripts/deployment/`](archive/scripts/deployment/).
 
 ### Manual PM2 Setup
 
@@ -806,14 +705,6 @@ pm2 startup
 # Check status
 pm2 status
 pm2 logs pwa-dobot-plc
-```
-
-### Official API Setup (Optional)
-
-If you want to use the official Dobot API instead of pydobot:
-
-```bash
-./scripts/deployment/setup_official_dobot_api.sh
 ```
 
 ---
@@ -881,65 +772,67 @@ chmod +x scripts/check_wifi_ap.sh scripts/fix_wifi_ap.sh
 
 ## 📹 Vision System API
 
-### Camera Streams
+### Live result
 
-The vision system provides multiple camera stream endpoints that can be embedded in WinCC HMI or accessed directly:
+- **`GET /api/poe-vision/latest-result`** — JSON of the most recent backend detection cycle. Fields: `ok`, `dominant`, `confirmed_dominant`, `count`, `detections[]`, `streak`, `debounce_cycles`, `timestamp`. The frontend polls this every second.
+- **`GET /api/poe-vision/annotated`** — JPEG of the most recent annotated frame (bounding boxes drawn).
+- **`GET /api/poe-vision/status`** — model load status (`model_ready`, `model_path`, class names, candidate search paths).
+- **`POST /api/poe-vision/detect`** — returns the cached result (no longer triggers inference; kept for backwards compat with the previous JS).
 
-- **Raw Camera Feed**: `https://192.168.7.5:8080/api/camera/stream`
-  - Live MJPEG stream from camera
-  - Unprocessed image
+### Camera
 
-- **Analyzed Image API**: `POST https://192.168.7.5:8080/api/vision/analyze`
-  - Returns detection JSON and analyzed frame payload for on-demand calls
+- **`GET /api/poe-camera/status`** — `{configured, connected, ip}`
+- **`GET /api/poe-camera/capture`** — cached raw JPEG from the backend loop. Used by the Capture Training Image button.
+- **`GET /api/poe-camera/stream`** — proxied MJPEG stream from the M5Stack. Note: opening this counts against the camera's single-client HTTP slot, so the backend detection loop will see `camera_unreachable` while the stream is open.
 
-- **Annotated Result (single image)**: `https://192.168.7.5:8080/api/vision/annotated-result`
-  - Shows the final voting result with color label (e.g., "YELLOW CUBE")
-  - Updates after each voting analysis
-  - Displays the winning cube with colored bounding box
+### Raw PLC I/O
 
-- **Annotated Result (MJPEG stream)**: `https://192.168.7.5:8080/api/vision/annotated-result?stream=1`
-  - Continuous multipart stream for HMI image widgets
-  - Preferred endpoint when single-image caching causes stale frames
+- **`GET /api/plc/io/read`** — snapshot of `%I0.0..%I1.5`, `%Q0.0..%Q1.1`, `%IW64`, `%IW66` decoded into named bits + ints, with friendly TIA-project names attached. Driven by `plc_worker._refresh_raw_io()` every 500 ms.
 
-- **Latest Cycle Summary**: `GET https://192.168.7.5:8080/api/vision/latest-cycle`
-  - Returns latest 10-vote result (`detected_color`, `confidence`, `object_count`, `running`, timestamp)
+### PLC DBs
 
-### Color Detection Voting
+- **`GET /api/plc/db123/read` / `/api/plc/main/read`** — DB123 (process state)
+- **`GET /api/plc/db124/read` / `/api/plc/camera/read`** — DB124 (vision result bits)
+- **`GET /api/plc/db125/read` / `/api/plc/robot/read`** — DB125 (robot arm bridge)
+- **`GET /api/plc/status`** — connection state
 
-Test the color detection system with majority voting:
+### Config
 
-```bash
-# From web interface
-Open: https://192.168.7.5:8080/vision-system-new.html
-Click "START ANALYSIS (10 votes)"
-```
-
-The system takes 10 snapshots, votes on the most common color detected, and displays:
-- Final color result with confidence percentage
-- Vote breakdown by color
-- Annotated image with labeled cube
-- Color code for PLC integration (0=none, 1=yellow, 2=white, 3=metal)
+- **`GET /api/config`** — full backend config (`config.json` contents)
+- **`POST /api/config`** — partial merge; the vision page uses this to persist slider changes (`{poe_camera: {class_conf: {...}}}`)
 
 ---
 
 ## 📋 PLC Memory Map
 
-### DB1 (Data Block)
+| DB | Purpose |
+|----|---------|
+| DB123 | Main process state — HMI bits, conveyors, gantry, pallet, counters |
+| DB124 | Vision result bits (`yellow_cube_detected` 0.6, `purple_cube_detected` 0.7, `metal_cube_detected` 1.0, plus handshake bits) |
+| DB125 | Robot arm bridge (status bytes 0–21, commands bytes 22–31) |
+| DB126 | Edge device stats (CPU / mem / temp / uptime) |
+| DB127 | IO-Link PLC telemetry |
 
-- **DBD0-3**: Target X position (REAL)
-- **DBD4-7**: Target Y position (REAL)
-- **DBD8-11**: Target Z position (REAL)
+**Raw I/O** (no DB needed — read directly from PE / PA areas):
 
-### Merkers (M Memory)
+| Address | Tag |
+|---|---|
+| `%I0.0`, `%I0.1` | EStop Channel 1, 2 |
+| `%I0.2` | Blue Reset Button [NO] |
+| `%I0.3` | Green Start Button [NO] |
+| `%I0.4` | Red Stop Button [NC] |
+| `%I0.5..%I0.7` | Light Sensor 1, 2, 3 |
+| `%I1.0`, `%I1.1` | Inductive Proxy, Capacitive Proxy |
+| `%I1.2`, `%I1.3` | Gantry Limit Switch Low, High |
+| `%I1.4`, `%I1.5` | Quarantine Switch, Fault Override |
+| `%IW64`, `%IW66` | AnalogIn_0, AnalogIn_1 |
+| `%Q0.0`, `%Q0.1` | Stepper Pulse, Direction |
+| `%Q0.2`, `%Q0.3` | Plunger Down, Up |
+| `%Q0.4` | Pneumatic Vacuum |
+| `%Q0.5`, `%Q0.6`, `%Q0.7` | Gate, Reject, Reset Linear Actuator |
+| `%Q1.0`, `%Q1.1` | Conveyor 1, Conveyor 2 |
 
-- **M1000.0**: Start movement
-- **M1000.1**: Stop
-- **M1000.2**: Home
-- **M1000.3**: Emergency stop
-- **M1000.4**: Suction cup control
-- **M1000.5**: Ready status (read-only)
-- **M1000.6**: Busy status (read-only)
-- **M1000.7**: Error status (read-only)
+Full tag map for the DBs lives in `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_READ_WRITE_MAP.md`.
 
 ---
 
@@ -947,7 +840,7 @@ The system takes 10 snapshots, votes on the most common color detected, and disp
 
 The main issue (Dobot not moving) was solved by adding **automatic alarm clearing** to the initialization sequence. When the robot starts up, it may have alarms from previous sessions. These alarms prevent movement commands from working. The fix clears all alarms automatically when connecting.
 
-**See [Solution Summary](docs/solutions/SOLUTION_SUMMARY.md) for complete details.**
+**Historical Dobot fix details live in [`archive/docs/solutions/`](archive/docs/solutions/) — the Dobot Magician is no longer the active arm.**
 
 ---
 
@@ -956,14 +849,15 @@ The main issue (Dobot not moving) was solved by adding **automatic alarm clearin
 ### Quick Help
 
 - **Connection issues:** See [Troubleshooting](#-troubleshooting) section above
-- **Code examples:** Check [Solution Summary](docs/solutions/SOLUTION_SUMMARY.md)
-- **Deployment:** Use `./scripts/deployment/FINAL_DEPLOYMENT.sh`
+- **Robot arm latency / behaviour:** See [Recent: Robot Arm Latency Overhaul (2026-05-20)](#-recent-robot-arm-latency-overhaul-2026-05-20)
+- **Deployment:** See the [Deployment](#-deployment) section above
 
 ### Documentation Resources
 
-- **[Documentation Index](DOCUMENTATION_INDEX.md)** - Complete guide to all documentation
-- **[Solution Summary](docs/solutions/SOLUTION_SUMMARY.md)** - Main fix documentation
-- **[Quick Start Guide](docs/guides/QUICK_START_ON_PI.md)** - Setup instructions
+- **[Deployment Guide](docs/guides/DEPLOY_TO_PI.md)** - Setup instructions
+- **[J5 wrist-pitch bus corruption](docs/J5_WRIST_PITCH_BUS_CORRUPTION.md)** - ST3215 bus diagnosis
+- **[robotarmv3-pi-service README](pwa-dobot-plc/robotarmv3-pi-service/README.md)** - Arm bridge internals
+- **[archive/](archive/)** - Historic notes (Dobot fix, frontend cleanup plans, etc.)
 
 ### Common Questions
 
@@ -1007,6 +901,5 @@ MIT License - Feel free to use and modify!
 
 ---
 
-**Last Updated:** 2026-05-14
-**Version:** v4.7
+**Last Updated:** 2026-06-04
 **Status:** Production Ready ✅
