@@ -9,6 +9,8 @@ git.txt
 cube-training/cube_images/
 cube-training/cube_labels/
 cube-training/cube_labels.cvat_backup/
+cube-training/cube_labels.backup_*/
+cube-training/cubes*.zip
 cube-training/dataset/
 cube-training/runs/
 cube-training/sidelined/
