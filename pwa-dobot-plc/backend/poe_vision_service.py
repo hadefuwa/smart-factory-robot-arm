@@ -142,11 +142,84 @@ def apply_crop(frame, crop_cfg):
     return frame[y1:y2, x1:x2]
 
 
+def apply_mask(frame, mask_cfg):
+    """Paint solid-colour rectangles over the edges of `frame` IN PLACE.
+
+    Unlike apply_crop this preserves the original frame dimensions, so a YOLO
+    model trained on full-resolution frames sees the same aspect ratio at
+    inference. The masked region is replaced with `color_bgr` (default black,
+    which YOLO tends to handle cleanly because it resembles letterbox padding
+    common in training augmentation).
+
+    `mask_cfg` shape:
+        {"enabled": True, "color_bgr": [0,0,0],
+         "top_pct": 0, "bottom_pct": 0, "left_pct": 0, "right_pct": 30}
+    Returns the frame unchanged when mask_cfg is falsy or disabled.
+    """
+    if not mask_cfg or not mask_cfg.get('enabled'):
+        return frame
+    h, w = frame.shape[:2]
+    top    = max(0.0, min(100.0, float(mask_cfg.get('top_pct',    0))))
+    bottom = max(0.0, min(100.0, float(mask_cfg.get('bottom_pct', 0))))
+    left   = max(0.0, min(100.0, float(mask_cfg.get('left_pct',   0))))
+    right  = max(0.0, min(100.0, float(mask_cfg.get('right_pct',  0))))
+    raw_color = mask_cfg.get('color_bgr', [0, 0, 0])
+    try:
+        color = tuple(int(c) for c in raw_color)
+        if len(color) != 3:
+            color = (0, 0, 0)
+    except Exception:
+        color = (0, 0, 0)
+
+    # Copy so we don't mutate the caller's frame array.
+    result = frame.copy()
+    if top > 0:
+        y = int(h * top / 100.0)
+        result[:y, :] = color
+    if bottom > 0:
+        y = int(h * (1.0 - bottom / 100.0))
+        result[y:, :] = color
+    if left > 0:
+        x = int(w * left / 100.0)
+        result[:, :x] = color
+    if right > 0:
+        x = int(w * (1.0 - right / 100.0))
+        result[:, x:] = color
+    return result
+
+
+def keep_box_from_mask(frame_shape, mask_cfg):
+    """Return (x_min, y_min, x_max, y_max) of the un-masked region, or None.
+
+    Used to filter out detections whose centre falls inside the masked area
+    after apply_mask has zeroed it — YOLO sometimes hallucinates a box at
+    the hard mask boundary because the high-contrast edge looks like an
+    object edge.
+    """
+    if not mask_cfg or not mask_cfg.get('enabled'):
+        return None
+    h, w = frame_shape[:2]
+    top    = max(0.0, min(100.0, float(mask_cfg.get('top_pct',    0))))
+    bottom = max(0.0, min(100.0, float(mask_cfg.get('bottom_pct', 0))))
+    left   = max(0.0, min(100.0, float(mask_cfg.get('left_pct',   0))))
+    right  = max(0.0, min(100.0, float(mask_cfg.get('right_pct',  0))))
+    return (
+        int(w * left   / 100.0),
+        int(h * top    / 100.0),
+        int(w * (1.0 - right  / 100.0)),
+        int(h * (1.0 - bottom / 100.0)),
+    )
+
+
 # ── Inference ─────────────────────────────────────────────────────────────────
-def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU):
+def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU, keep_box=None):
     """
     Run YOLO inference on a frame (numpy BGR array).
     Returns a dict with detections and an annotated frame.
+
+    keep_box: optional (x_min, y_min, x_max, y_max). Detections whose centre
+    falls outside this region are dropped from both the detections list and
+    the drawn annotation — used to ignore mask-edge hallucinations.
     """
     if not _model_ready:
         return {"ok": False, "error": "model_not_loaded", "detections": []}
@@ -174,6 +247,13 @@ def detect_cubes(frame, conf: float = DEFAULT_CONF, iou: float = DEFAULT_IOU):
             h = y2 - y1
             cx = x1 + w // 2
             cy = y1 + h // 2
+
+            # Drop detections whose centre is outside the un-masked region.
+            if keep_box is not None:
+                kx1, ky1, kx2, ky2 = keep_box
+                if not (kx1 <= cx < kx2 and ky1 <= cy < ky2):
+                    continue
+
             colour = CUBE_COLOURS.get(label, (0, 255, 0))
 
             detections.append({

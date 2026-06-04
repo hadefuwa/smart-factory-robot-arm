@@ -201,12 +201,21 @@
     "ip": "192.168.7.6",
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
     "crop": {
+      "enabled": false,
+      "top_pct": 0,
+      "bottom_pct": 0,
+      "left_pct": 0,
+      "right_pct": 0,
+      "note": "Disabled in favour of mask below. Crop changes the frame aspect ratio which breaks a model trained on full-frame data."
+    },
+    "mask": {
       "enabled": true,
+      "color_bgr": [0, 0, 0],
       "top_pct": 0,
       "bottom_pct": 0,
       "left_pct": 0,
       "right_pct": 30,
-      "note": "Trim percentages applied to the raw frame before YOLO sees it. Removes the robot arm and the sorted-cube row at the top/right so the model's field of view is just the active conveyor zone."
+      "note": "Solid colour painted over edges of the frame BEFORE YOLO inference. Preserves the original 800x600 aspect ratio (model trained on full-frame data still works) while hiding the sorted-cube row and robot arm on the right side from the model."
     }
   },
   "enable_digital_twin_stream": false,

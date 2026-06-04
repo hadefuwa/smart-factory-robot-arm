@@ -4994,6 +4994,14 @@ def _poe_detection_loop():
             # Crop BEFORE everything downstream — annotated frame, raw cache,
             # YOLO input. config.poe_camera.crop drives the trim percentages.
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
+            # Mask paints solid colour over edges WITHOUT changing dimensions —
+            # use this instead of crop when you want to hide a region without
+            # disturbing the trained model's expected aspect ratio.
+            mask_cfg = cfg.get('poe_camera', {}).get('mask')
+            frame = poe_vision_service.apply_mask(frame, mask_cfg)
+            # Keep-box drops detections whose centre is in the masked region
+            # — kills phantom detections that fit to the hard mask boundary.
+            keep_box = poe_vision_service.keep_box_from_mask(frame.shape, mask_cfg)
 
             ok_raw, raw_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_raw:
@@ -5010,7 +5018,7 @@ def _poe_detection_loop():
                     time.sleep(POE_LOOP_INTERVAL_S)
                     continue
 
-            result    = poe_vision_service.detect_cubes(frame, conf=conf)
+            result    = poe_vision_service.detect_cubes(frame, conf=conf, keep_box=keep_box)
             annotated = result.pop('annotated', None)
 
             if annotated is not None:
