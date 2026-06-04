@@ -28,7 +28,7 @@ from datetime import datetime
 import struct
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -202,6 +202,18 @@ vision_detection_enabled = True
 _poe_latest_result = None
 _poe_latest_lock   = threading.Lock()
 
+# Backend YOLO detection loop state — see start_poe_detection_loop().
+# The loop owns the M5Stack camera's single-client HTTP slot; all PoE camera
+# routes (/api/poe-vision/detect, /api/poe-camera/capture, /api/poe-vision/
+# annotated) read from these caches rather than touching the camera directly.
+_poe_loop_lock         = threading.Lock()
+_poe_loop_result       = None      # JSON-serialisable dict from poe_vision_service.detect_cubes
+_poe_loop_raw_jpeg     = None      # bytes — last raw frame from the camera (for /capture)
+_poe_loop_anno_jpeg    = None      # bytes — last annotated frame (for /annotated)
+_poe_loop_thread       = None
+_poe_loop_pause_until  = 0.0       # epoch seconds; loop sleeps while now() < this
+POE_LOOP_INTERVAL_S    = 2.0       # one detection every 2 seconds
+
 # RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
 robot_arm_bridge_lock = threading.Lock()
 robot_arm_bridge_state = {
@@ -292,6 +304,7 @@ plc_auto_backend_state = {
     'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
     'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
     'home_visited_for_target_key': None,  # operator target key we've already passed through home for
+    'gated_reason': None,           # None when loop is active; 'no_command' / 'dead_bus' when skipping
 }
 PLC_AUTO_TARGET_TOLERANCE_MM = 20
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
@@ -425,6 +438,78 @@ def _route_target_via_home(cache: Dict[str, Any], x: Any, y: Any, z: Any,
     # Otherwise route via home (this tick — next tick will see arm reach home
     # within tolerance and the visited flag will flip to direct mode).
     return h['x'], h['y'], h['z']
+
+
+def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
+    """Return None when the PLC auto-move loop is allowed to run, or a short
+    string reason ('no_command' / 'dead_bus') when it must be gated.
+
+    The original loop blindly drove DB125.target_x/y/z whether or not the
+    operator asked for anything. A stale waypoint left in the PLC (or a
+    default after restart) would generate an endless storm of moveToXYZ
+    attempts and pulse `invalid_target` every backoff cycle. This gate stops
+    that:
+
+      - no_command: none of the DB125.byte22 command bits (home/pickup/
+        pallet/quarantine) is asserted. The PLC HMI must hold one of these
+        while it wants the arm to drive to the matching XYZ.
+      - dead_bus:   the bridge's last getStatus reported >0 joints with 0
+        available. With nothing answering on the TTL bus there is no point
+        sending moves; every attempt times out and noisily sets
+        `invalid_target`. When the bridge has never reported (None
+        last_status) we give it the benefit of the doubt and stay active.
+    """
+    cmd_active = (
+        bool(cache.get('db125_home_command', False))
+        or bool(cache.get('db125_pickup_command', False))
+        or bool(cache.get('db125_pallet_command', False))
+        or bool(cache.get('db125_quarantine_command', False))
+    )
+    if not cmd_active:
+        return 'no_command'
+
+    last_status = robot_arm_bridge_state.get('last_status') or {}
+    joints = last_status.get('joints') if isinstance(last_status, dict) else None
+    if isinstance(joints, list) and len(joints) > 0:
+        available = sum(1 for j in joints if isinstance(j, dict) and j.get('available'))
+        if available == 0:
+            return 'dead_bus'
+
+    return None
+
+
+def _apply_auto_move_gate(reason: Any) -> None:
+    """Transition the auto-move loop into / out of the gated state.
+
+    Only emits log_event and clears state on a real transition — the loop
+    calls this every tick, so silent re-entry must be cheap. On entry we
+    clear in-flight target/backoff state so the next legitimate command
+    fires promptly, and we deassert DB125.invalid_target explicitly
+    (otherwise it sits asserted until the 30s auto-reset).
+    """
+    prev = plc_auto_backend_state.get('gated_reason')
+    if prev == reason:
+        return
+
+    plc_auto_backend_state['gated_reason'] = reason
+    if reason is not None:
+        plc_auto_backend_state['active_target_key'] = None
+        plc_auto_backend_state['active_target_set_at'] = 0.0
+        plc_auto_backend_state['consecutive_errors'] = 0
+        plc_auto_backend_state['error_backoff_until'] = 0.0
+        plc_auto_backend_state['last_sent_target_key'] = None
+        plc_auto_backend_state['home_visited_for_target_key'] = None
+        try:
+            queue_invalid_target(False)
+        except Exception:
+            pass
+        log_event('auto_move', 'gate_engaged',
+                  f'PLC auto-move loop gated: {reason}',
+                  severity=SEVERITY_INFO, reason=reason)
+    else:
+        log_event('auto_move', 'gate_released',
+                  f'PLC auto-move loop active again (was gated: {prev})',
+                  severity=SEVERITY_INFO, previous_reason=prev)
 
 
 def _manual_override_remaining_seconds() -> int:
@@ -618,6 +703,15 @@ def plc_auto_backend_tick():
             ensure_robot_arm_bridge_connected()
         except Exception:
             pass
+        return
+
+    # Operator-intent + dead-bus gate. Without this the loop drives any value
+    # sitting in DB125.target_x/y/z whether or not the PLC HMI is asking, and
+    # storms moveToXYZ at a dark TTL bus, pulsing invalid_target on every
+    # backoff cycle. See _auto_move_gate_reason / _apply_auto_move_gate.
+    gate_reason = _auto_move_gate_reason(cache)
+    _apply_auto_move_gate(gate_reason)
+    if gate_reason is not None:
         return
 
     x_final = cache.get('db125_target_x')
@@ -1132,6 +1226,10 @@ def _position_logger_loop():
                                 # position, faults, connected bit. See
                                 # _writeback_bridge_status_to_plc for rationale.
                                 _writeback_bridge_status_to_plc(resp)
+                                # Cache the most recent status so the auto-move
+                                # gate can read joint availability without a
+                                # browser polling /api/robot-arm/status.
+                                robot_arm_bridge_state['last_status'] = resp
                             finally:
                                 ws.settimeout(3)
                 except Exception:
