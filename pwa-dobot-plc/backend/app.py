@@ -5003,6 +5003,18 @@ def poe_vision_latest_result():
     return jsonify(cached)
 
 
+@app.route('/api/vision/annotated-result', methods=['GET'])
+def legacy_annotated_result():
+    """Legacy URL kept alive for the PLC HMI panel.
+
+    The old USB / colour-voting pipeline is gone, but the HMI's iframe is
+    still configured against this URL. Forward to the new cached-annotated
+    handler so we don't have to change anything on the HMI side. Honours
+    ?stream=1 the same way the legacy endpoint did.
+    """
+    return poe_vision_annotated()
+
+
 @app.route('/api/poe-vision/annotated', methods=['GET'])
 def poe_vision_annotated():
     """Return the most-recent annotated frame as a JPEG image (from the
