@@ -213,6 +213,15 @@ _poe_loop_anno_jpeg    = None      # bytes — last annotated frame (for /annota
 _poe_loop_thread       = None
 _poe_loop_pause_until  = 0.0       # epoch seconds; loop sleeps while now() < this
 POE_LOOP_INTERVAL_S    = 2.0       # one detection every 2 seconds
+POE_DEBOUNCE_CYCLES    = 2         # consecutive cycles required before PLC bits change
+
+# Debounce state — counts consecutive cycles where each class (or None) was
+# the loop's dominant. The "confirmed" dominant only updates once a class
+# has held that position for POE_DEBOUNCE_CYCLES in a row, which kills the
+# single-cycle false-metal blips without slowing down real detections too
+# much. None is a valid key — same idea on the way back to "no cube".
+_poe_dominant_streak = {'yellow_cube': 0, 'purple_cube': 0, 'metal_cube': 0, None: 0}
+_poe_confirmed_dominant = None
 
 # RobotArmv3 Pi service bridge state (Flask -> Pi WebSocket)
 robot_arm_bridge_lock = threading.Lock()
@@ -5028,16 +5037,38 @@ def _poe_detection_loop():
                         _poe_loop_anno_jpeg = bytes(anno_buf)
 
             result['timestamp'] = time.time()
+
+            # N-consecutive-cycles debounce — see _poe_dominant_streak.
+            # Increment the streak for whatever class won this cycle (None
+            # included); reset every other streak. Once a streak hits
+            # POE_DEBOUNCE_CYCLES, that class becomes the latched
+            # confirmed dominant and gets written to the PLC. Until then,
+            # the PLC keeps whatever was last confirmed.
+            global _poe_confirmed_dominant
+            dominant = result.get('dominant')
+            for key in list(_poe_dominant_streak.keys()):
+                if key == dominant:
+                    # Cap the streak so it doesn't grow unbounded.
+                    _poe_dominant_streak[key] = min(
+                        _poe_dominant_streak[key] + 1,
+                        POE_DEBOUNCE_CYCLES + 5,
+                    )
+                else:
+                    _poe_dominant_streak[key] = 0
+            if _poe_dominant_streak[dominant] >= POE_DEBOUNCE_CYCLES:
+                _poe_confirmed_dominant = dominant
+            queue_cube_detection_bits(
+                yellow=(_poe_confirmed_dominant == 'yellow_cube'),
+                purple=(_poe_confirmed_dominant == 'purple_cube'),
+                metal =(_poe_confirmed_dominant == 'metal_cube'),
+            )
+            # Surface the debounce state in the JSON so the HMI can show
+            # "pending confirmation" hints instead of looking frozen.
+            result['confirmed_dominant'] = _poe_confirmed_dominant
+            result['streak'] = _poe_dominant_streak.get(dominant, 0)
+            result['debounce_cycles'] = POE_DEBOUNCE_CYCLES
             with _poe_loop_lock:
                 _poe_loop_result = result
-
-            # Queue PLC bits — helper skips no-op writes.
-            dominant = result.get('dominant')
-            queue_cube_detection_bits(
-                yellow=(dominant == 'yellow_cube'),
-                purple=(dominant == 'purple_cube'),
-                metal =(dominant == 'metal_cube'),
-            )
 
         except Exception as e:
             logger.warning(f"PoE detection loop iteration failed: {e}")
