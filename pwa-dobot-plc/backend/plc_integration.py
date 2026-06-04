@@ -355,6 +355,39 @@ def queue_robot_faults(any_moving: bool, any_overload: bool, any_undervoltage: b
         logger.error(f"Error queueing robot faults: {e}")
 
 
+_last_cube_detection_bits = None
+
+def queue_cube_detection_bits(yellow: bool, purple: bool, metal: bool):
+    """
+    Queue a write of the YOLO cube detection bits in DB124.
+
+    Idempotent — skips the enqueue when (yellow, purple, metal) matches the
+    previous call so the PLC worker queue doesn't fill with redundant writes
+    while a single cube sits in front of the camera for many frames.
+    """
+    global _last_cube_detection_bits
+    triple = (bool(yellow), bool(purple), bool(metal))
+    if triple == _last_cube_detection_bits:
+        return
+    if plc_worker is None:
+        logger.warning("PLC worker not initialized — cube bits dropped")
+        return
+
+    yp_offset = plc_worker.camera_db_tags['yellow_cube_detected']['byte']
+    yp_byte = bytearray(1)
+    set_bool(yp_byte, 0, plc_worker.camera_db_tags['yellow_cube_detected']['bit'], triple[0])
+    set_bool(yp_byte, 0, plc_worker.camera_db_tags['purple_cube_detected']['bit'], triple[1])
+    plc_worker.queue_write(plc_worker.camera_db_number, yp_offset, yp_byte, "Cube detect Y/P")
+
+    metal_offset = plc_worker.camera_db_tags['metal_cube_detected']['byte']
+    metal_byte = bytearray(1)
+    set_bool(metal_byte, 0, plc_worker.camera_db_tags['metal_cube_detected']['bit'], triple[2])
+    plc_worker.queue_write(plc_worker.camera_db_number, metal_offset, metal_byte, "Cube detect M")
+
+    _last_cube_detection_bits = triple
+    logger.debug(f"queued cube detection bits: yellow={triple[0]} purple={triple[1]} metal={triple[2]}")
+
+
 def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool = False, aluminum: bool = False):
     """
     Queue cube color detection bits write.

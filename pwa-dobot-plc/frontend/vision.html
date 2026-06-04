@@ -674,7 +674,7 @@
                 <i class="material-icons" style="font-size:1rem;line-height:1">search</i> Detect Cubes
               </button>
               <button class="btn btn-sm btn-ghost gap-1" onclick="startPoeLoop()" id="poeLoopBtn">
-                <i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto
+                <i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Live
               </button>
               <button class="btn btn-sm btn-primary gap-1" onclick="captureTrainingImage()" id="captureBtn">
                 <i class="material-icons" style="font-size:1rem;line-height:1">photo_camera</i> Capture
@@ -946,11 +946,10 @@
       metal_cube:  '#6b7280',
     };
 
+    // Detection is run by the BACKEND loop in app.py (start_poe_detection_loop),
+    // which executes whether or not this page is open and writes the PLC DB124
+    // cube bits directly. The page just polls the cached result for display.
     async function runPoeDetection() {
-      const confSlider = document.getElementById('poeConfSlider');
-      const conf = confSlider ? (parseInt(confSlider.value, 10) / 100) : 0.30;
-      const ip = (document.getElementById('poeCameraIp') || {}).value || '192.168.7.6';
-
       document.getElementById('poeModelMissingWarning').style.display = 'none';
       const _showDetectError = (msg) => {
         const ph = document.getElementById('poeAnnotatedPlaceholder');
@@ -968,37 +967,30 @@
         }
       };
 
-      // M5Stack ESP32 HTTP server is single-client. While /stream is open the
-      // backend's /capture call inside run_on_poe_cam() will time out as
-      // "camera_unreachable". Stop the live preview, run detect, then resume.
-      // _poeLoopTimer presence signals the Auto loop is driving — in that case
-      // the loop manages stream pause/resume itself.
-      const _autoMode = Boolean(_poeLoopTimer);
-      if (!_autoMode) stopStream();
-      const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
-      if (!_autoMode) await waitMs(450);
-
       let result;
       try {
-        const res = await fetch(`${API_BASE}/api/poe-vision/detect`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ip, conf}),
-          signal: AbortSignal.timeout(12000),
+        const res = await fetch(`${API_BASE}/api/poe-vision/latest-result?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000),
+          cache: 'no-store',
         });
         result = await res.json();
         if (res.status === 503) {
-          document.getElementById('poeModelMissingWarning').style.display = '';
-          if (!_autoMode) startStream();
+          if (result.error === 'model_not_loaded') {
+            document.getElementById('poeModelMissingWarning').style.display = '';
+          } else {
+            _showDetectError({
+              title: 'Backend loop warming up',
+              copy: 'No detection result yet — usually clears within 2-3 seconds of backend startup.'
+            });
+          }
           return;
         }
       } catch (e) {
-        addDebugLog('PoE detect request failed', e.message, 'warn');
+        addDebugLog('latest-result request failed', e.message, 'warn');
         _showDetectError({
-          title: 'Detect request failed',
-          copy: e.message + ' — backend may be down or request timed out.'
+          title: 'Backend unreachable',
+          copy: e.message + ' — backend may be restarting.'
         });
-        if (!_autoMode) startStream();
         return;
       }
 
@@ -1007,30 +999,27 @@
           document.getElementById('poeModelMissingWarning').style.display = '';
         } else if (result.error === 'camera_unreachable') {
           _showDetectError({
-            title: 'PoE Camera busy',
-            copy: 'The camera is already serving another HTTP client (likely the live stream). Try again — the page now pauses the stream before each detect.'
+            title: 'PoE Camera unreachable',
+            copy: 'Backend can\'t reach the M5Stack at the configured IP. Check power and network.'
           });
         } else {
           _showDetectError({
-            title: 'Detect failed',
-            copy: result.error || 'Unknown error from /api/poe-vision/detect.'
+            title: 'Detection error',
+            copy: result.error || 'Unknown error.'
           });
         }
-        addDebugLog('PoE detect error', result.error, 'warn');
-        if (!_autoMode) startStream();
+        addDebugLog('detection result not ok', result.error, 'warn');
         return;
       }
 
       const img = document.getElementById('poeAnnotatedImg');
       const ph  = document.getElementById('poeAnnotatedPlaceholder');
-      img.src   = `${API_BASE}/api/poe-vision/annotated?_=${Date.now()}`;
-      // CSS default for .sf-vision-frame is display:none, so we must set an
-      // explicit visible value rather than clearing the inline override.
+      // Cache-bust on the loop's timestamp so we only re-fetch the JPEG when
+      // the backend actually has a new frame.
+      const ts = Number(result.timestamp || Date.now()/1000).toFixed(2);
+      img.src   = `${API_BASE}/api/poe-vision/annotated?ts=${ts}`;
       img.style.display = 'block';
       if (ph) ph.style.display = 'none';
-      // Resume the live preview after a one-shot detect; the Auto loop keeps
-      // it paused for the duration of the loop.
-      if (!_autoMode) startStream();
 
       const badge  = document.getElementById('poeDominantBadge');
       const dot    = document.getElementById('poeDominantDot');
@@ -1082,23 +1071,20 @@
       } catch (e) { return false; }
     }
 
+    // Toggles the page-side poll that mirrors the backend loop's cached
+    // result. Detection itself never stops — this just controls whether the
+    // HMI refreshes its display. "Stop" hides the page polling; the PLC
+    // bits keep updating regardless.
     function startPoeLoop() {
       const btn = document.getElementById('poeLoopBtn');
       if (_poeLoopTimer) {
         clearInterval(_poeLoopTimer);
         _poeLoopTimer = null;
-        // Auto stopped — bring the live preview back.
-        startStream();
-        if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Auto'; }
+        if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Live'; }
       } else {
-        // Pause the live MJPEG preview for the duration of the loop so each
-        // detect's /capture call can win the M5Stack single-client slot.
-        stopStream();
-        // Mark loop active BEFORE the first detect so runPoeDetection's
-        // _autoMode check sees it.
         _poeLoopTimer = setInterval(runPoeDetection, 2000);
         runPoeDetection();
-        if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Stop'; }
+        if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Pause display'; }
       }
     }
 

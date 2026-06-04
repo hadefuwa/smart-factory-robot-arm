@@ -3920,17 +3920,34 @@ def poe_camera_stream():
 
 @app.route('/api/poe-camera/capture')
 def poe_camera_capture():
-    """Pull a single raw JPEG from the M5Stack PoE CAM-W /capture endpoint.
+    """Return the most recent raw JPEG the detection loop pulled from the cam.
 
-    Used for AI training-image collection — returns the frame in the
-    camera's native orientation (unrotated) so it matches what
-    poe_vision_service feeds to YOLO at inference time.
+    Used for AI training-image collection. Reads from the backend detection
+    loop's cache instead of hitting the camera directly, so the Capture
+    button never fights the loop for the M5Stack's single-client HTTP slot.
+    Frame is at most POE_LOOP_INTERVAL_S seconds old.
+
+    If the cache is empty (loop hasn't run yet, e.g. on first boot before the
+    camera is reachable), falls back to a one-shot direct fetch after briefly
+    pausing the loop so the request can't race.
     """
-    config = load_config()
-    poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
+    with _poe_loop_lock:
+        cached = _poe_loop_raw_jpeg
+    if cached is not None:
+        response = Response(cached, mimetype='image/jpeg')
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
+
+    # Fallback path — loop has no cached frame yet.
+    global _poe_loop_pause_until
+    cfg = load_config()
+    poe_ip = str(cfg.get('poe_camera', {}).get('ip', '')).strip()
     if not poe_ip:
         return jsonify({'error': 'PoE camera IP not configured.'}), 503
+    # Pause the loop for a second so we don't race it.
+    _poe_loop_pause_until = time.time() + 1.5
     try:
+        time.sleep(0.3)
         upstream = requests.get(f'http://{poe_ip}/capture', timeout=5)
         if upstream.status_code >= 400:
             return jsonify({'error': f'PoE camera returned HTTP {upstream.status_code}'}), 502
@@ -4890,46 +4907,140 @@ def poe_vision_status():
 
 @app.route('/api/poe-vision/detect', methods=['POST'])
 def poe_vision_detect():
-    """
-    Fetch a frame from the PoE CAM and run YOLO cube detection.
-    Body (optional JSON): { "ip": "192.168.7.6", "conf": 0.30 }
-    Returns JSON with detections list and dominant class.
-    Also caches the annotated frame for GET /api/poe-vision/annotated.
-    """
-    global _poe_latest_result
-    data     = request.get_json(silent=True) or {}
-    cfg      = load_config()
-    poe_ip   = data.get('ip', cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
-    conf     = float(data.get('conf', 0.30))
+    """Return the latest cached detection result.
 
-    if not poe_vision_service.is_ready():
-        if not poe_vision_service.load_model():
+    The backend detection loop (see start_poe_detection_loop) is the sole
+    owner of the M5Stack camera's single-client HTTP slot, so POST /detect
+    no longer fetches inline — it just hands back whatever the loop produced
+    most recently. The body is ignored (kept for backwards compat).
+    """
+    with _poe_loop_lock:
+        cached = dict(_poe_loop_result) if _poe_loop_result else None
+    if cached is None:
+        if not (poe_vision_service.is_ready() or poe_vision_service.load_model()):
             return jsonify({'ok': False, 'error': 'model_not_loaded',
                             'hint': 'Train the cube detector first — see cube-training/CUBE_TRAINING_GUIDE.md'}), 503
+        return jsonify({'ok': False, 'error': 'no_result_yet',
+                        'hint': 'Backend detection loop has not completed its first cycle.'}), 503
+    return jsonify(cached)
 
-    result = poe_vision_service.run_on_poe_cam(poe_ip, conf=conf)
 
-    # Cache annotated frame (numpy BGR → JPEG bytes)
-    if result.get('ok') and result.get('annotated') is not None:
-        _, buf = cv2.imencode('.jpg', result['annotated'], [cv2.IMWRITE_JPEG_QUALITY, 88])
-        with _poe_latest_lock:
-            _poe_latest_result = bytes(buf)
-
-    # Don't serialise numpy array in the JSON response
-    result.pop('annotated', None)
-    result.pop('timestamp', None)
-    return jsonify(result)
+@app.route('/api/poe-vision/latest-result', methods=['GET'])
+def poe_vision_latest_result():
+    """Return the latest cached detection result from the backend loop."""
+    with _poe_loop_lock:
+        cached = dict(_poe_loop_result) if _poe_loop_result else None
+    if cached is None:
+        return jsonify({'ok': False, 'error': 'no_result_yet'}), 503
+    return jsonify(cached)
 
 
 @app.route('/api/poe-vision/annotated', methods=['GET'])
 def poe_vision_annotated():
-    """Return the most-recent annotated frame as a JPEG image."""
-    with _poe_latest_lock:
-        jpeg = _poe_latest_result
+    """Return the most-recent annotated frame as a JPEG image (from the
+    backend detection loop)."""
+    with _poe_loop_lock:
+        jpeg = _poe_loop_anno_jpeg
+    if jpeg is None:
+        # Fall back to the legacy cache so existing GETs don't suddenly 404
+        # during the transition between code paths.
+        with _poe_latest_lock:
+            jpeg = _poe_latest_result
     if jpeg is None:
         abort(404)
     return Response(jpeg, mimetype='image/jpeg',
                     headers={'Cache-Control': 'no-store'})
+
+
+def _poe_detection_loop():
+    """Always-on YOLO detection loop. Runs on a daemon thread.
+
+    Pulls a frame from the M5Stack PoE CAM every POE_LOOP_INTERVAL_S seconds,
+    runs the cube detector, caches the raw + annotated JPEGs and the JSON
+    result, and queues PLC DB124 cube-detected bits (yellow / purple / metal)
+    based on the dominant class.
+
+    Owns the camera's single-client HTTP slot — other handlers read caches.
+    Honours the _poe_loop_pause_until epoch-seconds gate so /api/poe-camera/
+    capture can briefly cut in for a fresh raw frame.
+    """
+    global _poe_loop_result, _poe_loop_raw_jpeg, _poe_loop_anno_jpeg
+    logger.info("PoE detection loop starting (interval=%.1fs)", POE_LOOP_INTERVAL_S)
+    # Give the YOLO model load thread a head start.
+    time.sleep(2.0)
+
+    while True:
+        loop_started = time.time()
+        try:
+            now = time.time()
+            if now < _poe_loop_pause_until:
+                time.sleep(min(POE_LOOP_INTERVAL_S, _poe_loop_pause_until - now))
+                continue
+
+            cfg     = load_config()
+            poe_ip  = str(cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
+            conf    = float(cfg.get('poe_camera', {}).get('conf', 0.30))
+
+            frame = poe_vision_service.fetch_frame(poe_ip, timeout=4)
+            if frame is None:
+                with _poe_loop_lock:
+                    _poe_loop_result = {
+                        'ok': False, 'error': 'camera_unreachable',
+                        'detections': [], 'timestamp': time.time(),
+                    }
+                time.sleep(POE_LOOP_INTERVAL_S)
+                continue
+
+            ok_raw, raw_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            if ok_raw:
+                with _poe_loop_lock:
+                    _poe_loop_raw_jpeg = bytes(raw_buf)
+
+            if not poe_vision_service.is_ready():
+                if not poe_vision_service.load_model():
+                    with _poe_loop_lock:
+                        _poe_loop_result = {
+                            'ok': False, 'error': 'model_not_loaded',
+                            'detections': [], 'timestamp': time.time(),
+                        }
+                    time.sleep(POE_LOOP_INTERVAL_S)
+                    continue
+
+            result    = poe_vision_service.detect_cubes(frame, conf=conf)
+            annotated = result.pop('annotated', None)
+
+            if annotated is not None:
+                ok_anno, anno_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
+                if ok_anno:
+                    with _poe_loop_lock:
+                        _poe_loop_anno_jpeg = bytes(anno_buf)
+
+            result['timestamp'] = time.time()
+            with _poe_loop_lock:
+                _poe_loop_result = result
+
+            # Queue PLC bits — helper skips no-op writes.
+            dominant = result.get('dominant')
+            queue_cube_detection_bits(
+                yellow=(dominant == 'yellow_cube'),
+                purple=(dominant == 'purple_cube'),
+                metal =(dominant == 'metal_cube'),
+            )
+
+        except Exception as e:
+            logger.warning(f"PoE detection loop iteration failed: {e}")
+
+        elapsed = time.time() - loop_started
+        time.sleep(max(0.05, POE_LOOP_INTERVAL_S - elapsed))
+
+
+def start_poe_detection_loop():
+    """Spawn the always-on PoE detection loop daemon thread (idempotent)."""
+    global _poe_loop_thread
+    if _poe_loop_thread is not None and _poe_loop_thread.is_alive():
+        return
+    _poe_loop_thread = threading.Thread(target=_poe_detection_loop, daemon=True, name='poe-detect-loop')
+    _poe_loop_thread.start()
 
 
 # DISABLED (USB / color-voting retired): @app.route('/api/vision/latest-cycle', methods=['GET'])
@@ -6520,6 +6631,10 @@ if __name__ == '__main__':
     # Pre-load the cube detector model in a background thread so the first
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
+
+    # Always-on PoE YOLO detection loop — runs whether or not the web UI is
+    # open, writes DB124 cube bits, caches frames for the HTTP endpoints.
+    start_poe_detection_loop()
 
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
