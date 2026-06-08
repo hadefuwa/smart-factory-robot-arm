@@ -1123,14 +1123,14 @@ def _write_iolink_to_plc(worker):
         if online:
             _append_supervision_history(result.get('supervision', {}))
             sup = result.get('supervision', {})
-            current_ma = 0.0
+            current_a = 0.0
             voltage_v = 0.0
             temp_c = 0.0
             alarm = False
             for k, v in sup.items():
                 low = k.lower().replace('-', '').replace(' ', '')
                 if 'current' in low:
-                    current_ma = float(_parse_supervision_number(v, 0.0))
+                    current_a = float(_parse_supervision_number(v, 0.0))
                 elif 'voltage' in low:
                     voltage_v = float(_parse_supervision_number(v, 0.0))
                 elif 'temp' in low:
@@ -1140,8 +1140,8 @@ def _write_iolink_to_plc(worker):
                     alarm = bool(status_val) and status_val != 0
 
             current_buf = bytearray(4)
-            set_real(current_buf, 0, current_ma)
-            worker.queue_write(DB127, layout['current'], current_buf, f'IOLink Current={current_ma}mA')
+            set_real(current_buf, 0, current_a)
+            worker.queue_write(DB127, layout['current'], current_buf, f'IOLink Current={current_a}A')
 
             voltage_buf = bytearray(4)
             set_real(voltage_buf, 0, voltage_v)
@@ -6249,22 +6249,59 @@ _IO_LINK_HISTORY_MAX = 120
 
 
 def _parse_supervision_number(val, default=0):
-    """Parse supervision value to number. E.g. '251mA'->251, '23758mV'->23.758, '39Â°C'->39"""
+    """Parse supervision value to number in SI base units.
+    Examples: '251mA' -> 0.251 (A), '23758mV' -> 23.758 (V), '0.17 A' -> 0.17,
+    '24.0 V' -> 24.0, '39°C' -> 39.
+    """
     if val is None or val == '':
         return default
     s = str(val).strip()
-    m = re.match(r'^([-\d.]+)', s)
-    if m:
+    m = re.match(r'^(-?[\d.]+)', s)
+    if not m:
+        try:
+            return float(s)
+        except ValueError:
+            return default
+    num = float(m.group(1))
+    low = s.lower()
+    if 'mv' in low:
+        return round(num / 1000, 3)
+    if 'ma' in low:
+        return round(num / 1000, 3)
+    return num
+
+
+def _normalize_supervision_units(supervision):
+    """Rewrite supervision values to SI display units (V, A, °C).
+    The IFM master reports current/voltage in mA/mV; the UI shows volts and amps.
+    """
+    if not isinstance(supervision, dict):
+        return supervision
+    out = {}
+    for k, v in supervision.items():
+        if v is None or v == '':
+            out[k] = v
+            continue
+        s = str(v).strip()
+        m = re.match(r'^(-?\d+(?:\.\d+)?)\s*([a-zA-Z°]*)', s)
+        if not m:
+            out[k] = v
+            continue
         num = float(m.group(1))
-        if 'mV' in s.lower():
-            return round(num / 1000, 2)
-        if 'mA' in s.lower() or 'Â°c' in s.lower() or 'c' in s.lower():
-            return num
-        return num
-    try:
-        return float(s)
-    except ValueError:
-        return default
+        unit = m.group(2).lower()
+        low = k.lower().replace('-', '').replace(' ', '')
+        if 'voltage' in low:
+            volts = num / 1000.0 if unit == 'mv' else num
+            out[k] = f"{volts:.1f} V"
+        elif 'current' in low:
+            # Device convention: bare or 'mA' -> milliamps.
+            amps = num if unit == 'a' else num / 1000.0
+            out[k] = f"{amps:.2f} A"
+        elif 'temp' in low:
+            out[k] = f"{num:.0f} °C"
+        else:
+            out[k] = v
+    return out
 
 
 def _append_supervision_history(supervision_dict):
@@ -6693,7 +6730,7 @@ def _fetch_io_link_via_iot_core(base_url: str, timeout: float) -> Optional[Dict]
         return {
             'device_name': device_name,
             'ports': ports,
-            'supervision': supervision,
+            'supervision': _normalize_supervision_units(supervision),
             'software': software,
             'device_icon_url': device_icon_url,
             'product_image_url': '/api/io-link/product-image',
@@ -6784,7 +6821,7 @@ def _fetch_io_link_via_web_scrape(base_url: str, timeout: float) -> Optional[Dic
         return {
             'device_name': device_name,
             'ports': ports,
-            'supervision': supervision,
+            'supervision': _normalize_supervision_units(supervision),
             'software': software,
             'product_image_url': '/api/io-link/product-image',
             'timestamp': time.time()

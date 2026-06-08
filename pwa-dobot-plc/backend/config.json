@@ -167,7 +167,7 @@
       "enabled": true,
       "db_number": 127,
       "total_size": 18,
-      "comment": "IO-Link master supervision: online flag, port current/voltage/temperature, alarm, active port count",
+      "comment": "IO-Link master supervision: online flag, port current (Amps, REAL), voltage (Volts, REAL), temperature (°C, REAL), alarm, active port count",
       "tags": {
         "online":             { "byte": 0,  "bit": 0 },
         "current":            { "byte": 2 },

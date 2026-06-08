@@ -405,11 +405,11 @@
               </header>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <div class="chart-container">
-                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Current (mA)</h6>
+                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Current (A)</h6>
                   <div class="ct-chart ct-perfect-fourth" id="chartCurrent"></div>
                 </div>
                 <div class="chart-container">
-                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Voltage (mV)</h6>
+                  <h6 class="mb-2 text-center text-sm font-bold text-base-content">Voltage (V)</h6>
                   <div class="ct-chart ct-perfect-fourth" id="chartVoltage"></div>
                 </div>
                 <div class="chart-container">
@@ -848,13 +848,13 @@
           };
         };
 
-        // Current chart (mA) - always starts at 0A
+        // Current chart (A) - always starts at 0A
         const currentRange = getMinMax(currentSer);
         const currentOpts = { ...baseOpts, ...currentRange };
         if (chartCurrent) chartCurrent.update({ labels: labels, series: [currentSer] }, currentOpts);
         else chartCurrent = new Chartist.Line('#chartCurrent', { labels: labels, series: [currentSer] }, currentOpts);
 
-        // Voltage chart (mV) - always starts at 0V
+        // Voltage chart (V) - always starts at 0V
         const voltageRange = getMinMax(voltageSer);
         const voltageOpts = { ...baseOpts, ...voltageRange };
         if (chartVoltage) chartVoltage.update({ labels: labels, series: [voltageSer] }, voltageOpts);
