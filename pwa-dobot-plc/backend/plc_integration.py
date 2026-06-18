@@ -182,20 +182,13 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         logger.warning("PLC worker not initialized")
         return
 
-    # Read-modify-write the DB125 status bytes
-    # All status bits live in byte 0 (and cycle_complete in byte 1).
-    # We must seed each byte buffer from the current cache so we only change
-    # the bits we're explicitly updating — not zero-out the rest.
+    # Bit-level writes only. Do NOT do byte RMW on DB125 byte 0 — the PLC
+    # owns several bits in there (e.g. Move_Complete at 0.2, set by the
+    # position-tolerance ladder) and a cached byte write here clobbers them.
+    # queue_bit_write does an atomic RMW on the worker thread so only the
+    # bits Pi actually owns are touched.
     try:
         cache = get_plc_cache()
-        # Idempotency: if the values we'd write match what cache already holds,
-        # skip enqueueing entirely. Without this, every Flask-to-bridge
-        # connection flap (close + open) queued 2 writes per side = 4+ writes
-        # to status bytes that hadn't actually changed, slamming the PLC
-        # worker's write queue (~50ms per write) and dragging cycle time
-        # from 150ms baseline to 500-2000ms. With this guard, repeated
-        # close/open cycles where the cache already reflects the state
-        # produce zero writes.
         current_connected = bool(cache.get('db125_connected', False))
         current_busy = bool(cache.get('db125_busy', False))
         new_connected = bool(connected) if connected is not None else current_connected
@@ -203,39 +196,20 @@ def queue_robot_status(connected: bool = None, busy: bool = None):
         if new_connected == current_connected and new_busy == current_busy:
             return
 
-        if connected is None:
-            connected = current_connected
-        if busy is None:
-            busy = current_busy
-
-        # Build a map of byte_offset → buffer, pre-seeded from all known status bits
-        STATUS_FIELDS = [
-            ('connected',              'db125_connected'),
-            ('busy',                   'db125_busy'),
-            ('move_complete',          'db125_move_complete'),
-            ('at_home',                'db125_at_home'),
-            ('at_pickup_position',     'db125_at_pickup_position'),
-            ('at_pallet_position',     'db125_at_pallet_position'),
-            ('at_quarantine_position', 'db125_at_quarantine_position'),
-            ('gripper_active',         'db125_gripper_active'),
-            ('cycle_complete',         'db125_cycle_complete'),
-        ]
-        byte_writes = {}
-        for field_name, cache_key in STATUS_FIELDS:
-            tag = plc_worker.robot_db_tags.get(field_name)
-            if not tag:
-                continue
-            entry = byte_writes.setdefault(tag['byte'], bytearray(1))
-            set_bool(entry, 0, tag['bit'], bool(cache.get(cache_key, False)))
-
-        # Now overlay the explicit overrides
-        for field_name, value in (('connected', connected), ('busy', busy)):
-            tag = plc_worker.robot_db_tags.get(field_name)
-            if tag and value is not None:
-                set_bool(byte_writes.setdefault(tag['byte'], bytearray(1)), 0, tag['bit'], bool(value))
-
-        for byte_offset, byte_data in byte_writes.items():
-            plc_worker.queue_write(plc_worker.robot_db_number, byte_offset, byte_data, f"Robot status byte {byte_offset}")
+        if connected is not None and new_connected != current_connected:
+            tag = plc_worker.robot_db_tags.get('connected')
+            if tag:
+                plc_worker.queue_bit_write(
+                    plc_worker.robot_db_number, tag['byte'], tag['bit'],
+                    new_connected, f"connected={new_connected}",
+                )
+        if busy is not None and new_busy != current_busy:
+            tag = plc_worker.robot_db_tags.get('busy')
+            if tag:
+                plc_worker.queue_bit_write(
+                    plc_worker.robot_db_number, tag['byte'], tag['bit'],
+                    new_busy, f"busy={new_busy}",
+                )
 
     except Exception as e:
         logger.error(f"Error queueing robot status: {e}")
@@ -253,9 +227,11 @@ def _write_invalid_target_bit(is_invalid: bool):
         return
     try:
         tag = plc_worker.robot_db_tags['invalid_target']
-        buf = bytearray(1)
-        set_bool(buf, 0, tag['bit'], is_invalid)
-        plc_worker.queue_write(plc_worker.robot_db_number, tag['byte'], buf, f"invalid_target={is_invalid}")
+        # Bit write so we don't clobber Cycle_Complete (DBX1.0) sharing this byte.
+        plc_worker.queue_bit_write(
+            plc_worker.robot_db_number, tag['byte'], tag['bit'],
+            bool(is_invalid), f"invalid_target={is_invalid}",
+        )
     except Exception as e:
         logger.error(f"Error writing invalid_target: {e}")
 

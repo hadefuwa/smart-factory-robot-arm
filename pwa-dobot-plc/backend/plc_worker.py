@@ -196,11 +196,20 @@ class VisionHandshakeState:
 
 @dataclass
 class PLCWrite:
-    """Queued PLC write operation"""
+    """Queued PLC write operation.
+
+    Byte mode (default): `data` is written verbatim to DB.offset.
+    Bit mode: when `bit` is not None, the worker reads DB.offset fresh,
+    sets only that single bit to `bit_value`, and writes the byte back.
+    This keeps the Pi from clobbering bits in the same byte that the PLC
+    owns (e.g. DB125.DBX0.2 Move_Complete, which is set by ladder).
+    """
     db: int
     offset: int
     data: bytearray
     description: str = ""
+    bit: Optional[int] = None
+    bit_value: Optional[bool] = None
 
 
 # ============================================================================
@@ -606,6 +615,20 @@ class PLCWorker:
             description: Human-readable description for logging
         """
         write = PLCWrite(db=db, offset=offset, data=data, description=description)
+        with self.write_queue_lock:
+            self.write_queue.append(write)
+
+    def queue_bit_write(self, db: int, byte: int, bit: int, value: bool, description: str = ""):
+        """Queue an atomic single-bit write.
+
+        The worker thread does a fresh RMW of the byte at write time so the
+        seven other bits in the byte are preserved as the PLC sees them right
+        now — no stale cache, no clobber of PLC-owned bits.
+        """
+        write = PLCWrite(
+            db=db, offset=byte, data=bytearray(1),
+            description=description, bit=bit, bit_value=bool(value),
+        )
         with self.write_queue_lock:
             self.write_queue.append(write)
 
@@ -1151,9 +1174,19 @@ class PLCWorker:
         # Execute each write
         for write in writes:
             try:
-                self.client.db_write(write.db, write.offset, write.data)
-                if write.description:
-                    logger.debug(f"✍️ PLC write: DB{write.db}.{write.offset} - {write.description}")
+                if write.bit is not None:
+                    # Atomic bit write: read the byte fresh, flip just our bit,
+                    # write it back. Preserves any PLC-owned bits in the byte.
+                    current = self.client.db_read(write.db, write.offset, 1)
+                    buf = bytearray(current)
+                    set_bool(buf, 0, write.bit, bool(write.bit_value))
+                    self.client.db_write(write.db, write.offset, buf)
+                    if write.description:
+                        logger.debug(f"✍️ PLC bit write: DB{write.db}.DBX{write.offset}.{write.bit}={write.bit_value} - {write.description}")
+                else:
+                    self.client.db_write(write.db, write.offset, write.data)
+                    if write.description:
+                        logger.debug(f"✍️ PLC write: DB{write.db}.{write.offset} - {write.description}")
             except Exception as e:
                 logger.error(f"PLC write error DB{write.db}.{write.offset}: {e}")
                 self.stats['write_errors'] += 1
