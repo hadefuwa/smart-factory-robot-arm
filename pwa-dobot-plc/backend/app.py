@@ -2146,10 +2146,14 @@ def init_clients():
             db125_config=get_robot_db_config(config)
         )
         plc_worker.robot_connected_provider = lambda: bool(robot_arm_bridge_state.get('connected'))
-        # Start the PoE-camera probe thread BEFORE wiring the provider so the
-        # first PLC cycle reads a real verdict rather than the initial default.
-        start_poe_camera_probe_thread()
-        plc_worker.camera_connected_provider = _poe_camera_connected_provider
+        # USB camera connected = OpenCV VideoCapture is open. PoE-camera probe
+        # thread is no longer started while the USB pipeline owns vision.
+        # start_poe_camera_probe_thread()
+        plc_worker.camera_connected_provider = lambda: bool(
+            camera_service is not None
+            and camera_service.camera is not None
+            and camera_service.camera.isOpened()
+        )
         # Try to establish robot-arm bridge at startup so DB125.DBX0.0
         # can reflect real bridge connectivity even before UI polling starts.
         try:
@@ -6909,9 +6913,10 @@ if __name__ == '__main__':
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
 
-    # Always-on PoE YOLO detection loop — runs whether or not the web UI is
-    # open, writes DB124 cube bits, caches frames for the HTTP endpoints.
-    start_poe_detection_loop()
+    # PoE YOLO detection loop DISABLED — production vision is back on the
+    # USB camera + colour-voting pipeline. The /api/poe-vision/* endpoints
+    # (and vision-poe.html) will return stale/no data; that's intentional.
+    # start_poe_detection_loop()
 
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
