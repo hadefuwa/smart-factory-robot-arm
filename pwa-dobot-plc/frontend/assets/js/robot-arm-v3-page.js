@@ -64,6 +64,7 @@
     { key: 'x_position',            label: 'X Position',      type: 'int',  unit: 'mm', group: 'Position' },
     { key: 'y_position',            label: 'Y Position',      type: 'int',  unit: 'mm', group: 'Position' },
     { key: 'z_position',            label: 'Z Position',      type: 'int',  unit: 'mm', group: 'Position' },
+    { key: 'execute_move',          label: 'Execute Move',    type: 'bool', group: 'PLC Commands' },
     { key: 'home_command',          label: 'Home Cmd',        type: 'bool', group: 'PLC Commands' },
     { key: 'pickup_command',        label: 'Pickup Cmd',      type: 'bool', group: 'PLC Commands' },
     { key: 'pallet_command',        label: 'Pallet Cmd',      type: 'bool', group: 'PLC Commands' },

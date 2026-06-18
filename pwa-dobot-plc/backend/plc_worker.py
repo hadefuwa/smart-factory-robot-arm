@@ -158,11 +158,12 @@ ROBOT_DB_DEFAULTS = {
     'x_position':             {'byte': 16, 'kind': 'int'},
     'y_position':             {'byte': 18, 'kind': 'int'},
     'z_position':             {'byte': 20, 'kind': 'int'},
-    'home_command':           {'byte': 22, 'bit': 0, 'kind': 'bool'},
-    'pickup_command':         {'byte': 22, 'bit': 1, 'kind': 'bool'},
-    'pallet_command':         {'byte': 22, 'bit': 2, 'kind': 'bool'},
-    'quarantine_command':     {'byte': 22, 'bit': 3, 'kind': 'bool'},
-    'end_effector_command':   {'byte': 22, 'bit': 4, 'kind': 'bool'},
+    'execute_move':           {'byte': 22, 'bit': 0, 'kind': 'bool'},
+    'home_command':           {'byte': 22, 'bit': 1, 'kind': 'bool'},
+    'pickup_command':         {'byte': 22, 'bit': 2, 'kind': 'bool'},
+    'pallet_command':         {'byte': 22, 'bit': 3, 'kind': 'bool'},
+    'quarantine_command':     {'byte': 22, 'bit': 4, 'kind': 'bool'},
+    'end_effector_command':   {'byte': 22, 'bit': 5, 'kind': 'bool'},
     'speed':                  {'byte': 24, 'kind': 'int'},
     'target_x':               {'byte': 26, 'kind': 'int'},
     'target_y':               {'byte': 28, 'kind': 'int'},
@@ -496,6 +497,7 @@ class PLCWorker:
             'db125_x_position': 0,
             'db125_y_position': 0,
             'db125_z_position': 0,
+            'db125_execute_move': False,
             'db125_home_command': False,
             'db125_pickup_command': False,
             'db125_pallet_command': False,
@@ -1002,6 +1004,7 @@ class PLCWorker:
             self.cache['db125_x_position'] = self._robot_int(data, 'x_position')
             self.cache['db125_y_position'] = self._robot_int(data, 'y_position')
             self.cache['db125_z_position'] = self._robot_int(data, 'z_position')
+            self.cache['db125_execute_move'] = self._robot_bit(data, 'execute_move')
             self.cache['db125_home_command'] = self._robot_bit(data, 'home_command')
             self.cache['db125_pickup_command'] = self._robot_bit(data, 'pickup_command')
             self.cache['db125_pallet_command'] = self._robot_bit(data, 'pallet_command')
