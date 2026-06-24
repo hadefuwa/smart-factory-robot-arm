@@ -221,13 +221,13 @@
       "note": "Disabled in favour of mask below. Crop changes the frame aspect ratio which breaks a model trained on full-frame data."
     },
     "mask": {
-      "enabled": true,
+      "enabled": false,
       "color_bgr": [0, 0, 0],
       "top_pct": 0,
       "bottom_pct": 0,
       "left_pct": 0,
       "right_pct": 30,
-      "note": "Solid colour painted over edges of the frame BEFORE YOLO inference. Preserves the original 800x600 aspect ratio (model trained on full-frame data still works) while hiding the sorted-cube row and robot arm on the right side from the model."
+      "note": "Disabled for the USB-camera dataset: training captures are unmasked (Capture Training Image cache went unmasked in commit 15103bf), so masking at inference creates a distribution shift YOLO has never seen. Re-enable only if you capture training data WITH the mask painted in."
     }
   },
   "enable_digital_twin_stream": false,

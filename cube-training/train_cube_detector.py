@@ -48,15 +48,23 @@ results = model.train(
     patience=20,        # Stop early if no improvement for 20 epochs
     save=True,
     plots=True,
-    # Augmentation — helps generalise with limited data
-    hsv_h=0.015,        # Hue shift (helps with lighting variation)
-    hsv_s=0.5,          # Saturation shift
-    hsv_v=0.3,          # Brightness shift
+    # Augmentation — cranked up because 33 images per train run is way
+    # too few. Without this the model memorises a handful of features
+    # from training frames and produces garbage at inference time.
+    hsv_h=0.05,         # More hue jitter
+    hsv_s=0.7,          # Stronger saturation jitter
+    hsv_v=0.5,          # Stronger brightness jitter (handles lighting drift)
     fliplr=0.5,         # Horizontal flip
-    degrees=5.0,        # Slight rotation
-    translate=0.1,      # Small crop offset
-    scale=0.3,          # Scale jitter
-    mosaic=0.5,         # Mosaic augmentation
+    flipud=0.2,         # Vertical flip — cubes have no canonical "up"
+    degrees=20.0,       # Wider rotation range
+    translate=0.2,      # More position variation
+    scale=0.5,          # More scale jitter
+    shear=5.0,          # Shear distortion
+    perspective=0.001,  # Mild perspective warp
+    mosaic=1.0,         # Always mosaic — synthesises new layouts from the 33 images
+    mixup=0.2,          # Blend pairs of images
+    copy_paste=0.3,     # Paste annotated objects between images
+    erasing=0.4,        # Random erasing
 )
 
 # Copy best.pt to a clearly named file for easy deployment.
