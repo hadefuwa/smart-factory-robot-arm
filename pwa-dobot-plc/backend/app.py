@@ -4378,7 +4378,7 @@ def get_camera_focus():
         'autofocus': autofocus,
         'value': value,
         'min': 0,
-        'max': 250,
+        'max': 1023,
         'step': 5,
     })
 
@@ -4396,7 +4396,7 @@ def set_camera_focus():
             value = int(data.get('value', 0))
         except (TypeError, ValueError):
             value = 0
-        value = max(0, min(250, value))
+        value = max(0, min(1023, value))
 
         camera_service.focus_autofocus = autofocus
         camera_service.focus_value = value
