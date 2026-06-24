@@ -950,7 +950,7 @@
         // Restart the auto-detect loop if it was running before, restoring the
         // page's running-detection state without flipping the button UI.
         if (_loopWasRunning && !_poeLoopTimer) {
-          _poeLoopTimer = setInterval(runPoeDetection, 2000);
+          _poeLoopTimer = setInterval(runPoeDetection, 200);
           // Kick one immediately so the user sees fresh annotation now.
           runPoeDetection();
         }
@@ -1089,10 +1089,9 @@
 
       const img = document.getElementById('poeAnnotatedImg');
       const ph  = document.getElementById('poeAnnotatedPlaceholder');
-      // Cache-bust on the loop's timestamp so we only re-fetch the JPEG when
-      // the backend actually has a new frame.
-      const ts = Number(result.timestamp || Date.now()/1000).toFixed(2);
-      img.src   = `${API_BASE}/api/poe-vision/annotated?ts=${ts}`;
+      // Always cache-bust on Date.now() so we re-fetch the JPEG every poll
+      // (backend pump runs ~7Hz, so frames are usually fresh).
+      img.src   = `${API_BASE}/api/poe-vision/annotated?ts=${Date.now()}`;
       img.style.display = 'block';
       if (ph) ph.style.display = 'none';
 
@@ -1159,7 +1158,7 @@
         _poeLoopTimer = null;
         if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Live'; }
       } else {
-        _poeLoopTimer = setInterval(runPoeDetection, 2000);
+        _poeLoopTimer = setInterval(runPoeDetection, 200);
         runPoeDetection();
         if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Pause display'; }
       }
