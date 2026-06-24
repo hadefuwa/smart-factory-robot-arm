@@ -5018,34 +5018,15 @@ def test_color_voting():
 
 @app.route('/api/vision/annotated-result')
 def get_annotated_result():
-    """Get the latest annotated voting result image"""
-    try:
-        # HMI-friendly mode: stream as MJPEG to avoid stale single-image caching.
-        if request.args.get('stream', '').lower() in ('1', 'true', 'yes'):
-            response = Response(
-                generate_annotated_result_frames(),
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-            response.headers['X-Frame-Options'] = 'ALLOWALL'
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
-            response.headers['X-Accel-Buffering'] = 'no'
-            return response
+    """Legacy URL kept alive for the PLC HMI panel.
 
-        image_data, mime_type = _get_latest_annotated_result_image()
-
-        # Return latest annotated image (PNG/JPEG)
-        response = make_response(image_data)
-        response.headers['Content-Type'] = mime_type
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-        return response
-    except Exception as e:
-        logger.error(f"Error serving annotated result: {e}")
-        return jsonify({'error': str(e)}), 500
+    The old USB / colour-voting pipeline is dormant — production vision is
+    now the always-on YOLO loop fed from the USB camera. Forward to the
+    PoE-style annotated handler so the HMI's iframe (or
+    /api/vision/annotated-result?stream=1) keeps working without HMI
+    config changes. Honours ?stream=1 the same way as before.
+    """
+    return poe_vision_annotated()
 
 @app.route('/api/vision/detection-enabled', methods=['GET', 'POST'])
 def vision_detection_enabled_endpoint():

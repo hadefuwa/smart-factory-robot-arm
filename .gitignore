@@ -4,6 +4,10 @@
 # Local-only working files
 git.txt
 
+# Historic Dobot / USB-camera reference code — kept on disk for browsing
+# but not relevant to active development.
+archive/
+
 # Cube-training data + generated artifacts (the trained .pt model gets
 # SCP'd directly to the Pi, never tracked here)
 cube-training/cube_images/

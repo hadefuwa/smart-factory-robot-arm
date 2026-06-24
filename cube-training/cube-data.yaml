@@ -1,12 +1,16 @@
 # YOLOv11 Dataset Configuration - Cube Detection
-# Smart Factory: yellow, purple, and metal cube classification
+# Smart Factory: yellow, purple, metal cube classification
 
 path: dataset
 
 train: images/train
 val:   images/val
 
-# Class IDs must match the labels used during annotation
+# Class IDs must match the order used in CVAT during annotation.
+# CVAT label spec for the USB-camera dataset uses bare names (yellow,
+# purple, metal); we keep the _cube suffix here so the runtime backend
+# (CUBE_CLASSES / class_conf / DB124 *_cube_detected bits) keeps matching
+# without a rename pass.
 names:
   0: yellow_cube
   1: purple_cube
