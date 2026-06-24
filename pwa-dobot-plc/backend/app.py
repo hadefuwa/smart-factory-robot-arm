@@ -2070,11 +2070,11 @@ def init_clients():
         )
     # Load focus settings if available (applied via v4l2-ctl after every open).
     focus_config = camera_config.get('focus') or {}
-    camera_service.focus_autofocus = bool(focus_config.get('autofocus', True))
+    camera_service.focus_autofocus = bool(focus_config.get('autofocus', False))
     try:
-        camera_service.focus_value = int(focus_config.get('value', 0))
+        camera_service.focus_value = int(focus_config.get('value', 550))
     except (TypeError, ValueError):
-        camera_service.focus_value = 0
+        camera_service.focus_value = 550
     # Load detection ROI settings if available
     detection_roi_config = camera_config.get('detection_roi', {})
     if detection_roi_config:
@@ -4369,11 +4369,11 @@ def get_camera_focus():
     """Get current USB-camera focus settings (autofocus on/off + manual value)."""
     cfg = load_config()
     focus_cfg = (cfg.get('camera') or {}).get('focus') or {}
-    autofocus = bool(focus_cfg.get('autofocus', True))
+    autofocus = bool(focus_cfg.get('autofocus', False))
     try:
-        value = int(focus_cfg.get('value', 0))
+        value = int(focus_cfg.get('value', 550))
     except (TypeError, ValueError):
-        value = 0
+        value = 550
     return jsonify({
         'autofocus': autofocus,
         'value': value,

@@ -101,8 +101,8 @@ class CameraService:
         # lock focus to focus_value (0..250 on IMX179 UVC). Applied via
         # v4l2-ctl after every successful camera open — OpenCV's
         # CAP_PROP_AUTOFOCUS / CAP_PROP_FOCUS round-trip is flaky on V4L2.
-        self.focus_autofocus = True
-        self.focus_value = 0
+        self.focus_autofocus = False
+        self.focus_value = 550
         # Crop/zoom settings (applied to camera frames)
         self.crop_enabled = False
         self.crop_x = 0  # Top-left X (as percentage 0-100)
