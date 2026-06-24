@@ -528,7 +528,7 @@
             <li class="sf-menu-title"><span>Production</span></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/index.html"><i class="material-icons">dashboard</i><span class="sf-nav-text">Dashboard</span></a></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/robot-arm.html"><i class="material-icons">precision_manufacturing</i><span class="sf-nav-text">Robot Arm</span></a></li>
-              <li><a class="sf-nav-item active flex items-center gap-3 rounded-lg" href="/vision-system-new.html"><i class="material-icons">visibility</i><span class="sf-nav-text">Vision System</span></a></li>
+              <li><a class="sf-nav-item active flex items-center gap-3 rounded-lg" href="/vision.html"><i class="material-icons">visibility</i><span class="sf-nav-text">Vision System</span></a></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/rfid.html"><i class="material-icons">nfc</i><span class="sf-nav-text">RFID Tracking</span></a></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/plc-setup.html"><i class="material-icons">analytics</i><span class="sf-nav-text">PLC Setup</span></a></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/io-link.html"><i class="material-icons">settings_input_component</i><span class="sf-nav-text">IO-Link Master</span></a></li>
@@ -536,7 +536,6 @@
             <li class="sf-menu-title sf-menu-gap"><span>Utilities</span></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/hotspot-status.html"><i class="material-icons">wifi</i><span class="sf-nav-text">Hotspot Status</span></a></li>
               <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/color-voting-test.html"><i class="material-icons">palette</i><span class="sf-nav-text">Color Voting Test</span></a></li>
-              <li><a class="sf-nav-item flex items-center gap-3 rounded-lg" href="/vision-system.html"><i class="material-icons">history</i><span class="sf-nav-text">Vision Legacy</span></a></li>
           </ul>
         </nav>
       </aside>
@@ -602,7 +601,7 @@
                 <div id="statusYellowMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
               <div id="statusWhiteCard" class="sf-vision-status-card sf-vision-status-card--neutral rounded-box border border-base-300 p-4">
-                <div class="text-xs text-base-content/60 mb-2">White Bit (32.1)</div>
+                <div class="text-xs text-base-content/60 mb-2">Purple Bit (32.1)</div>
                 <div id="statusWhiteValue" class="text-lg font-bold">--</div>
                 <div id="statusWhiteMeta" class="text-xs text-base-content/60 mt-1">Reading...</div>
               </div>
@@ -619,64 +618,162 @@
             </div>
           </section>
 
-          <section id="usb-actions-section" class="sf-panel sf-stage sf-stage-2">
-            <header class="sf-panel-head">
-              <h3>Primary Actions</h3>
-              <p>Kick off the production analysis cycle or run a quick test.</p>
-            </header>
-            <div class="flex flex-wrap gap-3">
-              <button class="btn btn-success" onclick="startAnalysis()">
-                <i class="material-icons">analytics</i> START ANALYSIS (1 vote)
-              </button>
-              <button class="btn btn-info" onclick="detectObjects()">
-                <i class="material-icons">search</i> Quick Test
-              </button>
-            </div>
-          </section>
-
+          <!--
+          DISABLED: Live MJPEG camera feed retired in favour of the AI Cube
+          Detection auto-loop below. The M5Stack ESP32 HTTP server is
+          single-client, so the stream proxy and the YOLO /capture loop can't
+          both run at the same time. Keeping the auto-detect loop running means
+          we get one purpose-built annotated frame every ~2s instead of a raw
+          preview, which is what the production HMI actually wants. The IP /
+          connect controls and the Capture Training Image button live inside the
+          AI section now.
           <section class="sf-row sf-stage sf-stage-3">
             <article class="sf-panel">
               <header class="sf-panel-head">
                 <h3>Camera Feed</h3>
-                <p>Live stream with crop and detection overlays.</p>
+                <p>Live MJPEG stream from the M5Stack PoE CAM-W.</p>
               </header>
-
-              <div class="sf-vision-media-shell">
-                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="transform: rotate(270deg);">
-                <canvas id="cropOverlay" class="sf-vision-overlay"></canvas>
-                <canvas id="roiOverlay" class="sf-vision-overlay"></canvas>
-                <div id="cameraPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">CAM</div>
-                  <div class="sf-vision-placeholder-title">Loading camera feed...</div>
-                </div>
-              </div>
-            </article>
-
-            <article id="final-result-section" class="sf-panel">
-              <header class="sf-panel-head">
-                <h3>Final Result</h3>
-                <p>Annotated voting output for the current cycle.</p>
-              </header>
-              <div class="sf-vision-media-shell">
-                <img id="annotatedImage" class="sf-vision-frame is-centered" src="" alt="Annotated Result">
-                <div id="annotatedPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">RESULT</div>
-                  <div class="sf-vision-placeholder-title">Voting result will appear here</div>
-                  <div class="sf-vision-placeholder-copy">Run "START ANALYSIS" to see the final result</div>
-                </div>
-              </div>
+              ...
             </article>
           </section>
+          -->
 
-          <section class="sf-row sf-stage sf-stage-3">
-            <article id="results" class="sf-panel sf-vision-hidden">
-              <header class="sf-panel-head">
-                <h3>Voting Results Details</h3>
-                <p>Expanded result data from the current run.</p>
-              </header>
-              <div id="resultsContent" class="text-sm text-base-content/80"></div>
-            </article>
+          <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2">
+            <header class="sf-panel-head">
+              <h3>PoE CAM — AI Cube Detection</h3>
+              <p>YOLO cube detection running every 2 s on frames pulled from the M5Stack PoE CAM-W.</p>
+            </header>
 
+            <!-- Camera connection row -->
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
+                <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
+                <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
+                  <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
+                </button>
+                <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
+                  <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
+                </button>
+              </div>
+              <span id="poeCamStatusBadge" class="sf-title-conn-badge offline">
+                <span class="sf-title-conn-dot"></span>
+                <span id="poeCamStatusText">Disconnected</span>
+              </span>
+            </div>
+
+            <!-- Controls row -->
+            <div class="flex items-center gap-3 flex-wrap mb-4">
+              <button class="btn btn-sm btn-info gap-1" onclick="runPoeDetection()">
+                <i class="material-icons" style="font-size:1rem;line-height:1">search</i> Detect Cubes
+              </button>
+              <button class="btn btn-sm btn-ghost gap-1" onclick="startPoeLoop()" id="poeLoopBtn">
+                <i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Live
+              </button>
+              <button class="btn btn-sm btn-primary gap-1" onclick="captureTrainingImage()" id="captureBtn">
+                <i class="material-icons" style="font-size:1rem;line-height:1">photo_camera</i> Capture
+              </button>
+              <span id="captureStatus" class="text-xs text-base-content/60"></span>
+              <span id="poeModelStatus" class="text-xs text-base-content/50 ml-auto"></span>
+            </div>
+
+            <!-- Per-class confidence thresholds. Each slider updates the value
+                 next to it on input; on release we debounce-save to /api/config
+                 so the backend detection loop picks up the new threshold within
+                 a cycle. Useful when one class consistently under- or
+                 over-detects relative to the others. -->
+            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Per-class confidence</span>
+                <span id="poeClassConfSaveStatus" class="text-xs text-base-content/50"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#f59e0b;"></span>
+                <label for="poeConfYellow" class="text-xs w-16">Yellow</label>
+                <input type="range" id="poeConfYellow" min="10" max="90" value="35" step="5" class="range range-xs range-warning w-40">
+                <span id="poeConfYellowVal" class="text-xs font-mono w-10 text-right">35%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#a855f7;"></span>
+                <label for="poeConfPurple" class="text-xs w-16">Purple</label>
+                <input type="range" id="poeConfPurple" min="10" max="90" value="50" step="5" class="range range-xs w-40" style="--range-shdw:#a855f7;">
+                <span id="poeConfPurpleVal" class="text-xs font-mono w-10 text-right">50%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#6b7280;"></span>
+                <label for="poeConfMetal" class="text-xs w-16">Metal</label>
+                <input type="range" id="poeConfMetal" min="10" max="90" value="60" step="5" class="range range-xs range-neutral w-40">
+                <span id="poeConfMetalVal" class="text-xs font-mono w-10 text-right">60%</span>
+              </div>
+            </div>
+
+            <!-- Two-column: annotated image + results -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Annotated image -->
+              <div class="sf-vision-media-shell" style="min-height:220px">
+                <img id="poeAnnotatedImg" class="sf-vision-frame is-centered" src="" alt="Annotated Detection" style="display:none">
+                <div id="poeAnnotatedPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">AI</div>
+                  <div class="sf-vision-placeholder-title">Press Detect Cubes</div>
+                  <div class="sf-vision-placeholder-copy">YOLO will annotate detected cubes here</div>
+                </div>
+              </div>
+
+              <!-- Detection results panel -->
+              <div class="space-y-3">
+                <!-- Dominant result badge -->
+                <div id="poeDominantBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3" style="display:none">
+                  <div id="poeDominantDot" class="w-4 h-4 rounded-full flex-shrink-0"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Dominant</div>
+                    <div id="poeDominantLabel" class="font-bold text-base-content text-base"></div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">Detections</div>
+                    <div id="poeDetCount" class="font-mono text-lg font-bold text-info">0</div>
+                  </div>
+                </div>
+
+                <!-- Photoelectric sensor (%I0.5 Light Sensor 1) — cross-check
+                     against the AI. When the sensor sees something but the AI
+                     says nothing, an "AI MISSED IT" warning lights up below. -->
+                <div id="poeSensorBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3">
+                  <div id="poeSensorDot" class="w-4 h-4 rounded-full flex-shrink-0" style="background:#9e9e9e"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Light Sensor 1 (%I0.5)</div>
+                    <div id="poeSensorLabel" class="font-bold text-base-content text-base">—</div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">PLC read</div>
+                    <div id="poeSensorAge" class="font-mono text-xs text-base-content/60">—</div>
+                  </div>
+                </div>
+
+                <!-- Mismatch warning -->
+                <div id="poeMismatchWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">priority_high</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">AI missed the object</div>
+                    <div>Photoelectric sensor reports an object on the conveyor but YOLO returned zero detections. Likely an untrained class (e.g. a green cube) or low confidence — capture and label more training data.</div>
+                  </div>
+                </div>
+
+                <!-- Detections list -->
+                <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
+
+                <!-- Model not loaded warning -->
+                <div id="poeModelMissingWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">warning</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">Model not trained yet</div>
+                    <div>Follow the <strong>CUBE_TRAINING_GUIDE.md</strong> in cube-training/ to capture images, annotate, and train the detector. Then SCP <code>cube_detector.pt</code> to the Pi.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="sf-stage sf-stage-3">
             <article class="sf-panel sf-vision-hidden">
               <header class="sf-panel-head">
                 <h3>Debug Console</h3>
@@ -691,145 +788,6 @@
             </article>
           </section>
 
-          <section id="detection-settings-section" class="sf-panel sf-stage sf-stage-3">
-            <header class="sf-panel-head">
-              <button
-                type="button"
-                id="settingsToggleBtn"
-                onclick="toggleSettingsPanel()"
-                aria-expanded="false"
-                class="btn btn-ghost w-full justify-between"
-              >
-                <span class="flex items-center gap-3 text-left">
-                  <i class="material-icons sf-vision-inline-icon">tune</i>
-                  <span class="flex flex-col">
-                    <span class="font-semibold">Detection Settings</span>
-                    <span class="text-xs text-base-content/60">Crop, expected area, and thresholds</span>
-                  </span>
-                </span>
-                <span class="flex items-center gap-2 text-xs font-semibold">
-                  <span id="settingsToggleText">Expand</span>
-                  <i class="material-icons sf-vision-toggle-icon" id="settingsToggleIcon">expand_more</i>
-                </span>
-              </button>
-            </header>
-            <div id="settingsBody" class="space-y-4 sf-vision-hidden">
-                  <details class="sf-template-details rounded-box border border-base-300 bg-base-100 p-3">
-                    <summary class="sf-details-summary">
-                      More Info: PLC Cube Color Bits
-                    </summary>
-                    <div class="sf-vision-help-copy">
-                      <div>DB124 is a 2-byte PLC result block. The live result bits are:</div>
-                      <div class="sf-vision-help-gap"><code>defect_detected</code> -> DB124.DBX0.4</div>
-                      <div><code>reject_command_from_plc</code> -> DB124.DBX0.5</div>
-                      <div><code>yellow_cube_detected</code> -> DB124.DBX0.6</div>
-                      <div><code>white_cube_detected</code> -> DB124.DBX0.7</div>
-                      <div><code>metal_cube_detected</code> -> DB124.DBX1.0</div>
-                      <div class="sf-vision-help-gap">No object counters or extra color bytes are stored in the current DB124 layout.</div>
-                    </div>
-                  </details>
-
-                  <!-- Detection Method Info -->
-                  <div class="sf-settings-panel rounded-box border border-warning bg-warning/10 p-4">
-                    <div class="sf-mini-title text-warning mb-2">Color Filter Detection (OpenCV HSV)</div>
-                    <div class="text-sm text-base-content/80">Detects Yellow, White, and Metal/Grey cubes using HSV color filtering</div>
-                  </div>
-                  <input type="hidden" id="objectDetectionMethod" value="color">
-
-                  <!-- Crop Settings (hidden) -->
-                  <div class="sf-settings-panel rounded-box border border-info/40 bg-info/10 p-4 space-y-3 sf-vision-hidden">
-                    <h5 class="mb-3 text-sm font-semibold text-info">
-                      Camera crop / zoom
-                    </h5>
-                    <div class="text-xs text-base-content/70">
-                      Draw a rectangle on the camera image to define the crop area. Only this area will be used for detection.
-                    </div>
-                    <div class="flex flex-col gap-2 md:flex-row">
-                      <button class="btn btn-primary md:flex-1" onclick="startDrawingCrop()" id="drawCropBtn">
-                        <i class="material-icons text-base">crop</i> Draw Crop Area
-                      </button>
-                      <button class="btn btn-error md:flex-1" onclick="resetCrop()" id="resetCropBtn">
-                        <i class="material-icons text-base">refresh</i> Reset Crop
-                      </button>
-                    </div>
-                    <div id="cropInfo" class="rounded-box border border-info/40 bg-info/10 p-3 sf-vision-hidden">
-                      <div class="mb-1 text-xs font-semibold text-info">Current Crop:</div>
-                      <div class="sf-vision-info-grid">
-                        <div>Position: X=<span id="cropInfoX">0</span>%, Y=<span id="cropInfoY">0</span>%</div>
-                        <div>Size: <span id="cropInfoWidth">100</span>% × <span id="cropInfoHeight">100</span>%</div>
-                      </div>
-                    </div>
-                    <div id="cropDrawInstructions" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-warning sf-vision-hidden">
-                      <div class="mb-1 font-semibold">Instructions:</div>
-                      <div>1. Click and hold on the camera image</div>
-                      <div>2. Drag to draw a rectangle for the crop area</div>
-                      <div>3. Release to apply the crop</div>
-                      <div class="mt-1 text-warning">Press ESC to cancel</div>
-                    </div>
-                  </div>
-                  <!-- Expected Cube Position (Detection Area) -->
-                  <div class="sf-settings-panel rounded-box border border-accent/40 bg-accent/10 p-4 space-y-3">
-                    <h5 class="sf-mini-title text-accent">
-                      Expected Cube Position (Detection Area)
-                    </h5>
-                    <div class="text-xs text-base-content/70">
-                      Draw a rectangle where you expect the cube to appear. Detection will ignore everything outside this area.
-                    </div>
-                    <div class="flex flex-col gap-2 md:flex-row">
-                      <button class="btn btn-info md:flex-1" onclick="startDrawingDetectionRoi()" id="drawRoiBtn">
-                        <i class="material-icons text-base">crop_free</i> Draw Detection Area
-                      </button>
-                      <button class="btn btn-error md:flex-1" onclick="resetDetectionRoi()" id="resetRoiBtn">
-                        <i class="material-icons text-base">refresh</i> Reset Area
-                      </button>
-                    </div>
-                      <div id="roiInfo" class="rounded-box border border-accent/40 bg-accent/10 p-3 sf-vision-hidden">
-                      <div class="mb-1 text-xs font-semibold text-accent">Current Detection Area:</div>
-                      <div class="sf-vision-info-grid">
-                        <div>Position: X=<span id="roiInfoX">0</span>%, Y=<span id="roiInfoY">0</span>%</div>
-                        <div>Size: <span id="roiInfoWidth">100</span>% × <span id="roiInfoHeight">100</span>%</div>
-                      </div>
-                    </div>
-                      <div id="roiDrawInstructions" class="rounded-box border border-info/40 bg-info/10 p-3 text-xs text-info sf-vision-hidden">
-                      <div class="mb-1 font-semibold">Instructions:</div>
-                      <div>1. Click and hold on the camera image</div>
-                      <div>2. Drag to draw the expected cube area</div>
-                      <div>3. Release to apply</div>
-                      <div class="mt-1 text-warning">Press ESC to cancel</div>
-                    </div>
-                  </div>
-
-                  <!-- Detection Parameters (Manual) - hidden -->
-                  <div class="sf-settings-panel rounded-box border border-base-300 bg-base-100 p-4 space-y-4 sf-vision-hidden">
-                    <h5 class="sf-mini-title text-base-content/80">
-                      Detection Parameters (Manual)
-                    </h5>
-                    <div class="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label class="mb-2 block text-xs text-base-content/80">
-                          Min Area: <span id="minAreaValue">500</span> pixels
-                        </label>
-                        <input class="range range-primary range-sm w-full" type="range" id="minAreaSlider" min="100" max="50000" step="100" value="500" oninput="updateParams()">
-                      </div>
-                      <div>
-                        <label class="mb-2 block text-xs text-base-content/80">
-                          Max Area: <span id="maxAreaValue">50000</span> pixels
-                        </label>
-                        <input class="range range-secondary range-sm w-full" type="range" id="maxAreaSlider" min="100" max="100000" step="100" value="50000" oninput="updateParams()">
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="hidden gap-3 md:flex" id="oldButtons">
-                    <button class="btn btn-primary" onclick="startContinuousDetection()" id="startBtn">
-                      <i class="material-icons">play_arrow</i> Start Continuous
-                    </button>
-                    <button class="btn btn-danger sf-vision-hidden" onclick="stopContinuousDetection()" id="stopBtn">
-                      <i class="material-icons">stop</i> Stop
-                    </button>
-                  </div>
-            </div>
-          </section>
         </main>
       </div>
     </div>
@@ -849,19 +807,7 @@
     let streamReconnectTimer = null;
     let lastFrameTime = 0;  // epoch ms of last received MJPEG frame
     let statusInterval = null;
-    let detectionInterval = null;
-    let detectionActive = false;
-    let objectParamsSaveTimer = null;
-    let pagePrefsSaveTimer = null;
-    let lastCycleTimestampSeen = 0;
-    let lastAnnotatedRefreshMs = 0;
-    let lastAnnotatedRefreshWhileStartMs = 0;
     const debugLogEntries = [];
-
-    let objectParams = {
-      min_area: 500,
-      max_area: 50000
-    };
 
     function addDebugLog(message, details = null, level = 'info') {
       const ts = new Date().toLocaleTimeString();
@@ -895,21 +841,443 @@
       if (summaryEl) summaryEl.textContent = 'No debug events yet.';
     }
 
-    function getActiveCameraStreamPath() {
-      return '/api/camera/stream';
+    function getCameraStreamUrl() {
+      return `${API_BASE}/api/camera/stream?_=${Date.now()}`;
     }
 
-    function getActiveCameraStreamUrl() {
-      return `${API_BASE}${getActiveCameraStreamPath()}?_=${Date.now()}`;
+    function _setPoeCamBadge(connected) {
+      const badge = document.getElementById('poeCamStatusBadge');
+      const dot = badge && badge.querySelector('.sf-title-conn-dot');
+      const text = document.getElementById('poeCamStatusText');
+      if (!badge) return;
+      badge.classList.toggle('online', connected);
+      badge.classList.toggle('offline', !connected);
+      if (dot) dot.classList.toggle('pulse', connected);
+      if (text) text.textContent = connected ? 'Connected' : 'Unreachable';
+    }
+
+    async function loadPoeCameraConfig() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ip) {
+            const inp = document.getElementById('poeCameraIp');
+            if (inp) inp.value = data.ip;
+          }
+          _setPoeCamBadge(data.connected);
+        }
+      } catch (e) {
+        addDebugLog('PoE camera config load failed', e.message, 'warn');
+      }
+      // Per-class confidence — pull from the full config so the sliders start
+      // at the values the backend is actually using.
+      try {
+        const r = await fetch(`${API_BASE}/api/config?t=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000), cache: 'no-store',
+        });
+        if (r.ok) {
+          const cfg = await r.json();
+          const cc = (cfg && cfg.poe_camera && cfg.poe_camera.class_conf) || {};
+          _setClassConfSlider('poeConfYellow', 'poeConfYellowVal', cc.yellow_cube ?? 0.35);
+          _setClassConfSlider('poeConfPurple', 'poeConfPurpleVal', cc.purple_cube ?? 0.50);
+          _setClassConfSlider('poeConfMetal',  'poeConfMetalVal',  cc.metal_cube  ?? 0.60);
+        }
+      } catch (e) {
+        addDebugLog('class_conf load failed', e.message, 'warn');
+      }
+    }
+
+    function _setClassConfSlider(sliderId, labelId, value) {
+      const pct = Math.round(Number(value) * 100);
+      const s = document.getElementById(sliderId);
+      const l = document.getElementById(labelId);
+      if (s) s.value = String(pct);
+      if (l) l.textContent = pct + '%';
+    }
+
+    // Debounced save — sliders fire `input` rapidly while dragging; only POST
+    // once the user pauses for ~400 ms so we don't spam /api/config and
+    // disturb the backend detection loop with mid-drag thresholds.
+    let _classConfSaveTimer = null;
+    function queueSaveClassConf() {
+      const status = document.getElementById('poeClassConfSaveStatus');
+      if (status) { status.textContent = 'Saving...'; status.style.color = ''; }
+      if (_classConfSaveTimer) clearTimeout(_classConfSaveTimer);
+      _classConfSaveTimer = setTimeout(saveClassConf, 400);
+    }
+
+    async function saveClassConf() {
+      const status = document.getElementById('poeClassConfSaveStatus');
+      const yellow = Number(document.getElementById('poeConfYellow').value) / 100;
+      const purple = Number(document.getElementById('poeConfPurple').value) / 100;
+      const metal  = Number(document.getElementById('poeConfMetal').value)  / 100;
+      try {
+        const res = await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            poe_camera: { class_conf: {
+              yellow_cube: yellow, purple_cube: purple, metal_cube: metal,
+            }},
+          }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (status) {
+          status.textContent = `Saved Y${Math.round(yellow*100)}% P${Math.round(purple*100)}% M${Math.round(metal*100)}%`;
+          status.style.color = 'var(--sf-success-ui, #4caf50)';
+        }
+        addDebugLog('class_conf saved', { yellow, purple, metal });
+      } catch (e) {
+        if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
+        addDebugLog('class_conf save failed', e.message, 'error');
+      }
+    }
+
+    function _wireClassConfSliders() {
+      const pairs = [
+        ['poeConfYellow', 'poeConfYellowVal'],
+        ['poeConfPurple', 'poeConfPurpleVal'],
+        ['poeConfMetal',  'poeConfMetalVal'],
+      ];
+      for (const [s, l] of pairs) {
+        const slider = document.getElementById(s);
+        const label  = document.getElementById(l);
+        if (!slider || !label) continue;
+        slider.addEventListener('input', () => {
+          label.textContent = slider.value + '%';
+          queueSaveClassConf();
+        });
+      }
+    }
+
+    async function applyPoeCameraIp() {
+      const inp = document.getElementById('poeCameraIp');
+      const ip = (inp ? inp.value : '').trim();
+      if (!ip) { alert('Please enter the camera IP address.'); return; }
+      addDebugLog('PoE camera IP applying', ip);
+      try {
+        await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ poe_camera: { ip } })
+        });
+        await checkPoeCameraStatus();
+        stopStream();
+        setTimeout(() => updateCameraFrame(true), 100);
+      } catch (e) {
+        addDebugLog('PoE camera apply error', e.message, 'error');
+      }
+    }
+
+    async function captureTrainingImage() {
+      const btn = document.getElementById('captureBtn');
+      const status = document.getElementById('captureStatus');
+      if (btn) btn.disabled = true;
+      if (status) { status.textContent = 'Pausing detection loop...'; status.className = 'text-xs text-info'; }
+
+      // M5Stack ESP32 HTTP server is single-client. The auto-detect loop is the
+      // other consumer of /capture now (live MJPEG is retired), so we have to
+      // pause it for the duration of this capture.
+      const _loopWasRunning = Boolean(_poeLoopTimer);
+      if (_loopWasRunning) {
+        clearInterval(_poeLoopTimer);
+        _poeLoopTimer = null;
+      }
+
+      const waitMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      async function attemptCapture() {
+        const res = await fetch(`${API_BASE}/api/poe-camera/capture?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(12000),
+          cache: 'no-store'
+        });
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try { msg = (await res.json()).error || msg; } catch (_) {}
+          throw new Error(msg);
+        }
+        return res.blob();
+      }
+
+      try {
+        // Give any in-flight backend /detect call a moment to finish releasing
+        // the upstream socket on the M5Stack before we hit /capture.
+        await waitMs(600);
+        if (status) { status.textContent = 'Capturing...'; status.className = 'text-xs text-info'; }
+
+        let blob;
+        try {
+          blob = await attemptCapture();
+        } catch (firstErr) {
+          // Single retry — camera sometimes needs a second to free the socket.
+          addDebugLog('capture retry after error', firstErr.message, 'warn');
+          await waitMs(900);
+          blob = await attemptCapture();
+        }
+
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cube_${stamp}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (status) { status.textContent = `Saved cube_${stamp}.jpg (${(blob.size/1024).toFixed(0)} KB)`; status.className = 'text-xs text-success'; }
+        addDebugLog('training image saved', `${blob.size} bytes`);
+      } catch (e) {
+        if (status) { status.textContent = `Capture failed: ${e.message}`; status.className = 'text-xs text-error'; }
+        addDebugLog('capture failed', e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+        // Restart the auto-detect loop if it was running before, restoring the
+        // page's running-detection state without flipping the button UI.
+        if (_loopWasRunning && !_poeLoopTimer) {
+          _poeLoopTimer = setInterval(runPoeDetection, 2000);
+          // Kick one immediately so the user sees fresh annotation now.
+          runPoeDetection();
+        }
+      }
+    }
+
+    async function checkPoeCameraStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(8000), cache: 'no-store'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          _setPoeCamBadge(data.connected);
+          addDebugLog('PoE camera status', data);
+          return data.connected;
+        }
+      } catch (e) {
+        _setPoeCamBadge(false);
+        addDebugLog('PoE camera status check failed', e.message, 'warn');
+      }
+      return false;
+    }
+
+    // PoE YOLO cube detection
+    let _poeLoopTimer = null;
+
+    const POE_CUBE_COLOURS = {
+      yellow_cube: '#f59e0b',
+      purple_cube: '#a855f7',
+      metal_cube:  '#6b7280',
+    };
+
+    // Detection is run by the BACKEND loop in app.py (start_poe_detection_loop),
+    // which executes whether or not this page is open and writes the PLC DB124
+    // cube bits directly. The page just polls the cached result for display.
+    // Track latest sensor + detection count so the mismatch warning fires
+    // even when the two pollers tick out of step.
+    let _lastSensorState = null;   // true = object present, false = clear
+    let _lastDetectionCount = null;
+
+    function _updateMismatchWarning() {
+      const el = document.getElementById('poeMismatchWarning');
+      if (!el) return;
+      // Only show when sensor explicitly reports an object AND we have a
+      // recent AI result that found zero cubes. Suppress when either signal
+      // is unknown.
+      const sensorOn = _lastSensorState === true;
+      const aiSawNothing = _lastDetectionCount === 0;
+      el.style.display = (sensorOn && aiSawNothing) ? '' : 'none';
+    }
+
+    async function pollPlcSensor() {
+      const dot   = document.getElementById('poeSensorDot');
+      const label = document.getElementById('poeSensorLabel');
+      const age   = document.getElementById('poeSensorAge');
+      try {
+        const res = await fetch(`${API_BASE}/api/plc/io/read?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(4000),
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          if (label) label.textContent = `PLC HTTP ${res.status}`;
+          _lastSensorState = null;
+          _updateMismatchWarning();
+          return;
+        }
+        const snap = await res.json();
+        if (snap.error) {
+          if (label) label.textContent = `PLC read error`;
+          _lastSensorState = null;
+          _updateMismatchWarning();
+          return;
+        }
+        const on = Boolean(snap?.inputs?.['I0.5']);
+        _lastSensorState = on;
+        if (dot)   dot.style.background = on ? '#4caf50' : '#9e9e9e';
+        if (label) label.textContent    = on ? 'OBJECT DETECTED' : 'No object';
+        if (age && snap.timestamp) {
+          const sec = Math.max(0, Math.round(Date.now()/1000 - snap.timestamp));
+          age.textContent = sec + 's ago';
+        }
+        _updateMismatchWarning();
+      } catch (e) {
+        if (label) label.textContent = `Poll failed: ${e.message}`;
+        _lastSensorState = null;
+        _updateMismatchWarning();
+      }
+    }
+
+    async function runPoeDetection() {
+      document.getElementById('poeModelMissingWarning').style.display = 'none';
+      const _showDetectError = (msg) => {
+        const ph = document.getElementById('poeAnnotatedPlaceholder');
+        const img = document.getElementById('poeAnnotatedImg');
+        if (img) img.style.display = 'none';
+        if (ph) {
+          ph.style.display = 'flex';
+          ph.innerHTML = `
+            <div class="sf-vision-camera-error">
+              <i class="material-icons sf-vision-inline-icon is-large">videocam_off</i>
+              <p class="sf-vision-placeholder-title">${msg.title}</p>
+              <p class="sf-vision-placeholder-copy">${msg.copy}</p>
+            </div>
+          `;
+        }
+      };
+
+      let result;
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/latest-result?_=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000),
+          cache: 'no-store',
+        });
+        result = await res.json();
+        if (res.status === 503) {
+          if (result.error === 'model_not_loaded') {
+            document.getElementById('poeModelMissingWarning').style.display = '';
+          } else {
+            _showDetectError({
+              title: 'Backend loop warming up',
+              copy: 'No detection result yet — usually clears within 2-3 seconds of backend startup.'
+            });
+          }
+          return;
+        }
+      } catch (e) {
+        addDebugLog('latest-result request failed', e.message, 'warn');
+        _showDetectError({
+          title: 'Backend unreachable',
+          copy: e.message + ' — backend may be restarting.'
+        });
+        return;
+      }
+
+      if (!result.ok) {
+        if (result.error === 'model_not_loaded') {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        } else if (result.error === 'camera_unreachable') {
+          _showDetectError({
+            title: 'PoE Camera unreachable',
+            copy: 'Backend can\'t reach the M5Stack at the configured IP. Check power and network.'
+          });
+        } else {
+          _showDetectError({
+            title: 'Detection error',
+            copy: result.error || 'Unknown error.'
+          });
+        }
+        addDebugLog('detection result not ok', result.error, 'warn');
+        return;
+      }
+
+      const img = document.getElementById('poeAnnotatedImg');
+      const ph  = document.getElementById('poeAnnotatedPlaceholder');
+      // Cache-bust on the loop's timestamp so we only re-fetch the JPEG when
+      // the backend actually has a new frame.
+      const ts = Number(result.timestamp || Date.now()/1000).toFixed(2);
+      img.src   = `${API_BASE}/api/poe-vision/annotated?ts=${ts}`;
+      img.style.display = 'block';
+      if (ph) ph.style.display = 'none';
+
+      const badge  = document.getElementById('poeDominantBadge');
+      const dot    = document.getElementById('poeDominantDot');
+      const label  = document.getElementById('poeDominantLabel');
+      const count  = document.getElementById('poeDetCount');
+      _lastDetectionCount = Number(result.count || 0);
+      _updateMismatchWarning();
+      if (result.dominant) {
+        badge.style.display = '';
+        dot.style.backgroundColor = POE_CUBE_COLOURS[result.dominant] || '#888';
+        label.textContent = result.dominant.replace('_', ' ');
+        count.textContent = result.count;
+      } else {
+        badge.style.display = '';
+        dot.style.backgroundColor = '#374151';
+        label.textContent = 'Nothing detected';
+        count.textContent = '0';
+      }
+
+      const list = document.getElementById('poeDetectionsList');
+      list.innerHTML = '';
+      (result.detections || []).forEach(d => {
+        const colour = POE_CUBE_COLOURS[d.class] || '#888';
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-2 py-1 rounded bg-base-200 text-xs';
+        row.innerHTML = `
+          <span style="width:10px;height:10px;border-radius:50%;background:${colour};flex-shrink:0;display:inline-block"></span>
+          <span class="font-medium flex-1">${d.class.replace('_', ' ')}</span>
+          <span class="font-mono text-base-content/60">${(d.confidence*100).toFixed(0)}%</span>
+          <span class="font-mono text-base-content/40">${d.width}×${d.height}px</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function checkPoeModelStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/poe-vision/status`, {signal: AbortSignal.timeout(4000)});
+        const data = await res.json();
+        const el = document.getElementById('poeModelStatus');
+        if (el) {
+          el.textContent = data.model_ready
+            ? `Model ready (${(data.model_path||'').split('/').pop().split('\\').pop()})`
+            : 'Model not loaded — train first';
+          el.className = `text-xs ml-auto ${data.model_ready ? 'text-success' : 'text-warning'}`;
+        }
+        if (!data.model_ready) {
+          document.getElementById('poeModelMissingWarning').style.display = '';
+        }
+        return Boolean(data.model_ready);
+      } catch (e) { return false; }
+    }
+
+    // Toggles the page-side poll that mirrors the backend loop's cached
+    // result. Detection itself never stops — this just controls whether the
+    // HMI refreshes its display. "Stop" hides the page polling; the PLC
+    // bits keep updating regardless.
+    function startPoeLoop() {
+      const btn = document.getElementById('poeLoopBtn');
+      if (_poeLoopTimer) {
+        clearInterval(_poeLoopTimer);
+        _poeLoopTimer = null;
+        if (btn) { btn.classList.remove('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">loop</i> Live'; }
+      } else {
+        _poeLoopTimer = setInterval(runPoeDetection, 2000);
+        runPoeDetection();
+        if (btn) { btn.classList.add('btn-warning'); btn.innerHTML = '<i class="material-icons" style="font-size:1rem;line-height:1">stop</i> Pause display'; }
+      }
     }
 
     async function runDebugChecks() {
       const endpoints = [
         '/api/health',
-        '/api/camera/status',
+        '/api/poe-camera/status',
+        '/api/poe-vision/status',
         '/api/plc/camera/start',
-        '/api/plc/camera/read',
-        '/api/vision/annotated-result'
+        '/api/plc/camera/read'
       ];
       addDebugLog('Running manual debug checks...');
 
@@ -927,21 +1295,6 @@
         } catch (error) {
           addDebugLog(`${endpoint} request failed`, error.message, 'error');
         }
-      }
-    }
-
-    function redrawPersistentOverlays() {
-      const cameraFrame = document.getElementById('cameraFrame');
-      if (!cameraFrame || cameraFrame.style.display === 'none') return;
-
-      // Only redraw ROI (detection area). Crop overlay is disabled.
-      if (currentRoiSettings?.enabled && !isDrawingRoi) {
-        drawRoiOverlay(
-          currentRoiSettings.x,
-          currentRoiSettings.y,
-          currentRoiSettings.width,
-          currentRoiSettings.height
-        );
       }
     }
 
@@ -1005,32 +1358,6 @@
       return response.json();
     }
 
-    function renderCycleSummary(cycle) {
-      if (!cycle) return;
-      const objectCount = Number(cycle.object_count || 0);
-      const detectedColor = cycle.detected_color || 'none';
-      const confidence = Number(cycle.confidence || 0);
-      const voteCounts = cycle.vote_counts || {};
-
-      const resultsDiv = document.getElementById('results');
-      const resultsContent = document.getElementById('resultsContent');
-      if (!resultsDiv || !resultsContent) return;
-
-      const votesText = Object.keys(voteCounts).length
-        ? Object.entries(voteCounts).map(([k, v]) => `${k}: ${v}`).join(' | ')
-        : 'No votes captured';
-
-      resultsContent.innerHTML = `
-        <div class="sf-vision-results-panel">
-          <div class="sf-vision-result-line"><strong>Cubes Detected:</strong> ${objectCount}</div>
-          <div class="sf-vision-result-line"><strong>Final Result:</strong> ${String(detectedColor).toUpperCase()} (${confidence.toFixed(1)}%)</div>
-          <div class="sf-vision-result-line"><strong>Votes:</strong> ${votesText}</div>
-          <div class="sf-vision-result-meta"><strong>Status:</strong> ${cycle.message || 'n/a'}</div>
-        </div>
-      `;
-      resultsDiv.classList.remove('sf-vision-hidden');
-    }
-
     function setTitleConnectionStatus(isOnline) {
       const badge = document.getElementById('titleConnBadge');
       const dot = document.getElementById('titleConnDot');
@@ -1047,13 +1374,13 @@
     async function updateLiveStatus() {
       const refreshEl = document.getElementById('statusLastRefresh');
 
-      const [plcResult, cameraResult, cameraDbResult, smartFactoryResult, healthResult, cycleResult] = await Promise.allSettled([
+      const [plcResult, poeStatusResult, cameraDbResult, smartFactoryResult, healthResult, poeModelResult] = await Promise.allSettled([
         fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/start`),
-        fetchJsonWithTimeout(`${API_BASE}/api/camera/status`),
+        fetchJsonWithTimeout(`${API_BASE}/api/poe-camera/status`),
         fetchJsonWithTimeout(`${API_BASE}/api/plc/camera/read`),
         fetchJsonWithTimeout(`${API_BASE}/api/smart-factory`),
         fetchJsonWithTimeout(`${API_BASE}/api/health`),
-        fetchJsonWithTimeout(`${API_BASE}/api/vision/latest-cycle`)
+        fetchJsonWithTimeout(`${API_BASE}/api/poe-vision/status`)
       ]);
 
       if (plcResult.status === 'fulfilled' && plcResult.value.success) {
@@ -1068,66 +1395,39 @@
           `${plc.address} | PLC ${plc.plc_connected ? 'connected' : 'disconnected'}`,
           plcStartOn ? 'good' : 'warn'
         );
-
-        // Keep Final Result moving while Start bit is continuously TRUE.
-        if (plcStartOn) {
-          const now = Date.now();
-          if (now - lastAnnotatedRefreshWhileStartMs >= 2500) {
-            refreshAnnotatedResultImage('plc-start-true');
-            lastAnnotatedRefreshWhileStartMs = now;
-          }
-        }
       } else {
         setLiveStatus('statusPlcStartCard', 'statusPlcStartValue', 'statusPlcStartMeta', 'UNAVAILABLE', '#f44336', 'Unable to read start bit', 'bad');
       }
 
-      if (cameraResult.status === 'fulfilled') {
-        const cam = cameraResult.value;
+      if (poeStatusResult.status === 'fulfilled') {
+        const cam = poeStatusResult.value || {};
         const connected = Boolean(cam.connected);
-        const canRead = Boolean(cam.can_read);
-        const cameraState = connected ? (canRead ? 'CONNECTED' : 'WARMING UP') : 'DISCONNECTED';
-        const color = connected ? (canRead ? '#4caf50' : '#ffb300') : '#f44336';
-        const cameraSource = cam.camera_source ? `Source ${cam.camera_source}` : `Index ${cam.camera_index}`;
+        const cameraState = connected ? 'CONNECTED' : 'DISCONNECTED';
+        const ipLabel = cam.ip ? `IP ${cam.ip}` : 'IP unknown';
         setLiveStatus(
           'statusCameraCard',
           'statusCameraValue',
           'statusCameraMeta',
           cameraState,
-          color,
-          connected ? `${cameraSource} | ${cam.resolution?.width || 0}x${cam.resolution?.height || 0}` : 'Camera service unavailable',
-          connected ? (canRead ? 'good' : 'warn') : 'bad'
+          connected ? '#4caf50' : '#f44336',
+          connected ? `PoE CAM | ${ipLabel}` : `PoE CAM unreachable | ${ipLabel}`,
+          connected ? 'good' : 'bad'
         );
+        _setPoeCamBadge(connected);
         setTitleConnectionStatus(connected);
       } else {
-        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status', 'bad');
+        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read PoE camera status', 'bad');
+        _setPoeCamBadge(false);
         setTitleConnectionStatus(false);
       }
 
       if (cameraDbResult.status === 'fulfilled' && cameraDbResult.value.success) {
         const tags = cameraDbResult.value.tags || {};
-        const busy = Boolean(tags.busy);
-        const completed = Boolean(tags.completed);
         const defectDetected = Boolean(tags.defect_detected);
         const yellowDetected = Boolean(tags.yellow_cube_detected);
-        const whiteDetected = Boolean(tags.white_cube_detected);
+        const purpleDetected = Boolean(tags.purple_cube_detected);
         const metalDetected = Boolean(tags.metal_cube_detected);
         const rejectCommand = Boolean(tags.reject_command_from_plc);
-        const detectionLatched = defectDetected || yellowDetected || whiteDetected || metalDetected;
-        const startBit = Boolean(tags.start);
-
-        let visionLabel = 'IDLE';
-        let tone = 'warn';
-        let color = '#ffb300';
-
-        if (busy) {
-          visionLabel = 'RUNNING';
-          tone = 'good';
-          color = '#4caf50';
-        } else if (completed) {
-          visionLabel = detectionLatched ? 'DONE (RESULT LATCHED)' : 'DONE (NO RESULT)';
-          tone = detectionLatched ? 'good' : 'bad';
-          color = detectionLatched ? '#4caf50' : '#f44336';
-        }
 
         const setBitStatus = (cardId, valueId, metaId, on, activeLabel) => {
           setLiveStatus(
@@ -1142,68 +1442,30 @@
         };
 
         setBitStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', yellowDetected, 'Yellow cube detected');
-        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', whiteDetected, 'White cube detected');
+        setBitStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', purpleDetected, 'Purple cube detected');
         setBitStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', metalDetected, 'Metal cube detected');
         setBitStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', defectDetected, rejectCommand ? 'Reject command is active from PLC' : 'Defect detected');
-
-        const annotatedImg = document.getElementById('annotatedImage');
-        if (completed && (!annotatedImg || annotatedImg.style.display === 'none')) {
-          addDebugLog('vision cycle completed', 'attempting annotated-result refresh from live status');
-          refreshAnnotatedResultImage('status-completed');
-        }
       } else {
-        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera DB tags', 'bad');
         setLiveStatus('statusYellowCard', 'statusYellowValue', 'statusYellowMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
         setLiveStatus('statusWhiteCard', 'statusWhiteValue', 'statusWhiteMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
         setLiveStatus('statusSteelCard', 'statusSteelValue', 'statusSteelMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
         setLiveStatus('statusAlluminiumCard', 'statusAlluminiumValue', 'statusAlluminiumMeta', 'UNAVAILABLE', '#f44336', 'Camera DB read unavailable', 'bad');
       }
 
-      if (cycleResult.status === 'fulfilled' && cycleResult.value.success) {
-        const cycle = cycleResult.value.cycle || {};
-        const running = Boolean(cycle.running);
-        const detectedColor = cycle.detected_color || 'none';
-        const confidence = Number(cycle.confidence || 0);
-        const objectCount = Number(cycle.object_count || 0);
-        const cycleMsg = cycle.message || 'No cycle message';
-
-        if (running) {
-          setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'RUNNING', '#4caf50', cycleMsg, 'good');
-        } else {
-          const label = detectedColor && detectedColor !== 'none'
-            ? `LAST: ${String(detectedColor).toUpperCase()}`
-            : 'IDLE';
-          const tone = objectCount > 0 ? 'good' : 'warn';
-          const color = objectCount > 0 ? '#4caf50' : '#ffb300';
-          setLiveStatus(
-            'statusVisionCard',
-            'statusVisionValue',
-            'statusVisionMeta',
-            label,
-            color,
-            `${confidence.toFixed(1)}% confidence | count ${objectCount}`,
-            tone
-          );
-        }
-
-        renderCycleSummary(cycle);
-
-        const cycleTs = Number(cycle.timestamp || 0);
-        if (cycleTs > lastCycleTimestampSeen && !cycle.running) {
-          lastCycleTimestampSeen = cycleTs;
-          addDebugLog('new PLC cycle result', cycle);
-          refreshAnnotatedResultImage('plc-cycle');
-          lastAnnotatedRefreshMs = Date.now();
-        } else if (!cycle.running) {
-          // Fallback refresh in case cycle endpoint was cached/stale upstream.
-          const now = Date.now();
-          if (now - lastAnnotatedRefreshMs >= 5000) {
-            refreshAnnotatedResultImage('plc-cycle-fallback');
-            lastAnnotatedRefreshMs = now;
-          }
-        }
+      if (poeModelResult.status === 'fulfilled') {
+        const model = poeModelResult.value || {};
+        const ready = Boolean(model.model_ready);
+        setLiveStatus(
+          'statusVisionCard',
+          'statusVisionValue',
+          'statusVisionMeta',
+          ready ? 'MODEL READY' : 'NO MODEL',
+          ready ? '#4caf50' : '#ffb300',
+          ready ? ((model.model_path || '').split('/').pop().split('\\').pop() || 'cube_detector.pt') : 'Train cube_detector.pt and SCP to Pi',
+          ready ? 'good' : 'warn'
+        );
       } else {
-        addDebugLog('latest-cycle unavailable', cycleResult.reason?.message || 'request failed', 'warn');
+        setLiveStatus('statusVisionCard', 'statusVisionValue', 'statusVisionMeta', 'UNAVAILABLE', '#f44336', 'PoE vision status unavailable', 'bad');
       }
 
       if (smartFactoryResult.status === 'fulfilled' && smartFactoryResult.value.uptime) {
@@ -1257,16 +1519,14 @@
       }, delayMs);
     }
 
-    // Connect camera frame to MJPEG stream
     function updateCameraFrame(forceReconnect = false) {
       const frame = document.getElementById('cameraFrame');
       const placeholder = document.getElementById('cameraPlaceholder');
       if (!frame) return;
 
-      const streamPath = getActiveCameraStreamPath();
-      const streamUrl = getActiveCameraStreamUrl();
+      const streamUrl = getCameraStreamUrl();
 
-      if (!forceReconnect && frame.src && frame.src.includes(streamPath)) {
+      if (!forceReconnect && frame.src && frame.src.includes('/api/camera/stream')) {
         return;
       }
 
@@ -1278,7 +1538,6 @@
         }
         frame.style.display = 'block';
         if (placeholder) placeholder.style.display = 'none';
-        redrawPersistentOverlays();
       };
 
       frame.onerror = () => {
@@ -1298,22 +1557,18 @@
       };
 
       frame.src = streamUrl;
-      addDebugLog('camera stream connected', streamPath);
+      addDebugLog('camera stream connected', '/api/camera/stream');
     }
 
-    // Start camera stream
     function startStream() {
       if (streamInterval) return;
-      updateCameraFrame(true); // Initial stream connect
+      updateCameraFrame(true);
       streamInterval = setInterval(() => {
         const frame = document.getElementById('cameraFrame');
-        const streamPath = getActiveCameraStreamPath();
-        // Reconnect if src is missing
-        if (!frame || !frame.src || !frame.src.includes(streamPath)) {
+        if (!frame || !frame.src || !frame.src.includes('/api/camera/stream')) {
           updateCameraFrame(true);
           return;
         }
-        // Reconnect if no frame received for 8 seconds (frozen stream)
         if (lastFrameTime > 0 && (Date.now() - lastFrameTime) > 8000) {
           addDebugLog('camera stream stall', 'No frames for 8s — reconnecting...', 'warn');
           lastFrameTime = 0;
@@ -1322,7 +1577,6 @@
       }, 4000);
     }
 
-    // Stop camera stream
     function stopStream() {
       if (streamInterval) {
         clearInterval(streamInterval);
@@ -1338,1160 +1592,25 @@
       }
     }
 
-    // Update parameters
-    function updateParams() {
-      objectParams.min_area = parseInt(document.getElementById('minAreaSlider').value);
-      objectParams.max_area = parseInt(document.getElementById('maxAreaSlider').value);
-      if (objectParams.max_area < objectParams.min_area) {
-        objectParams.max_area = objectParams.min_area;
-        document.getElementById('maxAreaSlider').value = objectParams.max_area;
-      }
-      document.getElementById('minAreaValue').textContent = objectParams.min_area;
-      document.getElementById('maxAreaValue').textContent = objectParams.max_area;
-      queueSaveObjectParams();
-    }
-
-    function queueSaveObjectParams() {
-      if (objectParamsSaveTimer) {
-        clearTimeout(objectParamsSaveTimer);
-      }
-      objectParamsSaveTimer = setTimeout(() => {
-        saveObjectParams().catch((error) => {
-          addDebugLog('save object params failed', error.message, 'warn');
-        });
-      }, 400);
-    }
-
-    async function saveObjectParams() {
-      const response = await fetch(`${API_BASE}/api/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          camera: {
-            object_params: {
-              min_area: objectParams.min_area,
-              max_area: objectParams.max_area
-            }
-          }
-        })
-      });
-      if (!response.ok) {
-        const txt = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status} ${txt}`);
-      }
-      addDebugLog('object params saved', objectParams);
-    }
-
-    async function loadObjectParams() {
-      try {
-        const response = await fetch(`${API_BASE}/api/config?t=${Date.now()}`, {
-          signal: AbortSignal.timeout(6000),
-          cache: 'no-store'
-        });
-        if (!response.ok) return;
-        const cfg = await response.json();
-        const saved = cfg?.camera?.object_params || {};
-        const min = Number(saved.min_area);
-        const max = Number(saved.max_area);
-        if (Number.isFinite(min) && min > 0) {
-          document.getElementById('minAreaSlider').value = min;
-        }
-        if (Number.isFinite(max) && max > 0) {
-          document.getElementById('maxAreaSlider').value = max;
-        }
-        objectParams.min_area = parseInt(document.getElementById('minAreaSlider').value, 10);
-        objectParams.max_area = parseInt(document.getElementById('maxAreaSlider').value, 10);
-        document.getElementById('minAreaValue').textContent = objectParams.min_area;
-        document.getElementById('maxAreaValue').textContent = objectParams.max_area;
-        addDebugLog('object params loaded', objectParams);
-      } catch (error) {
-        addDebugLog('load object params failed', error.message, 'warn');
-      }
-    }
-
-    function queueSavePagePrefs() {
-      if (pagePrefsSaveTimer) {
-        clearTimeout(pagePrefsSaveTimer);
-      }
-      pagePrefsSaveTimer = setTimeout(() => {
-        savePagePrefs().catch((error) => {
-          addDebugLog('save page prefs failed', error.message, 'warn');
-        });
-      }, 300);
-    }
-
-    async function savePagePrefs() {
-      const settingsBody = document.getElementById('settingsBody');
-      const settingsExpanded = settingsBody && settingsBody.style.display !== 'none';
-      const response = await fetch(`${API_BASE}/api/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          camera: {
-            vision_system_new: {
-              settings_expanded: Boolean(settingsExpanded)
-            }
-          }
-        })
-      });
-      if (!response.ok) {
-        const txt = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status} ${txt}`);
-      }
-    }
-
-    async function loadPagePrefs() {
-      try {
-        const response = await fetch(`${API_BASE}/api/config?t=${Date.now()}`, {
-          signal: AbortSignal.timeout(6000),
-          cache: 'no-store'
-        });
-        if (!response.ok) return;
-        const cfg = await response.json();
-        const expanded = Boolean(cfg?.camera?.vision_system_new?.settings_expanded);
-        if (!expanded) return;
-
-        const body = document.getElementById('settingsBody');
-        const btn = document.getElementById('settingsToggleBtn');
-        const text = document.getElementById('settingsToggleText');
-        const icon = document.getElementById('settingsToggleIcon');
-        if (body) body.style.display = 'block';
-        if (text) text.textContent = 'Collapse';
-        if (icon) icon.textContent = 'expand_less';
-        if (btn) btn.setAttribute('aria-expanded', 'true');
-      } catch (error) {
-        addDebugLog('load page prefs failed', error.message, 'warn');
-      }
-    }
-
-    async function refreshAnnotatedResultImage(reason = 'manual') {
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/annotated-result?t=${Date.now()}`, {
-          signal: AbortSignal.timeout(10000),
-          cache: 'no-store'
-        });
-        if (!response.ok) {
-          const txt = await response.text().catch(() => '');
-          addDebugLog(`annotated-result fetch failed (${reason})`, `HTTP ${response.status} ${txt}`, 'error');
-          return false;
-        }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const annotatedImg = document.getElementById('annotatedImage');
-        const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
-        if (annotatedImg.src && annotatedImg.src.startsWith('blob:')) {
-          URL.revokeObjectURL(annotatedImg.src);
-        }
-        annotatedImg.src = url;
-        annotatedImg.style.display = 'block';
-        if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
-        addDebugLog(`annotated-result updated (${reason})`, `${blob.size} bytes`);
-        return true;
-      } catch (error) {
-        addDebugLog(`annotated-result exception (${reason})`, error.message, 'error');
-        return false;
-      }
-    }
-
-    function getVisionColorMeta(color) {
-      if (color === 'yellow') {
-        return {
-          borderColor: '#ffeb3b',
-          badgeStyle: 'background: color-mix(in srgb, #ffeb3b 24%, var(--sf-base-100)); color: #8a6d00;',
-          icon: 'Y'
-        };
-      }
-      if (color === 'white') {
-        return {
-          borderColor: '#ffffff',
-          badgeStyle: 'background: color-mix(in srgb, #ffffff 24%, var(--sf-base-100)); color: var(--sf-base-content);',
-          icon: 'W'
-        };
-      }
-      if (color === 'metal') {
-        return {
-          borderColor: '#9e9e9e',
-          badgeStyle: 'background: color-mix(in srgb, #9e9e9e 24%, var(--sf-base-100)); color: #616161;',
-          icon: 'M'
-        };
-      }
-      return {
-        borderColor: '#f44336',
-        badgeStyle: 'background: color-mix(in srgb, #f44336 20%, var(--sf-base-100)); color: #c62828;',
-        icon: '?'
-      };
-    }
-
-    function renderAnalysisError(error) {
-      return `
-        <div class="sf-vision-result-card is-error">
-          <i class="material-icons sf-vision-inline-icon is-large">error_outline</i>
-          <div class="sf-vision-result-heading">Analysis Failed</div>
-          <div class="sf-vision-result-line">${error.message}</div>
-          ${error.message.includes('Camera') ? '<div class="sf-vision-result-meta">The camera system is initializing in the background. Please wait 10-20 seconds and try again.</div>' : ''}
-        </div>
-      `;
-    }
-
-    function renderVotingResultCard(result) {
-      const color = result.color || 'none';
-      const colorCode = result.color_code || 0;
-      const confidence = result.confidence || 0;
-      const totalSamples = result.total_samples || 10;
-      const voteCounts = result.vote_counts || {};
-      const meta = getVisionColorMeta(color);
-
-      let html = `
-        <div class="sf-vision-result-card is-final" style="border-left-color: ${meta.borderColor};">
-          <div class="flex items-center gap-4 mb-4">
-            <div class="flex-1">
-              <div class="sf-vision-result-heading">Final Result</div>
-              <div class="sf-vision-result-badge" style="${meta.badgeStyle}">
-                ${color === 'none' ? 'NO CUBE' : color.toUpperCase()}
-              </div>
-            </div>
-          </div>
-          <div class="sf-vision-result-summary">
-            <div><strong>Confidence:</strong> ${confidence.toFixed(1)}%</div>
-            <div><strong>Color Code:</strong> ${colorCode} ${colorCode > 0 ? '(Ready for PLC)' : ''}</div>
-            <div><strong>Total Samples:</strong> ${totalSamples}</div>
-          </div>
-          <div class="sf-vision-vote-section">
-            <div class="sf-vision-vote-title">Vote Breakdown</div>
-      `;
-
-      for (const [voteColor, count] of Object.entries(voteCounts)) {
-        const displayColor = voteColor === 'null' ? 'none' : voteColor;
-        const percentage = totalSamples > 0 ? (count / totalSamples) * 100 : 0;
-        html += `
-          <div class="sf-vision-vote-row">
-            <div class="sf-vision-vote-head">
-              <span>${displayColor.toUpperCase()}</span>
-              <span>${count} votes (${percentage.toFixed(0)}%)</span>
-            </div>
-            <div class="sf-vision-vote-track">
-              <div class="sf-vision-vote-fill" style="width: ${percentage}%; background: ${meta.borderColor};"></div>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `
-          </div>
-        </div>
-      `;
-
-      return html;
-    }
-
-    function renderDetectionResultsCard(results) {
-      const objectCount = results.object_count || 0;
-      const objects = results.objects || [];
-      const debug = results.debug || {};
-
-      let html = `<div class="sf-vision-result-line"><strong>Cubes Detected:</strong> ${objectCount}</div>`;
-
-      if (objects.length > 0) {
-        html += '<div class="mt-3">';
-        objects.forEach((obj, idx) => {
-          const color = obj.color || 'unknown';
-          const center = obj.center || [0, 0];
-          const area = obj.area || 0;
-          const meta = getVisionColorMeta(color);
-
-          html += `
-            <div class="sf-vision-object-card" style="border-left-color: ${meta.borderColor};">
-              <div class="sf-vision-object-head">
-                <div class="sf-vision-object-icon">${meta.icon}</div>
-                <div>
-                  <div class="sf-vision-object-title">Cube ${idx + 1}</div>
-                  <div class="sf-vision-result-badge" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; ${meta.badgeStyle}">
-                    ${color.toUpperCase()}
-                  </div>
-                </div>
-              </div>
-              <div class="sf-vision-object-meta">Center: (${center[0]}, ${center[1]}) | Area: ${area.toFixed(0)} px^2</div>
-            </div>
-          `;
-        });
-        html += '</div>';
-      } else {
-        html += '<div class="sf-vision-empty-state">No cubes detected</div>';
-      }
-
-      if (Object.keys(debug).length > 0) {
-        html += '<div class="sf-vision-debug-card"><div class="sf-vision-debug-title">Debug Info</div>';
-        Object.keys(debug).forEach(color => {
-          const info = debug[color];
-          if (info.pixels !== undefined) {
-            html += `<div class="sf-vision-debug-line">${color.toUpperCase()}: ${info.pixels} pixels matched, ${info.objects || 0} objects</div>`;
-          }
-          if (info.contours) {
-            html += `<div class="sf-vision-debug-line">${color.toUpperCase()} Contours: ${info.contours.total} total, ${info.contours.rejected_small} too small, ${info.contours.rejected_large} too large, ${info.contours.accepted} accepted</div>`;
-          }
-        });
-        html += '</div>';
-      }
-
-      return html;
-    }
-
-    // START ANALYSIS - Run voting-based detection (10 snapshots)
-    async function startAnalysis() {
-      console.log('Starting Analysis with Majority Voting (10 snapshots)');
-      console.log('Using area limits for voting:', objectParams.min_area, 'to', objectParams.max_area, 'pixels');
-      addDebugLog('startAnalysis invoked', { min_area: objectParams.min_area, max_area: objectParams.max_area });
-
-      const resultsDiv = document.getElementById('results');
-      const resultsContent = document.getElementById('resultsContent');
-
-      // Show loading state
-      resultsContent.innerHTML = `
-        <div class="sf-vision-result-card sf-vision-loading">
-          <div class="sf-vision-loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>
-          <div class="sf-vision-result-line"><strong>Taking 1 snapshot...</strong></div>
-          <div class="sf-vision-loading-copy">This takes about 1 second</div>
-        </div>
-      `;
-      resultsDiv.classList.remove('sf-vision-hidden');
-
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/test-color-voting`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            num_samples: 1,
-            delay_ms: 0,
-            min_area: objectParams.min_area,
-            max_area: objectParams.max_area
-          })
-        });
-        addDebugLog('test-color-voting response', { status: response.status, ok: response.ok });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMsg = errorData.error || `HTTP ${response.status}`;
-
-          if (response.status === 503 && errorMsg.includes('Camera service not initialized')) {
-            throw new Error('Camera is not ready yet. Please wait a moment and try again. The system retries camera connection automatically.');
-          }
-          throw new Error(errorMsg);
-        }
-
-        const data = await response.json();
-        console.log('✅ Analysis complete:', data);
-        addDebugLog('test-color-voting payload', data);
-
-        // Display final voting result
-        displayVotingResult(data.result);
-
-      } catch (error) {
-        console.error('Error during analysis:', error);
-        addDebugLog('startAnalysis exception', error.message, 'error');
-        resultsContent.innerHTML = renderAnalysisError(error);
-        resultsDiv.classList.remove('sf-vision-hidden');
-      }
-    }
-
-    // Display voting result with nice UI
-    function displayVotingResult(result) {
-      const resultsDiv = document.getElementById('results');
-      const resultsContent = document.getElementById('resultsContent');
-      resultsContent.innerHTML = renderVotingResultCard(result);
-      resultsDiv.classList.remove('sf-vision-hidden');
-      addDebugLog('displayVotingResult called', {
-        color: result?.color || null,
-        confidence: result?.confidence || 0,
-        hasAnnotatedImage: Boolean(result?.annotated_image)
-      });
-
-      if (result.annotated_image) {
-        const annotatedImg = document.getElementById('annotatedImage');
-        const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
-        const imageFormat = (result.annotated_image_format || 'jpeg').toLowerCase();
-
-        annotatedImg.src = `data:image/${imageFormat};base64,${result.annotated_image}`;
-        annotatedImg.style.display = 'block';
-        if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
-        addDebugLog('final result image rendered', `base64 length ${result.annotated_image.length}`);
-      } else {
-        addDebugLog('no annotated_image in voting result', 'trying /api/vision/annotated-result fallback', 'warn');
-        refreshAnnotatedResultImage('voting-fallback');
-      }
-    }
-
-    // Detect objects once (quick test - single frame)
-    async function detectObjects() {
-      const objectMethod = document.getElementById('objectDetectionMethod').value;
-      const roiForRequest = {
-        enabled: Boolean(currentRoiSettings?.enabled),
-        x: Number(currentRoiSettings?.x || 0),
-        y: Number(currentRoiSettings?.y || 0),
-        width: Number(currentRoiSettings?.width || 100),
-        height: Number(currentRoiSettings?.height || 100)
-      };
-
-      console.log('🔍 Starting detection with params:', objectParams);
-      addDebugLog('detectObjects invoked', { objectMethod, params: objectParams, detection_roi: roiForRequest });
-      
-      try {
-        // Get analyzed image
-        const analyzeResponse = await fetch(`${API_BASE}/api/vision/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            method: 'combined',
-            use_object_detection: true,
-            object_method: objectMethod,
-            object_params: {
-              ...objectParams,
-              detection_roi_enabled: roiForRequest.enabled,
-              detection_roi: roiForRequest
-            },
-            defect_detection_enabled: false
-          })
-        });
-        
-        console.log('🔍 Analyze response status:', analyzeResponse.status);
-        addDebugLog('vision/analyze response', {
-          status: analyzeResponse.status,
-          ok: analyzeResponse.ok,
-          objectHeader: analyzeResponse.headers.get('X-Objects-Detected'),
-          hasDetectedObjectsHeader: Boolean(analyzeResponse.headers.get('X-Detected-Objects'))
-        });
-
-        if (analyzeResponse.ok) {
-          const objectCountHeader = analyzeResponse.headers.get('X-Objects-Detected');
-          const detectedObjectsHeader = analyzeResponse.headers.get('X-Detected-Objects');
-
-          const blob = await analyzeResponse.blob();
-          addDebugLog('analyzed image received', `${blob.size} bytes`);
-          const url = URL.createObjectURL(blob);
-          const annotatedImg = document.getElementById('annotatedImage');
-          const annotatedPlaceholder = document.getElementById('annotatedPlaceholder');
-          
-          if (annotatedImg.src && annotatedImg.src.startsWith('blob:')) {
-            URL.revokeObjectURL(annotatedImg.src);
-          }
-          annotatedImg.src = url;
-          annotatedImg.style.display = 'block';
-          if (annotatedPlaceholder) annotatedPlaceholder.style.display = 'none';
-
-          const analyzeResults = {
-            object_count: Number.parseInt(objectCountHeader || '0', 10) || 0,
-            objects: [],
-            debug: {}
-          };
-
-          if (detectedObjectsHeader) {
-            try {
-              analyzeResults.objects = JSON.parse(detectedObjectsHeader);
-              if (!objectCountHeader) {
-                analyzeResults.object_count = analyzeResults.objects.length;
-              }
-            } catch (parseError) {
-              console.warn('Could not parse X-Detected-Objects header:', parseError);
-              addDebugLog('X-Detected-Objects parse error', parseError.message, 'error');
-            }
-          }
-
-          // Backward compatibility: older backend may not include X-Detected-Objects.
-          // Fall back to /api/vision/detect only when header-based object data is unavailable.
-          if (!detectedObjectsHeader) {
-            const detectResponse = await fetch(`${API_BASE}/api/vision/detect`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                object_detection_enabled: true,
-                defect_detection_enabled: false,
-                object_method: objectMethod,
-                object_params: {
-                  ...objectParams,
-                  detection_roi_enabled: roiForRequest.enabled,
-                  detection_roi: roiForRequest
-                }
-              })
-            });
-
-            if (detectResponse.ok) {
-              const fallbackResults = await detectResponse.json();
-              analyzeResults.object_count = fallbackResults.object_count || 0;
-              analyzeResults.objects = fallbackResults.objects || [];
-              analyzeResults.debug = fallbackResults.debug || {};
-              console.log('🔍 Detection Results (fallback /detect):', fallbackResults);
-              addDebugLog('fallback /detect payload', fallbackResults);
-            } else {
-              const fallbackErrorText = await detectResponse.text().catch(() => 'Unknown error');
-              console.warn('Fallback /detect failed:', detectResponse.status, fallbackErrorText);
-              addDebugLog('fallback /detect failed', `HTTP ${detectResponse.status} ${fallbackErrorText}`, 'error');
-            }
-          }
-
-          console.log('🔍 Detection Results (single-frame):', analyzeResults);
-          displayResults(analyzeResults);
-        } else {
-          const errorText = await analyzeResponse.text().catch(() => 'Unknown error');
-          console.error('🔍 Analyze Error:', analyzeResponse.status, errorText);
-          addDebugLog('vision/analyze failed', `HTTP ${analyzeResponse.status} ${errorText}`, 'error');
-          alert('Quick test failed: ' + errorText);
-        }
-      } catch (error) {
-        console.error('Error detecting objects:', error);
-        addDebugLog('detectObjects exception', error.message, 'error');
-        alert('Error detecting objects: ' + error.message);
-      }
-    }
-
-    // Display results
-    function displayResults(results) {
-      const resultsDiv = document.getElementById('results');
-      const resultsContent = document.getElementById('resultsContent');
-
-      if (!resultsDiv || !resultsContent) return;
-      resultsContent.innerHTML = renderDetectionResultsCard(results);
-      resultsDiv.classList.remove('sf-vision-hidden');
-    }
-
-    // Start continuous detection
-    function startContinuousDetection() {
-      detectionActive = true;
-      document.getElementById('startBtn').style.display = 'none';
-      document.getElementById('stopBtn').style.display = 'inline-block';
-      
-      detectionInterval = setInterval(() => {
-        if (detectionActive) {
-          detectObjects();
-        }
-      }, 2000); // Detect every 2 seconds
-    }
-
-    // Stop continuous detection
-    function stopContinuousDetection() {
-      detectionActive = false;
-      if (detectionInterval) {
-        clearInterval(detectionInterval);
-        detectionInterval = null;
-      }
-      document.getElementById('startBtn').style.display = 'inline-block';
-      document.getElementById('stopBtn').style.display = 'none';
-    }
-
-    // Crop Drawing Variables
-    let isDrawingCropArea = false;
-    let cropDrawStartX = null;
-    let cropDrawStartY = null;
-    let cropDrawCurrentX = 0;
-    let cropDrawCurrentY = 0;
-    let currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
-
-    // Load existing crop settings (now only to ensure cropping is OFF)
-    async function loadCropSettings() {
-      try {
-        const response = await fetch(`${API_BASE}/api/camera/crop`);
-        if (response.ok) {
-          const crop = await response.json();
-          // Force crop disabled so the backend sends the full frame
-          currentCropSettings = {
-            enabled: false,
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100
-          };
-          // Save disabled crop back to backend
-          await applyCropSettings();
-          console.log('Crop disabled (full frame used instead). Previous settings were:', crop);
-        }
-      } catch (error) {
-        console.error('Error loading/disabling crop settings:', error);
-      }
-    }
-
-    function startDrawingCrop() {
-      const cameraFrame = document.getElementById('cameraFrame');
-      const cropOverlay = document.getElementById('cropOverlay');
-      const drawBtn = document.getElementById('drawCropBtn');
-      const instructions = document.getElementById('cropDrawInstructions');
-      
-      if (cameraFrame.style.display === 'none') {
-        alert('Please wait for the camera feed to load before drawing the crop area.');
-        return;
-      }
-      
-      // Setup overlay canvas to match image
-      cropOverlay.width = cameraFrame.width;
-      cropOverlay.height = cameraFrame.height;
-      cropOverlay.style.width = cameraFrame.offsetWidth + 'px';
-      cropOverlay.style.height = cameraFrame.offsetHeight + 'px';
-      cropOverlay.style.display = 'block';
-      cropOverlay.style.pointerEvents = 'auto';
-      
-      instructions.style.display = 'block';
-      drawBtn.disabled = true;
-      drawBtn.style.opacity = '0.5';
-      
-      isDrawingCropArea = true;
-      
-      // Add event listeners
-      cropOverlay.addEventListener('mousedown', onCropDrawStart);
-      cropOverlay.addEventListener('mousemove', onCropDrawMove);
-      cropOverlay.addEventListener('mouseup', onCropDrawEnd);
-      document.addEventListener('keydown', onCropDrawEscape);
-    }
-
-    function onCropDrawStart(event) {
-      const rect = event.target.getBoundingClientRect();
-      cropDrawStartX = event.clientX - rect.left;
-      cropDrawStartY = event.clientY - rect.top;
-      cropDrawCurrentX = cropDrawStartX;
-      cropDrawCurrentY = cropDrawStartY;
-    }
-
-    function onCropDrawMove(event) {
-      if (cropDrawStartX === null || cropDrawStartY === null) return;
-      
-      const rect = event.target.getBoundingClientRect();
-      cropDrawCurrentX = event.clientX - rect.left;
-      cropDrawCurrentY = event.clientY - rect.top;
-      
-      drawCropRectangle();
-    }
-
-    function onCropDrawEnd(event) {
-      if (cropDrawStartX === null || cropDrawStartY === null) return;
-      
-      const rect = event.target.getBoundingClientRect();
-      cropDrawCurrentX = event.clientX - rect.left;
-      cropDrawCurrentY = event.clientY - rect.top;
-      
-      const cameraFrame = document.getElementById('cameraFrame');
-      const canvasWidth = cameraFrame.width;
-      const canvasHeight = cameraFrame.height;
-      
-      // Calculate rectangle bounds
-      const x1 = Math.min(cropDrawStartX, cropDrawCurrentX);
-      const y1 = Math.min(cropDrawStartY, cropDrawCurrentY);
-      const x2 = Math.max(cropDrawStartX, cropDrawCurrentX);
-      const y2 = Math.max(cropDrawStartY, cropDrawCurrentY);
-      
-      // Convert to percentages
-      const xPercent = (x1 / canvasWidth) * 100;
-      const yPercent = (y1 / canvasHeight) * 100;
-      const widthPercent = ((x2 - x1) / canvasWidth) * 100;
-      const heightPercent = ((y2 - y1) / canvasHeight) * 100;
-      
-      // Validate minimum size
-      if (widthPercent < 5 || heightPercent < 5) {
-        alert('Crop area is too small. Please draw a larger rectangle.');
-        cancelCropDrawing();
-        return;
-      }
-      
-      // Save the crop settings
-      currentCropSettings = {
-        enabled: true,
-        x: Math.round(xPercent * 10) / 10,
-        y: Math.round(yPercent * 10) / 10,
-        width: Math.round(widthPercent * 10) / 10,
-        height: Math.round(heightPercent * 10) / 10
-      };
-      
-      applyCropSettings();
-      cancelCropDrawing();
-    }
-
-    function onCropDrawEscape(event) {
-      if (event.key === 'Escape' && isDrawingCropArea) {
-        cancelCropDrawing();
-      }
-    }
-
-    function drawCropRectangle() {
-      const cropOverlay = document.getElementById('cropOverlay');
-      const ctx = cropOverlay.getContext('2d');
-      
-      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
-      
-      const x = Math.min(cropDrawStartX, cropDrawCurrentX);
-      const y = Math.min(cropDrawStartY, cropDrawCurrentY);
-      const width = Math.abs(cropDrawCurrentX - cropDrawStartX);
-      const height = Math.abs(cropDrawCurrentY - cropDrawStartY);
-      
-      // Draw semi-transparent overlay
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, 0, cropOverlay.width, cropOverlay.height);
-      
-      // Clear crop area
-      ctx.clearRect(x, y, width, height);
-      
-      // Draw border
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, width, height);
-      
-      // Draw label
-      ctx.fillStyle = '#00ff00';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText('CROP AREA', x + 10, y + 25);
-      ctx.font = '12px Arial';
-      ctx.fillText(Math.round(width) + 'x' + Math.round(height) + 'px', x + 10, y + 45);
-    }
-
-    function cancelCropDrawing() {
-      const cropOverlay = document.getElementById('cropOverlay');
-      const drawBtn = document.getElementById('drawCropBtn');
-      const instructions = document.getElementById('cropDrawInstructions');
-      
-      isDrawingCropArea = false;
-      cropDrawStartX = null;
-      cropDrawStartY = null;
-      cropDrawCurrentX = 0;
-      cropDrawCurrentY = 0;
-      
-      cropOverlay.style.pointerEvents = 'none';
-      instructions.style.display = 'none';
-      drawBtn.disabled = false;
-      drawBtn.style.opacity = '1';
-      
-      cropOverlay.removeEventListener('mousedown', onCropDrawStart);
-      cropOverlay.removeEventListener('mousemove', onCropDrawMove);
-      cropOverlay.removeEventListener('mouseup', onCropDrawEnd);
-      document.removeEventListener('keydown', onCropDrawEscape);
-      
-      // Redraw existing crop if any
-      if (currentCropSettings.enabled) {
-        drawCropOverlay(currentCropSettings.x, currentCropSettings.y, currentCropSettings.width, currentCropSettings.height);
-      } else {
-        const ctx = cropOverlay.getContext('2d');
-        ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
-        cropOverlay.style.display = 'none';
-      }
-    }
-
-    function drawCropOverlay(x, y, width, height) {
-      const cameraFrame = document.getElementById('cameraFrame');
-      const cropOverlay = document.getElementById('cropOverlay');
-      
-      if (cameraFrame.style.display === 'none') return;
-      
-      cropOverlay.width = cameraFrame.width;
-      cropOverlay.height = cameraFrame.height;
-      cropOverlay.style.width = cameraFrame.offsetWidth + 'px';
-      cropOverlay.style.height = cameraFrame.offsetHeight + 'px';
-      cropOverlay.style.display = 'block';
-      
-      const ctx = cropOverlay.getContext('2d');
-      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
-      
-      const cropX = (x / 100) * cropOverlay.width;
-      const cropY = (y / 100) * cropOverlay.height;
-      const cropWidth = (width / 100) * cropOverlay.width;
-      const cropHeight = (height / 100) * cropOverlay.height;
-      
-      // Draw dark overlay
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, 0, cropOverlay.width, cropOverlay.height);
-      
-      // Clear crop area
-      ctx.clearRect(cropX, cropY, cropWidth, cropHeight);
-      
-      // Draw border
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
-      
-      // Draw label
-      ctx.fillStyle = '#00ff00';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText('CROP AREA', cropX + 10, cropY + 25);
-    }
-
-    // Detection ROI (expected cube position) drawing
-    let isDrawingRoi = false;
-    let roiStartX = null;
-    let roiStartY = null;
-    let roiCurrentX = 0;
-    let roiCurrentY = 0;
-    let currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
-
-    /**
-     * Returns the actual rendered image rect within the <img> element when
-     * object-fit: contain is used. Accounts for letterbox / pillarbox padding.
-     * All values are in display pixels relative to the img element's top-left.
-     */
-    function getRenderedImageGeometry(imgElement) {
-      const naturalW = imgElement.naturalWidth || imgElement.width;
-      const naturalH = imgElement.naturalHeight || imgElement.height;
-      const displayW = imgElement.offsetWidth;
-      const displayH = imgElement.offsetHeight;
-
-      if (!naturalW || !naturalH || !displayW || !displayH) {
-        return { x: 0, y: 0, width: displayW, height: displayH };
-      }
-
-      const naturalAspect = naturalW / naturalH;
-      const displayAspect = displayW / displayH;
-
-      let renderedW, renderedH;
-      if (displayAspect > naturalAspect) {
-        // Pillarboxed: height fills, width has side padding
-        renderedH = displayH;
-        renderedW = renderedH * naturalAspect;
-      } else {
-        // Letterboxed: width fills, height has top/bottom padding
-        renderedW = displayW;
-        renderedH = renderedW / naturalAspect;
-      }
-
-      return {
-        x: (displayW - renderedW) / 2,
-        y: (displayH - renderedH) / 2,
-        width: renderedW,
-        height: renderedH,
-      };
-    }
-
-    /** Sync canvas internal resolution and CSS size to the current display size. */
-    function syncCanvasToDisplay(canvas, imgElement) {
-      const w = imgElement.offsetWidth;
-      const h = imgElement.offsetHeight;
-      if (canvas.width !== w) canvas.width = w;
-      if (canvas.height !== h) canvas.height = h;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-    }
-
-    async function loadDetectionRoi() {
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/roi?t=${Date.now()}`, { cache: 'no-store' });
-        if (response.ok) {
-          const roi = await response.json();
-          currentRoiSettings = roi;
-          if (roi.enabled) {
-            showRoiInfo();
-            drawRoiOverlay(roi.x, roi.y, roi.width, roi.height);
-          }
-          console.log('Detection ROI loaded:', roi);
-        }
-      } catch (error) {
-        console.error('Error loading detection ROI:', error);
-      }
-    }
-
-    function startDrawingDetectionRoi() {
-      const cameraFrame = document.getElementById('cameraFrame');
-      const roiOverlay = document.getElementById('roiOverlay');
-      const drawBtn = document.getElementById('drawRoiBtn');
-      const instructions = document.getElementById('roiDrawInstructions');
-
-      if (cameraFrame.style.display === 'none') {
-        alert('Please wait for the camera feed to load before drawing the detection area.');
-        return;
-      }
-
-      syncCanvasToDisplay(roiOverlay, cameraFrame);
-      roiOverlay.style.display = 'block';
-      roiOverlay.style.pointerEvents = 'auto';
-
-      instructions.style.display = 'block';
-      drawBtn.disabled = true;
-      drawBtn.style.opacity = '0.5';
-
-      isDrawingRoi = true;
-
-      roiOverlay.addEventListener('mousedown', onRoiDrawStart);
-      roiOverlay.addEventListener('mousemove', onRoiDrawMove);
-      roiOverlay.addEventListener('mouseup', onRoiDrawEnd);
-      document.addEventListener('keydown', onRoiDrawEscape);
-    }
-
-    function onRoiDrawStart(event) {
-      const rect = event.target.getBoundingClientRect();
-      roiStartX = event.clientX - rect.left;
-      roiStartY = event.clientY - rect.top;
-      roiCurrentX = roiStartX;
-      roiCurrentY = roiStartY;
-    }
-
-    function onRoiDrawMove(event) {
-      if (roiStartX === null || roiStartY === null) return;
-
-      const rect = event.target.getBoundingClientRect();
-      roiCurrentX = event.clientX - rect.left;
-      roiCurrentY = event.clientY - rect.top;
-
-      drawRoiRectangle();
-    }
-
-    function onRoiDrawEnd(event) {
-      if (roiStartX === null || roiStartY === null) return;
-
-      const rect = event.target.getBoundingClientRect();
-      roiCurrentX = event.clientX - rect.left;
-      roiCurrentY = event.clientY - rect.top;
-
-      const cameraFrame = document.getElementById('cameraFrame');
-      const geo = getRenderedImageGeometry(cameraFrame);
-
-      // Clamp draw coordinates to the actual image content area (ignore letterbox padding)
-      const x1 = Math.max(geo.x, Math.min(roiStartX, roiCurrentX));
-      const y1 = Math.max(geo.y, Math.min(roiStartY, roiCurrentY));
-      const x2 = Math.min(geo.x + geo.width, Math.max(roiStartX, roiCurrentX));
-      const y2 = Math.min(geo.y + geo.height, Math.max(roiStartY, roiCurrentY));
-
-      // Percentages relative to the actual rendered image area, not the element box
-      const xPercent = ((x1 - geo.x) / geo.width) * 100;
-      const yPercent = ((y1 - geo.y) / geo.height) * 100;
-      const widthPercent = ((x2 - x1) / geo.width) * 100;
-      const heightPercent = ((y2 - y1) / geo.height) * 100;
-
-      // Allow very small ROI selections; only reject zero-size accidental clicks.
-      if (widthPercent <= 0 || heightPercent <= 0) {
-        cancelDetectionRoiDrawing();
-        return;
-      }
-
-      currentRoiSettings = {
-        enabled: true,
-        x: Math.round(xPercent * 10) / 10,
-        y: Math.round(yPercent * 10) / 10,
-        width: Math.round(widthPercent * 10) / 10,
-        height: Math.round(heightPercent * 10) / 10,
-      };
-
-      applyDetectionRoi();
-      cancelDetectionRoiDrawing();
-    }
-
-    function onRoiDrawEscape(event) {
-      if (event.key === 'Escape' && isDrawingRoi) {
-        cancelDetectionRoiDrawing();
-      }
-    }
-
-    function drawRoiRectangle() {
-      const roiOverlay = document.getElementById('roiOverlay');
-      const ctx = roiOverlay.getContext('2d');
-
-      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
-
-      const x = Math.min(roiStartX, roiCurrentX);
-      const y = Math.min(roiStartY, roiCurrentY);
-      const width = Math.abs(roiCurrentX - roiStartX);
-      const height = Math.abs(roiCurrentY - roiStartY);
-
-      ctx.fillStyle = 'rgba(0, 188, 212, 0.2)';
-      ctx.fillRect(x, y, width, height);
-
-      ctx.strokeStyle = '#00e5ff';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, width, height);
-
-      ctx.fillStyle = '#00e5ff';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText('DETECTION AREA', x + 10, y + 25);
-    }
-
-    function cancelDetectionRoiDrawing() {
-      const roiOverlay = document.getElementById('roiOverlay');
-      const drawBtn = document.getElementById('drawRoiBtn');
-      const instructions = document.getElementById('roiDrawInstructions');
-
-      isDrawingRoi = false;
-      roiStartX = null;
-      roiStartY = null;
-      roiCurrentX = 0;
-      roiCurrentY = 0;
-
-      roiOverlay.style.pointerEvents = 'none';
-      instructions.style.display = 'none';
-      drawBtn.disabled = false;
-      drawBtn.style.opacity = '1';
-
-      roiOverlay.removeEventListener('mousedown', onRoiDrawStart);
-      roiOverlay.removeEventListener('mousemove', onRoiDrawMove);
-      roiOverlay.removeEventListener('mouseup', onRoiDrawEnd);
-      document.removeEventListener('keydown', onRoiDrawEscape);
-
-      if (currentRoiSettings.enabled) {
-        drawRoiOverlay(currentRoiSettings.x, currentRoiSettings.y, currentRoiSettings.width, currentRoiSettings.height);
-      } else {
-        const ctx = roiOverlay.getContext('2d');
-        ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
-        roiOverlay.style.display = 'none';
-      }
-    }
-
-    function drawRoiOverlay(x, y, width, height) {
-      const cameraFrame = document.getElementById('cameraFrame');
-      const roiOverlay = document.getElementById('roiOverlay');
-
-      if (cameraFrame.style.display === 'none') return;
-
-      syncCanvasToDisplay(roiOverlay, cameraFrame);
-      roiOverlay.style.display = 'block';
-
-      const ctx = roiOverlay.getContext('2d');
-      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
-
-      // Convert percentages back to display pixels, offset by the actual image area
-      const geo = getRenderedImageGeometry(cameraFrame);
-      const roiX = geo.x + (x / 100) * geo.width;
-      const roiY = geo.y + (y / 100) * geo.height;
-      const roiWidth = (width / 100) * geo.width;
-      const roiHeight = (height / 100) * geo.height;
-
-      ctx.strokeStyle = '#00e5ff';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(roiX, roiY, roiWidth, roiHeight);
-
-      ctx.fillStyle = '#00e5ff';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText('DETECTION AREA', roiX + 10, roiY + 25);
-    }
-
-    async function applyDetectionRoi() {
-      try {
-        const response = await fetch(`${API_BASE}/api/vision/roi`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentRoiSettings),
-        });
-
-        if (response.ok) {
-          console.log('Detection ROI saved:', currentRoiSettings);
-          if (currentRoiSettings.enabled) {
-            showRoiInfo();
-            drawRoiOverlay(currentRoiSettings.x, currentRoiSettings.y, currentRoiSettings.width, currentRoiSettings.height);
-          } else {
-            document.getElementById('roiInfo').style.display = 'none';
-            const roiOverlay = document.getElementById('roiOverlay');
-            const ctx = roiOverlay.getContext('2d');
-            ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
-            roiOverlay.style.display = 'none';
-          }
-        } else {
-          const text = await response.text();
-          console.error('Error saving detection ROI (HTTP):', response.status, text);
-          alert('Error saving detection area (HTTP ' + response.status + '): ' + text);
-        }
-      } catch (error) {
-        console.error('Error saving detection ROI:', error);
-        alert('Error saving detection area: ' + error.message);
-      }
-    }
-
-    async function resetDetectionRoi() {
-      currentRoiSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
-      await applyDetectionRoi();
-      document.getElementById('roiInfo').style.display = 'none';
-      const roiOverlay = document.getElementById('roiOverlay');
-      const ctx = roiOverlay.getContext('2d');
-      ctx.clearRect(0, 0, roiOverlay.width, roiOverlay.height);
-      roiOverlay.style.display = 'none';
-    }
-
-    function showRoiInfo() {
-      const roiInfo = document.getElementById('roiInfo');
-      document.getElementById('roiInfoX').textContent = currentRoiSettings.x.toFixed(1);
-      document.getElementById('roiInfoY').textContent = currentRoiSettings.y.toFixed(1);
-      document.getElementById('roiInfoWidth').textContent = currentRoiSettings.width.toFixed(1);
-      document.getElementById('roiInfoHeight').textContent = currentRoiSettings.height.toFixed(1);
-      roiInfo.style.display = 'block';
-    }
-
-    function toggleSettingsPanel() {
-      const body = document.getElementById('settingsBody');
-      const btn = document.getElementById('settingsToggleBtn');
-      const text = document.getElementById('settingsToggleText');
-      const icon = document.getElementById('settingsToggleIcon');
-      const isHidden = body.style.display === 'none' || body.style.display === '';
-
-      if (isHidden) {
-        body.style.display = 'block';
-        if (text) text.textContent = 'Collapse';
-        if (icon) icon.textContent = 'expand_less';
-        if (btn) btn.setAttribute('aria-expanded', 'true');
-      } else {
-        body.style.display = 'none';
-        if (text) text.textContent = 'Expand';
-        if (icon) icon.textContent = 'expand_more';
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
-      queueSavePagePrefs();
-    }
-
-    async function applyCropSettings() {
-      try {
-        const response = await fetch(`${API_BASE}/api/camera/crop`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentCropSettings)
-        });
-
-        if (response.ok) {
-          console.log('Crop settings saved:', currentCropSettings);
-          if (!currentCropSettings.enabled) {
-            const cropOverlay = document.getElementById('cropOverlay');
-            const ctx = cropOverlay.getContext('2d');
-            ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
-            cropOverlay.style.display = 'none';
-            document.getElementById('cropInfo').style.display = 'none';
-          }
-          // Do not draw crop overlay anymore; just refresh camera frame
-          updateCameraFrame();
-        } else {
-          const error = await response.json();
-          console.error('Error saving crop:', error);
-          alert('Error saving crop settings: ' + (error.error || 'Unknown error'));
-        }
-      } catch (error) {
-        console.error('Error saving crop settings:', error);
-        alert('Error saving crop settings: ' + error.message);
-      }
-    }
-
-    async function resetCrop() {
-      currentCropSettings = { enabled: false, x: 0, y: 0, width: 100, height: 100 };
-      await applyCropSettings();
-      document.getElementById('cropInfo').style.display = 'none';
-      const cropOverlay = document.getElementById('cropOverlay');
-      const ctx = cropOverlay.getContext('2d');
-      ctx.clearRect(0, 0, cropOverlay.width, cropOverlay.height);
-      cropOverlay.style.display = 'none';
-    }
-
-    function showCropInfo() {
-      const cropInfo = document.getElementById('cropInfo');
-      document.getElementById('cropInfoX').textContent = currentCropSettings.x.toFixed(1);
-      document.getElementById('cropInfoY').textContent = currentCropSettings.y.toFixed(1);
-      document.getElementById('cropInfoWidth').textContent = currentCropSettings.width.toFixed(1);
-      document.getElementById('cropInfoHeight').textContent = currentCropSettings.height.toFixed(1);
-      cropInfo.style.display = 'block';
-    }
-
-    // Initialize
     window.addEventListener('load', () => {
-      console.log('Color Detection Test Page Loaded');
       addDebugLog('page loaded', { apiBase: API_BASE });
 
-      // Load saved settings
-      loadObjectParams();
-      loadPagePrefs();
-      loadCropSettings(); // Load crop settings on page load
-      loadDetectionRoi(); // Load detection ROI on page load
+      loadPoeCameraConfig();
+      _wireClassConfSliders();
+      checkPoeModelStatus();
+      startLiveStatusPolling();
 
-      // Start live status and camera feed
-      startLiveStatusPolling(); // Start live status polling
-      startStream(); // Start fetching camera frames automatically
+      // Live MJPEG preview is retired — kick the YOLO auto-detect loop instead.
+      // Tiny delay so loadPoeCameraConfig has a chance to populate the IP field.
+      setTimeout(() => {
+        if (!_poeLoopTimer) startPoeLoop();
+      }, 400);
 
-      // Periodically refresh the final result image so it appears
-      // without needing a full page reload.
-      const annotatedRefreshIntervalMs = 10000; // 10 seconds
-      setInterval(() => {
-        refreshAnnotatedResultImage('periodic-refresh');
-      }, annotatedRefreshIntervalMs);
+      // Photoelectric sensor (%I0.5) — independent of the detect loop so the
+      // mismatch warning ("sensor sees something, AI sees nothing") stays
+      // current even if the AI poll falls behind.
+      pollPlcSensor();
+      setInterval(pollPlcSensor, 1000);
     });
   </script>
 </body>

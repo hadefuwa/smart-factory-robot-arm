@@ -3937,23 +3937,26 @@ def get_events():
 
 @app.route('/api/poe-camera/status')
 def poe_camera_status():
-    """Return the camera-reachability verdict from the background probe thread.
-    Does NOT do its own HTTP call — the probe thread is the single source of
-    truth so this endpoint never blocks and never disagrees with what the PLC
-    sees in DB124."""
-    config = load_config()
-    poe_ip = str(config.get('poe_camera', {}).get('ip', '')).strip()
-    if not poe_ip:
-        return jsonify({'configured': False, 'connected': False, 'ip': ''})
-    state = _poe_camera_probe_state
+    """Camera-reachability verdict. The endpoint name is legacy — production
+    vision is now USB. Returns whether CameraService has an open VideoCapture
+    and how stale the most recent frame is, so the vision-page connection
+    badge reflects USB-camera health."""
+    cam_ok = bool(
+        camera_service is not None
+        and camera_service.camera is not None
+        and camera_service.camera.isOpened()
+    )
+    last_frame_ts = float(getattr(camera_service, 'frame_time', 0.0)) if camera_service else 0.0
+    last_frame_age = round(time.time() - last_frame_ts, 2) if last_frame_ts else None
+    fresh = bool(last_frame_age is not None and last_frame_age < 5.0)
     return jsonify({
         'configured': True,
-        'connected': bool(state.get('connected', False)),
-        'ip': poe_ip,
-        'consecutive_failures': int(state.get('consecutive_failures', 0)),
-        'last_success_age_sec': round(time.time() - float(state.get('last_success_ts') or 0.0), 2) if state.get('last_success_ts') else None,
-        'last_probe_age_sec': round(time.time() - float(state.get('last_probe_ts') or 0.0), 2) if state.get('last_probe_ts') else None,
-        'last_error': state.get('last_error'),
+        'connected': cam_ok and fresh,
+        'ip': 'USB',
+        'consecutive_failures': 0,
+        'last_success_age_sec': last_frame_age,
+        'last_probe_age_sec': last_frame_age,
+        'last_error': None if cam_ok else 'usb_camera_not_open',
     })
 
 
@@ -5091,12 +5094,16 @@ def _poe_pump_loop():
                 time.sleep(min(0.5, _poe_loop_pause_until - now))
                 continue
 
-            cfg    = load_config()
-            poe_ip = str(cfg.get('poe_camera', {}).get('ip', '192.168.7.6'))
+            cfg = load_config()
 
-            frame = poe_vision_service.fetch_frame(poe_ip, timeout=4)
+            # USB camera (CameraService.last_frame) is the source. PoE M5Stack
+            # is gone; the loop still runs YOLO + writes DB124 bits — only the
+            # frame origin changed. Falls back gracefully if the USB camera
+            # hasn't initialised or is mid-reconnect.
+            frame = None
+            if camera_service is not None and getattr(camera_service, 'last_frame', None) is not None:
+                frame = camera_service.last_frame.copy()
             if frame is None:
-                # Camera unreachable — back off a bit so we don't spin.
                 time.sleep(0.5)
                 continue
 
@@ -6913,10 +6920,12 @@ if __name__ == '__main__':
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
 
-    # PoE YOLO detection loop DISABLED — production vision is back on the
-    # USB camera + colour-voting pipeline. The /api/poe-vision/* endpoints
-    # (and vision-poe.html) will return stale/no data; that's intentional.
-    # start_poe_detection_loop()
+    # YOLO detection loop now runs over USB-camera frames (see _poe_pump_loop
+    # — pump grabs from camera_service.last_frame instead of the M5Stack).
+    # /api/poe-vision/* + vision.html continue to work; the per-class
+    # confidence sliders, annotated overlay, and DB124 cube bits all drive
+    # off this USB-fed inference.
+    start_poe_detection_loop()
 
     # Auto-connect to PLC on startup (with retry logic)
     if plc_client:
