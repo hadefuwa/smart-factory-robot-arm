@@ -5173,16 +5173,16 @@ def _poe_pump_loop():
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
             frame_unmasked = frame.copy()
 
-            mask_cfg = cfg.get('poe_camera', {}).get('mask')
-            frame_masked = poe_vision_service.apply_mask(frame_unmasked, mask_cfg)
-
             # Hand the unmasked frame to the inference thread.
             with _poe_frame_lock:
                 _poe_latest_unmasked = frame_unmasked
                 cached_detections = list(_poe_latest_detections)
 
-            # Raw cache (masked) for Capture Training Image.
-            ok_raw, raw_buf = cv2.imencode('.jpg', frame_masked, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            # Raw cache (UNMASKED) for Capture Training Image — training data
+            # should be the full scene the camera sees, not what YOLO sees
+            # after the masking step. The mask still gets applied inside the
+            # inference loop, so production detection is unchanged.
+            ok_raw, raw_buf = cv2.imencode('.jpg', frame_unmasked, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_raw:
                 with _poe_loop_lock:
                     _poe_loop_raw_jpeg = bytes(raw_buf)
