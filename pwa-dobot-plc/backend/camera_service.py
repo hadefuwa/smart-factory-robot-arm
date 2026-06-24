@@ -13,6 +13,7 @@ from typing import Optional, Dict, List, Tuple
 import io
 import os
 import base64
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,12 @@ class CameraService:
         self.yolo_disabled_until = 0  # Timestamp when YOLO can be re-enabled after crashes
         self.max_crashes = 2  # Disable YOLO after 2 consecutive crashes (more aggressive)
         self.disable_duration = 60  # Disable for 60 seconds after crashes (longer cooldown)
+        # V4L2 focus controls. autofocus True = let the lens hunt. False =
+        # lock focus to focus_value (0..250 on IMX179 UVC). Applied via
+        # v4l2-ctl after every successful camera open — OpenCV's
+        # CAP_PROP_AUTOFOCUS / CAP_PROP_FOCUS round-trip is flaky on V4L2.
+        self.focus_autofocus = True
+        self.focus_value = 0
         # Crop/zoom settings (applied to camera frames)
         self.crop_enabled = False
         self.crop_x = 0  # Top-left X (as percentage 0-100)
@@ -143,7 +150,60 @@ class CameraService:
                 cam.release()
         return cv2.VideoCapture(source)
 
-    def _stabilize_camera_mode(self) -> bool:
+    def _device_path_for(self, source) -> Optional[str]:
+        """Resolve a V4L2 device path from whatever was passed to VideoCapture."""
+        if isinstance(source, int):
+            return f'/dev/video{source}'
+        if isinstance(source, str):
+            if source.startswith('/dev/'):
+                return source
+            if source.strip().isdigit():
+                return f'/dev/video{int(source.strip())}'
+        return None
+
+    def apply_v4l2_focus(self, source=None) -> Tuple[bool, Optional[str]]:
+        """Push self.focus_autofocus / self.focus_value to the camera via
+        v4l2-ctl. Tries the modern control name first and falls back to the
+        legacy one (kernel < 5.10). Returns (ok, error_string)."""
+        if os.name == 'nt':
+            return False, 'v4l2 not available on Windows'
+        device = self._device_path_for(source if source is not None else self.active_camera_source)
+        if not device:
+            return False, 'no device path'
+        autofocus_val = 1 if self.focus_autofocus else 0
+        last_err: Optional[str] = None
+        af_ok = False
+        for name in ('focus_automatic_continuous', 'focus_auto'):
+            try:
+                r = subprocess.run(
+                    ['v4l2-ctl', '-d', device, '-c', f'{name}={autofocus_val}'],
+                    capture_output=True, text=True, timeout=3,
+                )
+                if r.returncode == 0:
+                    af_ok = True
+                    break
+                last_err = (r.stderr or r.stdout or '').strip()
+            except FileNotFoundError:
+                return False, 'v4l2-ctl not installed'
+            except Exception as e:
+                last_err = str(e)
+        if not self.focus_autofocus:
+            try:
+                r = subprocess.run(
+                    ['v4l2-ctl', '-d', device, '-c', f'focus_absolute={int(self.focus_value)}'],
+                    capture_output=True, text=True, timeout=3,
+                )
+                if r.returncode != 0:
+                    return af_ok, (r.stderr or r.stdout or '').strip() or last_err
+            except Exception as e:
+                return af_ok, str(e)
+        logger.info(
+            "Applied v4l2 focus on %s: autofocus=%s value=%s",
+            device, self.focus_autofocus, self.focus_value,
+        )
+        return af_ok, last_err if not af_ok else None
+
+    def _stabilize_camera_mode(self, source=None) -> bool:
         """Negotiate a stable mode and verify the camera can return frames."""
         mode_candidates = []
         requested = (int(self.width), int(self.height))
@@ -179,6 +239,12 @@ class CameraService:
                         "Camera mode stabilized at %sx%s (requested %sx%s)",
                         actual_w, actual_h, mode_w, mode_h
                     )
+                    try:
+                        ok, err = self.apply_v4l2_focus(source=source)
+                        if not ok and err:
+                            logger.warning("v4l2 focus apply on open returned: %s", err)
+                    except Exception as fe:
+                        logger.warning("v4l2 focus apply on open failed: %s", fe)
                     return True
 
                 logger.warning("Camera mode %sx%s did not return frames during warm-up", mode_w, mode_h)
@@ -207,7 +273,7 @@ class CameraService:
                         self.camera = None
                         continue
 
-                    if self._stabilize_camera_mode():
+                    if self._stabilize_camera_mode(source=source):
                         self.active_camera_source = source
                         self.read_fail_count = 0
                         logger.info(

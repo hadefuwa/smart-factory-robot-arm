@@ -2068,6 +2068,13 @@ def init_clients():
             width=crop_config.get('width', 100),
             height=crop_config.get('height', 100)
         )
+    # Load focus settings if available (applied via v4l2-ctl after every open).
+    focus_config = camera_config.get('focus') or {}
+    camera_service.focus_autofocus = bool(focus_config.get('autofocus', True))
+    try:
+        camera_service.focus_value = int(focus_config.get('value', 0))
+    except (TypeError, ValueError):
+        camera_service.focus_value = 0
     # Load detection ROI settings if available
     detection_roi_config = camera_config.get('detection_roi', {})
     if detection_roi_config:
@@ -4354,6 +4361,60 @@ def set_camera_crop():
         return jsonify({'success': True, 'crop': camera_service.get_crop()})
     except Exception as e:
         logger.error(f"Error setting crop: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/camera/focus', methods=['GET'])
+def get_camera_focus():
+    """Get current USB-camera focus settings (autofocus on/off + manual value)."""
+    cfg = load_config()
+    focus_cfg = (cfg.get('camera') or {}).get('focus') or {}
+    autofocus = bool(focus_cfg.get('autofocus', True))
+    try:
+        value = int(focus_cfg.get('value', 0))
+    except (TypeError, ValueError):
+        value = 0
+    return jsonify({
+        'autofocus': autofocus,
+        'value': value,
+        'min': 0,
+        'max': 250,
+        'step': 5,
+    })
+
+
+@app.route('/api/camera/focus', methods=['POST'])
+def set_camera_focus():
+    """Set USB-camera autofocus + manual focus_absolute via v4l2-ctl, and
+    persist to config so the value survives restarts / camera reopens."""
+    if camera_service is None:
+        return jsonify({'error': 'Camera service not initialized'}), 503
+    try:
+        data = request.json or {}
+        autofocus = bool(data.get('autofocus', False))
+        try:
+            value = int(data.get('value', 0))
+        except (TypeError, ValueError):
+            value = 0
+        value = max(0, min(250, value))
+
+        camera_service.focus_autofocus = autofocus
+        camera_service.focus_value = value
+        ok, err = camera_service.apply_v4l2_focus()
+
+        cfg = load_config()
+        cfg.setdefault('camera', {})
+        cfg['camera']['focus'] = {'autofocus': autofocus, 'value': value}
+        save_config(cfg)
+
+        return jsonify({
+            'success': bool(ok),
+            'autofocus': autofocus,
+            'value': value,
+            'error': err,
+        })
+    except Exception as e:
+        logger.error(f"Error setting camera focus: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -670,6 +670,29 @@
               </div>
             </div>
 
+            <!-- USB camera focus. The IMX179 module hunts for focus as the
+                 cube moves through frame, which softens the edges YOLO needs.
+                 Disable autofocus and lock manual focus to a fixed value (the
+                 tray sits at a fixed distance from the lens). -->
+            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera focus</span>
+                <span id="cameraFocusSaveStatus" class="text-xs text-base-content/50"></span>
+              </div>
+              <div class="flex items-center gap-3 flex-wrap">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" id="cameraAutofocusToggle" class="toggle toggle-sm toggle-info">
+                  <span class="text-xs">Autofocus</span>
+                </label>
+                <label for="cameraFocusValue" class="text-xs w-20 text-base-content/70">Manual focus</label>
+                <input type="range" id="cameraFocusValue" min="0" max="250" value="0" step="5" class="range range-xs range-info w-48" disabled>
+                <span id="cameraFocusValueLabel" class="text-xs font-mono w-10 text-right">0</span>
+              </div>
+              <div class="text-[0.65rem] text-base-content/50">
+                Range 0&ndash;250 (near&nbsp;&rarr;&nbsp;far). Sweep until the cube edges look crisp in the annotated view, then leave it.
+              </div>
+            </div>
+
             <!-- Two-column: annotated image + results -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- Annotated image -->
@@ -863,6 +886,88 @@
       } catch (e) {
         if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
         addDebugLog('class_conf save failed', e.message, 'error');
+      }
+    }
+
+    // ---- USB camera focus (autofocus toggle + manual focus_absolute) ----
+    // The IMX179 module's autofocus drifts as cubes move. We expose a toggle
+    // + slider that POSTs to /api/camera/focus; the backend runs v4l2-ctl on
+    // /dev/video0 and persists the values into config.json so they re-apply
+    // on every camera reopen.
+    async function loadCameraFocus() {
+      try {
+        const r = await fetch(`${API_BASE}/api/camera/focus?t=${Date.now()}`, {
+          signal: AbortSignal.timeout(6000), cache: 'no-store',
+        });
+        if (!r.ok) return;
+        const f = await r.json();
+        const toggle = document.getElementById('cameraAutofocusToggle');
+        const slider = document.getElementById('cameraFocusValue');
+        const label  = document.getElementById('cameraFocusValueLabel');
+        if (toggle) toggle.checked = Boolean(f.autofocus);
+        if (slider) {
+          slider.value = String(f.value ?? 0);
+          slider.disabled = Boolean(f.autofocus);
+        }
+        if (label) label.textContent = String(f.value ?? 0);
+      } catch (e) {
+        addDebugLog('camera focus load failed', e.message, 'warn');
+      }
+    }
+
+    let _cameraFocusSaveTimer = null;
+    function queueSaveCameraFocus() {
+      const status = document.getElementById('cameraFocusSaveStatus');
+      if (status) { status.textContent = 'Saving...'; status.style.color = ''; }
+      if (_cameraFocusSaveTimer) clearTimeout(_cameraFocusSaveTimer);
+      _cameraFocusSaveTimer = setTimeout(saveCameraFocus, 350);
+    }
+
+    async function saveCameraFocus() {
+      const status = document.getElementById('cameraFocusSaveStatus');
+      const toggle = document.getElementById('cameraAutofocusToggle');
+      const slider = document.getElementById('cameraFocusValue');
+      const autofocus = Boolean(toggle && toggle.checked);
+      const value = Number(slider ? slider.value : 0);
+      try {
+        const res = await fetch(`${API_BASE}/api/camera/focus`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autofocus, value }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const out = await res.json();
+        if (status) {
+          if (out && out.success) {
+            status.textContent = autofocus ? 'Autofocus on' : `Locked @ ${value}`;
+            status.style.color = 'var(--sf-success-ui, #4caf50)';
+          } else {
+            status.textContent = 'Applied (warn: ' + (out.error || 'unknown') + ')';
+            status.style.color = 'var(--sf-warning-ui, #ffb300)';
+          }
+        }
+        addDebugLog('camera focus saved', { autofocus, value, error: out && out.error });
+      } catch (e) {
+        if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
+        addDebugLog('camera focus save failed', e.message, 'error');
+      }
+    }
+
+    function _wireCameraFocusControls() {
+      const toggle = document.getElementById('cameraAutofocusToggle');
+      const slider = document.getElementById('cameraFocusValue');
+      const label  = document.getElementById('cameraFocusValueLabel');
+      if (toggle) {
+        toggle.addEventListener('change', () => {
+          if (slider) slider.disabled = toggle.checked;
+          queueSaveCameraFocus();
+        });
+      }
+      if (slider && label) {
+        slider.addEventListener('input', () => {
+          label.textContent = slider.value;
+          queueSaveCameraFocus();
+        });
       }
     }
 
@@ -1407,6 +1512,8 @@
 
       loadClassConfFromConfig();
       _wireClassConfSliders();
+      loadCameraFocus();
+      _wireCameraFocusControls();
       checkPoeModelStatus();
       startLiveStatusPolling();
 
