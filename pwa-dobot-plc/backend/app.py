@@ -5292,12 +5292,15 @@ def _poe_detection_loop():
             else:
                 queue_cube_detection_bits(yellow=False, purple=False, metal=False)
 
-            # Defect = light sensor sees something but YOLO doesn't recognise
-            # a known cube class (or hasn't confirmed one through debounce).
-            # Cleared as soon as either the sensor goes low or YOLO confirms
-            # a class — so an unrecognised object on the conveyor latches
-            # DB124.DBX0.4 high until it leaves the sensor's view.
-            defect_detected = bool(sensor_present and _poe_confirmed_dominant is None)
+            # Defect = light sensor sees something but YOLO doesn't see any
+            # known cube class this cycle. Uses the immediate per-cycle
+            # `dominant` (above per-class threshold) instead of the
+            # debounced `_poe_confirmed_dominant`, so defect drops the
+            # moment a cube enters the frame — without that, the 2-cycle
+            # debounce on the cube bits made defect lag ~2 s behind reality.
+            # The debounce still gates the colour bits to the PLC; defect
+            # is informational and benefits from being snappier.
+            defect_detected = bool(sensor_present and dominant is None)
             queue_defect_detected(defect_detected)
 
             # Surface the debounce state in the JSON so the HMI can show
