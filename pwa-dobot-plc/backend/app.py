@@ -28,7 +28,7 @@ from datetime import datetime
 import struct
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, get_plc_io_snapshot
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -5292,6 +5292,14 @@ def _poe_detection_loop():
             else:
                 queue_cube_detection_bits(yellow=False, purple=False, metal=False)
 
+            # Defect = light sensor sees something but YOLO doesn't recognise
+            # a known cube class (or hasn't confirmed one through debounce).
+            # Cleared as soon as either the sensor goes low or YOLO confirms
+            # a class — so an unrecognised object on the conveyor latches
+            # DB124.DBX0.4 high until it leaves the sensor's view.
+            defect_detected = bool(sensor_present and _poe_confirmed_dominant is None)
+            queue_defect_detected(defect_detected)
+
             # Surface the debounce state in the JSON so the HMI can show
             # "pending confirmation" hints instead of looking frozen.
             result['confirmed_dominant'] = _poe_confirmed_dominant
@@ -5299,6 +5307,7 @@ def _poe_detection_loop():
             result['debounce_cycles'] = POE_DEBOUNCE_CYCLES
             result['sensor_present'] = sensor_present
             result['plc_bits_gated'] = not sensor_present
+            result['defect_detected'] = defect_detected
             with _poe_loop_lock:
                 _poe_loop_result = result
 

@@ -364,6 +364,39 @@ def queue_cube_detection_bits(yellow: bool, purple: bool, metal: bool):
     logger.debug(f"queued cube detection bits: yellow={triple[0]} purple={triple[1]} metal={triple[2]}")
 
 
+_last_defect_detected = None
+
+def queue_defect_detected(detected: bool):
+    """Write DB124 'defect_detected' bit (byte 0, bit 4).
+
+    Uses queue_bit_write so the atomic RMW on the worker thread preserves
+    the surrounding bits — `start` (0.0) and `reject_command_from_plc`
+    (0.5) are PLC-owned and would be clobbered by a full-byte write.
+
+    Idempotent: skips the enqueue when the value matches the previous
+    call, so a stable defect state doesn't fill the write queue.
+    """
+    global _last_defect_detected
+    value = bool(detected)
+    if value == _last_defect_detected:
+        return
+    if plc_worker is None:
+        logger.warning("PLC worker not initialized — defect bit dropped")
+        return
+    tag = plc_worker.camera_db_tags.get('defect_detected')
+    if not tag:
+        logger.warning("camera_db_tags missing defect_detected — bit dropped")
+        return
+    plc_worker.queue_bit_write(
+        plc_worker.camera_db_number,
+        tag['byte'], tag['bit'],
+        value,
+        f"defect_detected={value}",
+    )
+    _last_defect_detected = value
+    logger.debug(f"queued defect_detected={value}")
+
+
 def queue_cube_color_bits(yellow: bool = False, white: bool = False, steel: bool = False, aluminum: bool = False):
     """
     Queue cube color detection bits write.
