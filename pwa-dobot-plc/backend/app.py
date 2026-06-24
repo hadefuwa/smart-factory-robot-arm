@@ -5096,13 +5096,11 @@ def _poe_pump_loop():
 
             cfg = load_config()
 
-            # USB camera (CameraService.last_frame) is the source. PoE M5Stack
-            # is gone; the loop still runs YOLO + writes DB124 bits — only the
-            # frame origin changed. Falls back gracefully if the USB camera
-            # hasn't initialised or is mid-reconnect.
-            frame = None
-            if camera_service is not None and getattr(camera_service, 'last_frame', None) is not None:
-                frame = camera_service.last_frame.copy()
+            # USB camera is the source. Call read_frame() so OpenCV actually
+            # pulls a fresh frame off the device — last_frame on its own is
+            # only refreshed when somebody reads from CameraService, and
+            # nobody else does in this PoE-page-only setup.
+            frame = camera_service.read_frame() if camera_service is not None else None
             if frame is None:
                 time.sleep(0.5)
                 continue
