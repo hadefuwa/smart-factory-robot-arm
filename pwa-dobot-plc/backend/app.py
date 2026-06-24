@@ -5292,16 +5292,13 @@ def _poe_detection_loop():
             else:
                 queue_cube_detection_bits(yellow=False, purple=False, metal=False)
 
-            # Defect = light sensor sees something but YOLO doesn't see any
-            # known cube class this cycle. Uses the immediate per-cycle
-            # `dominant` (above per-class threshold) instead of the
-            # debounced `_poe_confirmed_dominant`, so defect drops the
-            # moment a cube enters the frame — without that, the 2-cycle
-            # debounce on the cube bits made defect lag ~2 s behind reality.
-            # The debounce still gates the colour bits to the PLC; defect
-            # is informational and benefits from being snappier.
+            # Defect is now driven by a separate _defect_watcher_loop at
+            # ~300 ms cadence instead of the 1 s YOLO cycle — this loop
+            # still computes the value so /api/poe-vision/latest-result
+            # reports a consistent snapshot, but it does NOT queue the
+            # write here. The watcher reads `dominant` out of the JSON
+            # cache below and handles the PLC write.
             defect_detected = bool(sensor_present and dominant is None)
-            queue_defect_detected(defect_detected)
 
             # Surface the debounce state in the JSON so the HMI can show
             # "pending confirmation" hints instead of looking frozen.
@@ -5321,22 +5318,59 @@ def _poe_detection_loop():
         time.sleep(max(0.05, POE_LOOP_INTERVAL_S - elapsed))
 
 
-def start_poe_detection_loop():
-    """Spawn the PoE frame-pump and inference daemon threads (idempotent).
+DEFECT_WATCHER_INTERVAL_S = 0.3
 
-    Two threads:
-      * pump  — fetches /capture as fast as possible, refreshes the raw +
-                annotated JPEG caches at camera HTTP cadence (~3-5 Hz).
-      * infer — runs YOLO on the latest pumped frame every
-                POE_LOOP_INTERVAL_S and publishes detections back to the pump.
+_defect_watcher_thread = None
+
+def _defect_watcher_loop():
+    """Fast poller for DB124.defect_detected.
+
+    Runs at ~300 ms (vs 1 s for the YOLO inference loop) so the bit
+    drops promptly when either the sensor goes low or YOLO recognises a
+    cube, without speeding up the costly YOLO pass. Reads:
+      * I0.5 from the PLC IO snapshot (cached, <1 ms read)
+      * latest `dominant` class from _poe_loop_result (cached JSON)
+
+    queue_defect_detected is idempotent so polling cheaply this often
+    doesn't flood the PLC write queue — only state changes are enqueued.
     """
-    global _poe_loop_thread, _poe_pump_thread
+    logger.info(
+        "Defect watcher starting (interval=%.2fs)", DEFECT_WATCHER_INTERVAL_S
+    )
+    while True:
+        try:
+            io_snap = get_plc_io_snapshot() or {}
+            sensor_present = bool(io_snap.get('inputs', {}).get('I0.5', False))
+            with _poe_loop_lock:
+                dominant = (_poe_loop_result or {}).get('dominant')
+            queue_defect_detected(bool(sensor_present and dominant is None))
+        except Exception as e:
+            logger.warning(f"defect watcher iteration failed: {e}")
+        time.sleep(DEFECT_WATCHER_INTERVAL_S)
+
+
+def start_poe_detection_loop():
+    """Spawn the PoE frame-pump, YOLO inference, and defect-watcher
+    daemon threads (idempotent).
+
+    Three threads:
+      * pump   — fetches /capture as fast as possible, refreshes the raw +
+                 annotated JPEG caches at camera HTTP cadence (~3-5 Hz).
+      * infer  — runs YOLO on the latest pumped frame every
+                 POE_LOOP_INTERVAL_S and publishes detections back to the pump.
+      * defect — polls sensor + cached YOLO result every
+                 DEFECT_WATCHER_INTERVAL_S and writes DB124.defect_detected.
+    """
+    global _poe_loop_thread, _poe_pump_thread, _defect_watcher_thread
     if _poe_pump_thread is None or not _poe_pump_thread.is_alive():
         _poe_pump_thread = threading.Thread(target=_poe_pump_loop, daemon=True, name='poe-pump-loop')
         _poe_pump_thread.start()
     if _poe_loop_thread is None or not _poe_loop_thread.is_alive():
         _poe_loop_thread = threading.Thread(target=_poe_detection_loop, daemon=True, name='poe-detect-loop')
         _poe_loop_thread.start()
+    if _defect_watcher_thread is None or not _defect_watcher_thread.is_alive():
+        _defect_watcher_thread = threading.Thread(target=_defect_watcher_loop, daemon=True, name='defect-watcher')
+        _defect_watcher_thread.start()
 
 
 @app.route('/api/vision/latest-cycle', methods=['GET'])
