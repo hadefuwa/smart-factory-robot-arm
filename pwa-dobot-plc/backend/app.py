@@ -2059,15 +2059,19 @@ def init_clients():
         height=camera_config.get('height', 480)
     )
     # Load crop settings if available
-    crop_config = camera_config.get('crop', {})
-    if crop_config:
-        camera_service.set_crop(
-            enabled=crop_config.get('enabled', False),
-            x=crop_config.get('x', 0),
-            y=crop_config.get('y', 0),
-            width=crop_config.get('width', 100),
-            height=crop_config.get('height', 100)
-        )
+    # Camera-side crop temporarily disabled — re-enable by uncommenting this
+    # block. config.camera.crop is still respected by everything else, this
+    # just stops it being applied to read_frame() output (and therefore to
+    # the YOLO pipeline and the Capture Training Image button).
+    # crop_config = camera_config.get('crop', {})
+    # if crop_config:
+    #     camera_service.set_crop(
+    #         enabled=crop_config.get('enabled', False),
+    #         x=crop_config.get('x', 0),
+    #         y=crop_config.get('y', 0),
+    #         width=crop_config.get('width', 100),
+    #         height=crop_config.get('height', 100)
+    #     )
     # Load focus settings if available (applied via v4l2-ctl after every open).
     focus_config = camera_config.get('focus') or {}
     camera_service.focus_autofocus = bool(focus_config.get('autofocus', False))
