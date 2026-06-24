@@ -618,21 +618,6 @@
             </div>
           </section>
 
-          <section class="sf-row sf-stage sf-stage-3">
-            <article class="sf-panel">
-              <header class="sf-panel-head">
-                <h3>Camera Feed</h3>
-                <p>Live MJPEG stream from the USB camera.</p>
-              </header>
-              <div class="sf-vision-media-shell">
-                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="display:none">
-                <div id="cameraPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">CAM</div>
-                  <div class="sf-vision-placeholder-title">Connecting to USB camera...</div>
-                </div>
-              </div>
-            </article>
-          </section>
 
           <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2">
             <header class="sf-panel-head">
@@ -781,9 +766,6 @@
 
   <script>
     const API_BASE = window.location.origin;
-    let streamInterval = null;
-    let streamReconnectTimer = null;
-    let lastFrameTime = 0;  // epoch ms of last received MJPEG frame
     let statusInterval = null;
     const debugLogEntries = [];
 
@@ -817,10 +799,6 @@
       if (logEl) logEl.textContent = '(cleared)';
       const summaryEl = document.getElementById('debugSummary');
       if (summaryEl) summaryEl.textContent = 'No debug events yet.';
-    }
-
-    function getCameraStreamUrl() {
-      return `${API_BASE}/api/camera/stream?_=${Date.now()}`;
     }
 
     async function loadClassConfFromConfig() {
@@ -1425,87 +1403,6 @@
       }, 4000);
     }
 
-    function scheduleStreamReconnect(delayMs = 1500) {
-      if (streamReconnectTimer) return;
-      streamReconnectTimer = setTimeout(() => {
-        streamReconnectTimer = null;
-        updateCameraFrame(true);
-      }, delayMs);
-    }
-
-    function updateCameraFrame(forceReconnect = false) {
-      const frame = document.getElementById('cameraFrame');
-      const placeholder = document.getElementById('cameraPlaceholder');
-      if (!frame) return;
-
-      const streamUrl = getCameraStreamUrl();
-
-      if (!forceReconnect && frame.src && frame.src.includes('/api/camera/stream')) {
-        return;
-      }
-
-      frame.onload = () => {
-        lastFrameTime = Date.now();
-        if (frame.naturalWidth > 0 && frame.naturalHeight > 0) {
-          frame.width = frame.naturalWidth;
-          frame.height = frame.naturalHeight;
-        }
-        frame.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-      };
-
-      frame.onerror = () => {
-        addDebugLog('camera stream error', 'USB camera MJPEG disconnected, reconnecting...', 'warn');
-        frame.style.display = 'none';
-        if (placeholder) {
-          placeholder.style.display = 'flex';
-          placeholder.innerHTML = `
-            <div class="sf-vision-camera-error">
-              <i class="material-icons sf-vision-inline-icon is-large">videocam_off</i>
-              <p class="sf-vision-placeholder-title">USB Camera Stream Unavailable</p>
-              <p class="sf-vision-placeholder-copy">Retrying automatically...</p>
-            </div>
-          `;
-        }
-        scheduleStreamReconnect(1500);
-      };
-
-      frame.src = streamUrl;
-      addDebugLog('camera stream connected', '/api/camera/stream');
-    }
-
-    function startStream() {
-      if (streamInterval) return;
-      updateCameraFrame(true);
-      streamInterval = setInterval(() => {
-        const frame = document.getElementById('cameraFrame');
-        if (!frame || !frame.src || !frame.src.includes('/api/camera/stream')) {
-          updateCameraFrame(true);
-          return;
-        }
-        if (lastFrameTime > 0 && (Date.now() - lastFrameTime) > 8000) {
-          addDebugLog('camera stream stall', 'No frames for 8s — reconnecting...', 'warn');
-          lastFrameTime = 0;
-          updateCameraFrame(true);
-        }
-      }, 4000);
-    }
-
-    function stopStream() {
-      if (streamInterval) {
-        clearInterval(streamInterval);
-        streamInterval = null;
-      }
-      if (streamReconnectTimer) {
-        clearTimeout(streamReconnectTimer);
-        streamReconnectTimer = null;
-      }
-      const frame = document.getElementById('cameraFrame');
-      if (frame) {
-        frame.src = '';
-      }
-    }
-
     window.addEventListener('load', () => {
       addDebugLog('page loaded', { apiBase: API_BASE });
 
@@ -1514,9 +1411,8 @@
       checkPoeModelStatus();
       startLiveStatusPolling();
 
-      // USB camera supports concurrent stream + capture — start the live MJPEG
-      // straight away, then kick the YOLO auto-detect loop a beat later.
-      startStream();
+      // Raw live MJPEG panel removed — the AI Cube Detection section below
+      // shows the same camera, annotated, every ~2s. Kick the YOLO auto-poll.
       setTimeout(() => {
         if (!_poeLoopTimer) startPoeLoop();
       }, 400);
