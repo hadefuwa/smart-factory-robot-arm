@@ -5170,6 +5170,12 @@ def _poe_pump_loop():
                 time.sleep(0.5)
                 continue
 
+            # Rotate 90° to the left (counter-clockwise) so the page +
+            # training captures match the camera's physical mounting.
+            # 640x480 input → 480x640 output. Applied here so YOLO, the
+            # annotated view and the Capture button all see the same frame.
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
             frame_unmasked = frame.copy()
 
