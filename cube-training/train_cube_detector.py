@@ -59,9 +59,14 @@ results = model.train(
     mosaic=0.5,         # Mosaic augmentation
 )
 
-# Copy best.pt to a clearly named file for easy deployment
-best_src  = os.path.join(OUTPUT_DIR, "best.pt")
-best_dest = os.path.join(OUTPUT_DIR, "cube_detector.pt")
+# Copy best.pt to a clearly named file for easy deployment.
+# Ultralytics auto-versions the run dir when RUN_NAME already exists
+# (cube_train -> cube_train2 -> ...), so the hard-coded OUTPUT_DIR
+# above can point at the wrong run. Use results.save_dir, which is
+# always the actual directory this training wrote to.
+actual_dir = os.path.join(str(results.save_dir), "weights") if results and getattr(results, "save_dir", None) else OUTPUT_DIR
+best_src  = os.path.join(actual_dir, "best.pt")
+best_dest = os.path.join(actual_dir, "cube_detector.pt")
 if os.path.exists(best_src):
     shutil.copy2(best_src, best_dest)
     print(f"\n  Copied best.pt -> {best_dest}")
