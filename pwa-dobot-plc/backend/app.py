@@ -5151,11 +5151,12 @@ def _poe_pump_loop():
                 time.sleep(0.5)
                 continue
 
-            # NOTE: rotation happens later, on the ANNOTATED frame only.
-            # YOLO inference + the Capture Training Image cache both stay
-            # in the camera's native landscape orientation — that's the
-            # frame shape the model was trained on (any rotation here
-            # would feed YOLO an orientation it has never seen).
+            # Rotate 90° CCW at the source. The cube_detector.pt currently
+            # deployed was trained on 480x640 portrait captures (see
+            # cube-training/cube_images/), so YOLO must see the same
+            # orientation. Training-image cache and the annotated view
+            # downstream both inherit this rotated frame.
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
             frame_unmasked = frame.copy()
@@ -5174,13 +5175,8 @@ def _poe_pump_loop():
                 with _poe_loop_lock:
                     _poe_loop_raw_jpeg = bytes(raw_buf)
 
-            # Annotated cache (unmasked + most-recent detection boxes) for HMI
-            # stream. Detections were computed on the landscape frame, so we
-            # draw them first and THEN rotate the resulting image 90° CCW for
-            # display. Bboxes rotate along with the pixels — no separate
-            # coordinate transform needed.
+            # Annotated cache (unmasked + most-recent detection boxes) for HMI stream.
             annotated = poe_vision_service.draw_detections(frame_unmasked, cached_detections)
-            annotated = cv2.rotate(annotated, cv2.ROTATE_90_COUNTERCLOCKWISE)
             ok_anno, anno_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_anno:
                 with _poe_loop_lock:
