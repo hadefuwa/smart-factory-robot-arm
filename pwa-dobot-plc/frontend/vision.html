@@ -618,49 +618,27 @@
             </div>
           </section>
 
-          <!--
-          DISABLED: Live MJPEG camera feed retired in favour of the AI Cube
-          Detection auto-loop below. The M5Stack ESP32 HTTP server is
-          single-client, so the stream proxy and the YOLO /capture loop can't
-          both run at the same time. Keeping the auto-detect loop running means
-          we get one purpose-built annotated frame every ~2s instead of a raw
-          preview, which is what the production HMI actually wants. The IP /
-          connect controls and the Capture Training Image button live inside the
-          AI section now.
           <section class="sf-row sf-stage sf-stage-3">
             <article class="sf-panel">
               <header class="sf-panel-head">
                 <h3>Camera Feed</h3>
-                <p>Live MJPEG stream from the M5Stack PoE CAM-W.</p>
+                <p>Live MJPEG stream from the USB camera.</p>
               </header>
-              ...
+              <div class="sf-vision-media-shell">
+                <img id="cameraFrame" class="sf-vision-frame" src="" alt="Camera Feed" style="display:none">
+                <div id="cameraPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">CAM</div>
+                  <div class="sf-vision-placeholder-title">Connecting to USB camera...</div>
+                </div>
+              </div>
             </article>
           </section>
-          -->
 
           <section id="poe-ai-section" class="sf-panel sf-stage sf-stage-2">
             <header class="sf-panel-head">
-              <h3>PoE CAM — AI Cube Detection</h3>
-              <p>YOLO cube detection running every 2 s on frames pulled from the M5Stack PoE CAM-W.</p>
+              <h3>AI Cube Detection</h3>
+              <p>YOLO cube detection running every 2 s on USB camera frames.</p>
             </header>
-
-            <!-- Camera connection row -->
-            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <div class="flex items-center gap-2 flex-wrap">
-                <label class="text-xs font-semibold text-info whitespace-nowrap">Camera IP:</label>
-                <input type="text" id="poeCameraIp" class="input input-bordered input-xs w-36" placeholder="192.168.x.x">
-                <button class="btn btn-xs btn-info" onclick="applyPoeCameraIp()">
-                  <i class="material-icons" style="font-size:0.875rem;line-height:1">wifi</i> Connect
-                </button>
-                <button class="btn btn-xs btn-ghost" onclick="checkPoeCameraStatus()" title="Test connection">
-                  <i class="material-icons" style="font-size:0.875rem;line-height:1">refresh</i>
-                </button>
-              </div>
-              <span id="poeCamStatusBadge" class="sf-title-conn-badge offline">
-                <span class="sf-title-conn-dot"></span>
-                <span id="poeCamStatusText">Disconnected</span>
-              </span>
-            </div>
 
             <!-- Controls row -->
             <div class="flex items-center gap-3 flex-wrap mb-4">
@@ -845,33 +823,7 @@
       return `${API_BASE}/api/camera/stream?_=${Date.now()}`;
     }
 
-    function _setPoeCamBadge(connected) {
-      const badge = document.getElementById('poeCamStatusBadge');
-      const dot = badge && badge.querySelector('.sf-title-conn-dot');
-      const text = document.getElementById('poeCamStatusText');
-      if (!badge) return;
-      badge.classList.toggle('online', connected);
-      badge.classList.toggle('offline', !connected);
-      if (dot) dot.classList.toggle('pulse', connected);
-      if (text) text.textContent = connected ? 'Connected' : 'Unreachable';
-    }
-
-    async function loadPoeCameraConfig() {
-      try {
-        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
-          signal: AbortSignal.timeout(6000), cache: 'no-store'
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.ip) {
-            const inp = document.getElementById('poeCameraIp');
-            if (inp) inp.value = data.ip;
-          }
-          _setPoeCamBadge(data.connected);
-        }
-      } catch (e) {
-        addDebugLog('PoE camera config load failed', e.message, 'warn');
-      }
+    async function loadClassConfFromConfig() {
       // Per-class confidence — pull from the full config so the sliders start
       // at the values the backend is actually using.
       try {
@@ -953,34 +905,15 @@
       }
     }
 
-    async function applyPoeCameraIp() {
-      const inp = document.getElementById('poeCameraIp');
-      const ip = (inp ? inp.value : '').trim();
-      if (!ip) { alert('Please enter the camera IP address.'); return; }
-      addDebugLog('PoE camera IP applying', ip);
-      try {
-        await fetch(`${API_BASE}/api/config`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ poe_camera: { ip } })
-        });
-        await checkPoeCameraStatus();
-        stopStream();
-        setTimeout(() => updateCameraFrame(true), 100);
-      } catch (e) {
-        addDebugLog('PoE camera apply error', e.message, 'error');
-      }
-    }
-
     async function captureTrainingImage() {
       const btn = document.getElementById('captureBtn');
       const status = document.getElementById('captureStatus');
       if (btn) btn.disabled = true;
       if (status) { status.textContent = 'Pausing detection loop...'; status.className = 'text-xs text-info'; }
 
-      // M5Stack ESP32 HTTP server is single-client. The auto-detect loop is the
-      // other consumer of /capture now (live MJPEG is retired), so we have to
-      // pause it for the duration of this capture.
+      // Pause the frontend YOLO poll while we grab a training shot so the
+      // /api/poe-camera/capture cache isn't being overwritten between the
+      // pump finishing and the blob coming back.
       const _loopWasRunning = Boolean(_poeLoopTimer);
       if (_loopWasRunning) {
         clearInterval(_poeLoopTimer);
@@ -1003,9 +936,9 @@
       }
 
       try {
-        // Give any in-flight backend /detect call a moment to finish releasing
-        // the upstream socket on the M5Stack before we hit /capture.
-        await waitMs(600);
+        // Tiny settle delay so the pump's cached JPEG matches what was on
+        // screen the moment the user clicked.
+        await waitMs(200);
         if (status) { status.textContent = 'Capturing...'; status.className = 'text-xs text-info'; }
 
         let blob;
@@ -1046,23 +979,6 @@
       }
     }
 
-    async function checkPoeCameraStatus() {
-      try {
-        const res = await fetch(`${API_BASE}/api/poe-camera/status?_=${Date.now()}`, {
-          signal: AbortSignal.timeout(8000), cache: 'no-store'
-        });
-        if (res.ok) {
-          const data = await res.json();
-          _setPoeCamBadge(data.connected);
-          addDebugLog('PoE camera status', data);
-          return data.connected;
-        }
-      } catch (e) {
-        _setPoeCamBadge(false);
-        addDebugLog('PoE camera status check failed', e.message, 'warn');
-      }
-      return false;
-    }
 
     // PoE YOLO cube detection
     let _poeLoopTimer = null;
@@ -1180,8 +1096,8 @@
           document.getElementById('poeModelMissingWarning').style.display = '';
         } else if (result.error === 'camera_unreachable') {
           _showDetectError({
-            title: 'PoE Camera unreachable',
-            copy: 'Backend can\'t reach the M5Stack at the configured IP. Check power and network.'
+            title: 'Camera unreachable',
+            copy: 'Backend has no recent frame from the USB camera. Check the cable / device node and the smart-factory service logs.'
           });
         } else {
           _showDetectError({
@@ -1410,14 +1326,12 @@
           'statusCameraMeta',
           cameraState,
           connected ? '#4caf50' : '#f44336',
-          connected ? `PoE CAM | ${ipLabel}` : `PoE CAM unreachable | ${ipLabel}`,
+          connected ? `USB camera | ${ipLabel}` : `USB camera unreachable`,
           connected ? 'good' : 'bad'
         );
-        _setPoeCamBadge(connected);
         setTitleConnectionStatus(connected);
       } else {
-        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read PoE camera status', 'bad');
-        _setPoeCamBadge(false);
+        setLiveStatus('statusCameraCard', 'statusCameraValue', 'statusCameraMeta', 'UNAVAILABLE', '#f44336', 'Unable to read camera status', 'bad');
         setTitleConnectionStatus(false);
       }
 
@@ -1595,13 +1509,14 @@
     window.addEventListener('load', () => {
       addDebugLog('page loaded', { apiBase: API_BASE });
 
-      loadPoeCameraConfig();
+      loadClassConfFromConfig();
       _wireClassConfSliders();
       checkPoeModelStatus();
       startLiveStatusPolling();
 
-      // Live MJPEG preview is retired — kick the YOLO auto-detect loop instead.
-      // Tiny delay so loadPoeCameraConfig has a chance to populate the IP field.
+      // USB camera supports concurrent stream + capture — start the live MJPEG
+      // straight away, then kick the YOLO auto-detect loop a beat later.
+      startStream();
       setTimeout(() => {
         if (!_poeLoopTimer) startPoeLoop();
       }, 400);
