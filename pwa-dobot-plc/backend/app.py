@@ -7070,17 +7070,18 @@ if __name__ == '__main__':
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
 
-    # Load histogram-based defect detector references. Cheap (<10 ms) and
-    # synchronous — anomaly detection is disabled gracefully if the npz
+    # Load purity-index defect detector references. Cheap (<10 ms) and
+    # synchronous — anomaly detection is disabled gracefully if the json
     # file is missing (run compute_defect_references.py once to build it).
     _here = os.path.dirname(os.path.abspath(__file__))
-    _defect_cfg = (config.get('poe_camera', {}) or {}).get('defect_detection', {}) or {}
+    _startup_cfg = load_config()
+    _defect_cfg = (_startup_cfg.get('poe_camera', {}) or {}).get('defect_detection', {}) or {}
     if _defect_cfg.get('enabled', True):
         _thresholds = _defect_cfg.get('thresholds') or {}
         # Strip null entries so DefectDetector falls back to auto-threshold.
         _thresholds = {k: v for k, v in _thresholds.items() if v is not None}
         defect_detector.get_singleton().load(
-            os.path.join(_here, 'defect_references.npz'),
+            os.path.join(_here, 'defect_references.json'),
             _thresholds,
         )
     else:
