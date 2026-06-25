@@ -4,7 +4,7 @@ This file gives Claude Code the context needed to work effectively in this repo.
 
 ## Project overview
 
-Industrial smart factory automation system. A Raspberry Pi 5 (`192.168.7.5`) acts as the central controller, communicating with a Siemens S7-1200 PLC, a 6-DOF Waveshare ST3215 robot arm, an IO-Link master, and an M5Stack PoE CAM-W. A Flask backend serves a PWA web UI on port 8080 (HTTPS).
+Industrial smart factory automation system. A Raspberry Pi 5 (`192.168.7.5`) acts as the central controller, communicating with a Siemens S7-1200 PLC, a 6-DOF Waveshare ST3215 robot arm, an IO-Link master, and a USB camera. A Flask backend serves a PWA web UI on port 8080 (HTTPS).
 
 The final production setup has **no Windows PC** — only Pi, PLC, arm, IO-Link, and camera, all on the `192.168.7.x` network. The web UI is for engineering / monitoring; the actual production control loops (cube detection → PLC bits, PLC target → arm motion) run on the Pi regardless of whether a browser is open.
 
@@ -15,8 +15,9 @@ The final production setup has **no Windows PC** — only Pi, PLC, arm, IO-Link,
 | Raspberry Pi 5 | 192.168.7.5 | Backend, web UI, all control logic |
 | Siemens S7-1200 PLC | 192.168.7.2 | Rack 0, Slot 1 |
 | IO-Link Master | 192.168.7.4 | HTTP polling, port 80 |
-| M5Stack PoE CAM-W | 192.168.7.6 | MJPEG + /capture HTTP, static IP |
-| GS105 Switch | — | Unmanaged, no PoE (camera takes 5 V via G5V pin) |
+| USB camera (IMX179) | — | UVC on `/dev/video0`, controlled via `v4l2-ctl` |
+| M5Stack PoE CAM-W | 192.168.7.6 | **Legacy** — disconnected; the production vision path is the USB camera |
+| GS105 Switch | — | Unmanaged, no PoE |
 
 ## Repository layout
 
@@ -28,15 +29,28 @@ smart-factory-robot-arm/
 │   │   │                           # Owns the always-on YOLO detection loop +
 │   │   │                           # the PLC auto-move backend.
 │   │   ├── config.json             # All hardware config — single source of truth
+│   │   │                           # MERGED with ~/.sf2/config.local.json at
+│   │   │                           # runtime (operator overrides survive resets)
 │   │   ├── plc_integration.py      # PLC write-side helpers (idempotent)
 │   │   ├── plc_worker.py           # snap7 worker thread, DB + PE/PA reads,
 │   │   │                           # batched writes, raw I/O snapshot
-│   │   ├── poe_vision_service.py   # YOLO load + inference, crop / mask /
-│   │   │                           # keep-box / per-class threshold helpers
-│   │   ├── dobot_client.py         # Dobot Magician (legacy, USB camera +
-│   │   │                           # dobot wiring is commented out)
-│   │   ├── camera_service.py       # USB camera service (DISABLED — left
-│   │   │                           # intact so legacy routes return 503)
+│   │   ├── poe_vision_service.py   # YOLO load + inference + draw_detections
+│   │   │                           # (filename is legacy from the M5Stack era;
+│   │   │                           # USB now feeds the same module)
+│   │   ├── defect_detector.py      # Two-stage QC: trust YOLO bbox, then look
+│   │   │                           # for dark blobs / high-sat patches inside.
+│   │   │                           # Per-class envelopes loaded from
+│   │   │                           # defect_references.json
+│   │   ├── compute_defect_references.py
+│   │   │                           # Builds defect_references.json from
+│   │   │                           # cube_labels/ training crops. Re-run after
+│   │   │                           # every YOLO retrain.
+│   │   ├── defect_references.json  # Per-class HSV envelopes + clean-training
+│   │   │                           # noise floor. Loaded at startup.
+│   │   ├── camera_service.py       # USB camera + v4l2-ctl integration
+│   │   │                           # (focus, brightness, contrast, exposure,
+│   │   │                           # white balance)
+│   │   ├── dobot_client.py         # Dobot Magician (legacy, wiring commented)
 │   │   ├── vision_service.py       # Legacy HSV colour-voting (DISABLED)
 │   │   └── ssl/                    # Self-signed certs (not in git)
 │   ├── frontend/
@@ -75,21 +89,21 @@ smart-factory-robot-arm/
 
 ## Key config file
 
-`pwa-dobot-plc/backend/config.json` is the single source of truth for hardware addresses, PLC DB numbers, the vision pipeline knobs, and feature flags. Changes take effect on `sudo systemctl restart smart-factory`.
+`pwa-dobot-plc/backend/config.json` is the source-controlled defaults; `~/.sf2/config.local.json` (created at runtime by the `/api/config` POST handler) layers operator overrides on top. `load_config()` does the merge. Any slider change (per-class confidence, defect threshold, camera focus, v4l2 controls) lands in the local override so resets / git pulls don't lose tuning.
 
 Important blocks:
 - `plc.ip` — PLC address
-- `poe_camera.ip` — PoE camera address (`192.168.7.6`)
-- `poe_camera.conf` — global default confidence (fallback when no per-class value, default 0.5)
-- `poe_camera.class_conf` — per-class confidence thresholds:
-  `{"yellow_cube": 0.35, "purple_cube": 0.5, "metal_cube": 0.6}`.
-  The vision page's three sliders POST back to this block.
-- `poe_camera.crop` — pre-inference edge trim (changes aspect ratio)
-- `poe_camera.mask` — pre-inference solid-colour block (preserves aspect ratio).
-  Currently used in preference to crop because it keeps the trained model's
-  expected 800×600 input shape. Default: `right_pct=30`, black fill.
+- `poe_camera.conf` — global YOLO confidence floor (fallback)
+- `poe_camera.class_conf` — per-class YOLO confidence thresholds, e.g.
+  `{"yellow_cube": 0.35, "purple_cube": 0.5, "metal_cube": 0.6}`. Live-tunable from the vision page sliders.
+- `poe_camera.max_detections` — cap on cubes per frame after YOLO. Default `1`. The conveyor glass produces a mirror reflection that YOLO scores as a second lower-confidence cube; sorting by confidence and keeping top-N drops it.
+- `poe_camera.min_class_match` — fraction of bbox-centre pixels that must match the class's HSV envelope (default `0.10`). Drops YOLO mis-classifications where the cube colour doesn't match the predicted class — e.g. a red cube being labelled `yellow_cube`.
+- `poe_camera.defect_detection.thresholds` — per-class max defect % (raw percent, e.g. `2.0`). Above this, `defect_detected` pulses on DB124. Live-tunable from the vision page sliders.
+- `poe_camera.crop` / `poe_camera.mask` — pre-inference geometric edits. Both currently disabled because the USB camera training data is unmasked / uncropped; re-enabling either would create a distribution shift YOLO never saw.
+- `camera.focus` — `{"autofocus": bool, "value": int}`, applied via `v4l2-ctl` after every camera open. IMX179 manual focus range is 0–1023; default 550.
+- `camera.v4l2_controls` — arbitrary `{name: int}` map applied via `v4l2-ctl` after every camera open. Populated by the page sliders. Whitelist lives in `camera_service.CameraService.V4L2_CONTROL_WHITELIST` (brightness, contrast, saturation, hue, gain, sharpness, gamma, backlight_compensation, white_balance, exposure, power_line_frequency).
 - `io_link.master_ip` — IO-Link master address
-- `enable_digital_twin_stream` — set `false` to reduce CPU load
+- `enable_digital_twin_stream` — `false` to reduce CPU load
 
 ## Deployment workflow
 
@@ -138,7 +152,18 @@ Repo on Pi:        ~/sf2/   (cloned from GitHub, no internet access from here)
 Model on Pi:       ~/cube_detector.pt  (SCP'd manually after each retrain)
 ```
 
-## PoE camera firmware
+## USB camera (production)
+
+UVC webcam on `/dev/video0` (typically a Sony IMX179 module). OpenCV `VideoCapture` for raw frames, `v4l2-ctl` shell-out for controls that OpenCV's `CAP_PROP_*` round-tripping is flaky on:
+
+- **Focus** — `focus_automatic_continuous` (modern) / `focus_auto` (legacy) for AF, `focus_absolute` 0–1023 for manual. Always re-applied after camera open.
+- **Brightness / contrast / saturation / hue / gain / sharpness / gamma / backlight_compensation / white_balance / exposure / power_line_frequency** — exposed via `/api/camera/controls`. Whitelist in `camera_service.CameraService.V4L2_CONTROL_WHITELIST`. The page builds sliders dynamically from `v4l2-ctl --list-ctrls` output so any camera-specific control range is correct.
+
+For QC stability you want to **lock exposure (`exposure_auto = manual`) and white balance (`white_balance_temperature_auto = false`)** so the defect detector's `cube_mean_v` baseline doesn't drift with bench lighting changes.
+
+## PoE camera firmware (legacy)
+
+The M5Stack PoE CAM-W is **no longer in the active production path** — the USB camera replaced it. The firmware and flashing notes below are kept for reference.
 
 - **Board**: M5Stack PoE CAM-W V1.1 (ESP32-D0WDQ6-V3 + OV3660 + W5500)
 - **Firmware**: v1.1.0 — uses `ETH.h` (arduino-esp32 3.3.7 built-in)
@@ -167,10 +192,28 @@ Serial console must be absent from `/boot/firmware/cmdline.txt`.
 | DB | Purpose |
 |----|---------|
 | DB123 | Main process state (HMI bits, robot, conveyors, gantry, pallet, counts) |
-| DB124 | Camera/vision result bits (`yellow_cube_detected` 0.6, `purple_cube_detected` 0.7, `metal_cube_detected` 1.0, plus handshake bits) |
+| DB124 | Camera/vision result bits (see byte 0 map below) |
 | DB125 | Robot arm bridge (status bytes 0-21, commands bytes 22-31) |
 | DB126 | Edge device stats |
 | DB127 | IO-Link PLC telemetry |
+
+### DB124 byte 0 — vision result bits
+
+| Bit | Tag | Owner | Notes |
+|-----|-----|-------|-------|
+| 0.0 | `start` | PLC | READ-ONLY for Pi. Handshake trigger. |
+| 0.1 | `connected` | Pi | Camera reachable + frame fresh |
+| 0.2 | `busy` | Pi | Inference in progress |
+| 0.3 | `completed` | Pi | Latest cycle finished |
+| 0.4 | **`defect_detected`** | Pi | **Edge-pulse: 800 ms HIGH per defective cube** (see Defect detection below). PLC should edge-count, not level-gate. |
+| 0.5 | `reject_command_from_plc` | PLC | PLC-owned; Pi never writes this. |
+| 0.6 | `yellow_cube_detected` | Pi | Suppressed when cube is defective — only fires on clean cubes. |
+| 0.7 | `purple_cube_detected` | Pi | Same suppression rule. |
+| 1.0 | `metal_cube_detected` | Pi | Same suppression rule. |
+
+The colour-bit suppression means a defective cube produces ONLY `defect_detected` (no colour bit) — so a PLC routine that latches the colour first will fall through to the reject branch instead of binning a tape-covered yellow as clean yellow.
+
+Atomic single-bit writes (`plc_worker.queue_bit_write`) are used for `defect_detected` so the surrounding PLC-owned bits in byte 0 (`start`, `reject_command_from_plc`) survive the write. The colour-bit helper still writes a full byte but with the four Pi-owned bits set correctly.
 
 Full tag map: `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_READ_WRITE_MAP.md`. **Note the rename**: the DB124 bit previously named `white_cube_detected` is now `purple_cube_detected` in our Python/JS code — the byte/bit offset (0/7) is unchanged so the TIA project doesn't need updating.
 
@@ -205,36 +248,100 @@ Owns the loop that turns `DB125.target_xyz` into bridge `moveToXYZ` commands. Ru
 - **Tolerance**: `PLC_AUTO_TARGET_TOLERANCE_MM = 20` Euclidean. A stall response within this distance is treated as a successful arrival so the PLC doesn't retry indefinitely against a weak joint.
 - **Position-logger thread** writes `/home/pi/sf2/logs/plc_vs_arm_positions.csv` every 0.5 s with target XYZ, arm current XYZ (queried directly from the bridge so it's fresh), and connection state. Useful for diagnosing remaining latency without enabling verbose journal logs.
 
-## PoE vision pipeline (`app.py` + `poe_vision_service.py`)
+## Vision pipeline (`app.py` + `poe_vision_service.py` + `defect_detector.py`)
 
-Always-on YOLO cube detection. Runs whether or not the web UI is open. Defined in `app.py:_poe_detection_loop`, started as a daemon thread at app startup via `start_poe_detection_loop()`.
+The file is called `poe_vision_service.py` for historic reasons; the actual frame source is the USB camera, not the M5Stack. Two daemon threads do the work:
 
-Per cycle (`POE_LOOP_INTERVAL_S = 1.0` second):
+- **Pump** (`_poe_pump_loop`, ~7 Hz) — pulls frames out of `CameraService.read_frame()`, applies crop / mask / 90° CCW rotation, caches the raw JPEG (for the Capture Training Image button) and an annotated JPEG (for the HMI MJPEG stream). Runs faster than YOLO so the on-screen feed feels live.
+- **Inference** (`_poe_detection_loop`, 1 Hz) — owns YOLO + the defect detector. Publishes detections back to the pump for overlay, writes PLC bits.
 
-1. **Fetch raw frame** via `poe_vision_service.fetch_frame()` → single HTTP GET to `http://192.168.7.6/capture`. Returns a numpy BGR array. The loop owns the M5Stack's single-client HTTP slot, so other handlers don't touch the camera directly.
-2. **Cache raw JPEG** → `/api/poe-camera/capture` serves this on demand for the Capture Training Image button. Frame is at most ~1 s old.
-3. **Crop** (`apply_crop`) — currently disabled. Tunable via `config.poe_camera.crop`.
-4. **Mask** (`apply_mask`) — paints solid colour over edges. Default: right 30% black. Lives at `config.poe_camera.mask`. **Preserves the original 800×600 aspect ratio**, which matters because the trained model expects that shape.
-5. **YOLO inference** (`detect_cubes`) with:
-   - **YOLO `conf` floor** set to `min(class_conf.values())` so every candidate passes through to the post-filter.
-   - **Per-class confidence post-filter** drops detections whose confidence is below their class's threshold. Yellow=0.35 (permissive — model under-detects), Purple=0.5, Metal=0.6 (strict — model over-detects).
-   - **`keep_box`** computed from the mask config — drops detections whose centre falls in the masked region. Kills mask-edge hallucinations.
-6. **Cache annotated JPEG** → `/api/poe-vision/annotated` serves this.
-7. **N-consecutive-cycles debounce** (`POE_DEBOUNCE_CYCLES = 2`) on the dominant class. The PLC bit only changes after the same class has been the dominant for N cycles in a row. Single-cycle blips never reach the PLC. `None` is a valid streak key so removing the cube also takes N cycles to confirm.
-8. **Write PLC bits** via `queue_cube_detection_bits(yellow=..., purple=..., metal=...)` (idempotent — skips no-op writes).
+### Pump cadence
 
-Endpoints:
-- `GET /api/poe-vision/latest-result` — JSON of latest result (includes `confirmed_dominant`, `streak`, `debounce_cycles`)
-- `GET /api/poe-vision/annotated` — latest annotated JPEG
-- `POST /api/poe-vision/detect` — returns the cached result (no longer triggers fresh inference)
+`_poe_pump_loop` reads the latest USB frame each iteration. The frame goes through:
+
+1. **Rotate** 90° CCW (`cv2.ROTATE_90_COUNTERCLOCKWISE`). The training data was captured rotated, so YOLO + the defect detector need the same orientation.
+2. **Crop** (currently disabled — `config.poe_camera.crop.enabled = false`).
+3. Hand `frame_unmasked` to the inference thread via `_poe_latest_unmasked`.
+4. Cache `frame_unmasked` as `_poe_loop_raw_jpeg` for `/api/poe-camera/capture` (training-data button serves this).
+5. Draw the latest cached detections on `frame_unmasked` → `_poe_loop_anno_jpeg`.
+6. **REJECT overlay** — if I0.5 sensor is HIGH and the cached detection list is empty, paint a large red "REJECT" badge centred on the annotated frame. Pump owns this so it appears at ~7 Hz even when YOLO hasn't run yet.
+
+### Inference cadence
+
+`_poe_detection_loop` runs every `POE_LOOP_INTERVAL_S = 1.0` second:
+
+1. **Mask** is applied here (after the pump's unmasked handoff) and YOLO sees only the masked frame. Currently mask is disabled too.
+2. **YOLO inference** (`poe_vision_service.detect_cubes`) with the per-class confidence floor.
+3. **Cap to top-N detections** (`config.poe_camera.max_detections`, default `1`). Sorts by confidence and trims; drops the conveyor-glass mirror reflection that YOLO scores as a phantom second cube.
+4. **Hue-mismatch filter** (`defect_detector.class_match_fraction`). For each remaining detection, compute the fraction of bbox-centre pixels that pass the class's HSV envelope. If `< config.poe_camera.min_class_match` (default `0.10`), drop it — handles untrained colours (red, green) that YOLO snaps to the nearest known class.
+5. **Defect detection** (per detection — see below).
+6. **N-cycle debounce** (`POE_DEBOUNCE_CYCLES = 2`) on the dominant class.
+7. **Write colour bits** via `queue_cube_detection_bits` — but only if `sensor_present AND not any_defective`. Defective cubes write all colour bits FALSE.
+8. **Publish JSON state** to `_poe_loop_result` for `/api/poe-vision/latest-result` and the defect watcher.
+
+### Defect detection (`defect_detector.py`)
+
+Anomaly-detection downstream of YOLO. **No labelled defect training data needed** — flags any visual disruption (tape, marker, sticker, dirt, contamination) by analysing cube crops in HSV space.
+
+Per crop:
+
+1. **Centre-crop** the bbox at 75% (skips ~25% of background near bbox edges).
+2. **Clean reference** = mean V of the top-half of patch V values (the brightest 50% — almost always the clean cube surface, even on heavily contaminated cubes).
+3. **Adaptive dark threshold** = `cube_mean_v × dark_factor` (per-class `dark_factor` lives in `defect_references.json`; defaults: yellow 0.55, purple 0.55, metal 0.40 — lower for metal because brushed metal has natural shadows).
+4. **Candidate defect mask** = pixels in the patch with `V < dark_threshold`. For metal, ALSO pixels with `S >= envelope.defect_s_min` (catches coloured tape on grey metal).
+5. **Morphology** — open then close with a 5×5 kernel. Drops noise pixels, joins near-adjacent ones into a single blob.
+6. **defect_pct** = `defect_pixels / patch_pixels × 100`.
+
+`compute_defect_references.py` builds the per-class envelopes (`h_low`, `h_high`, `s_min`, `v_min`, `s_max`, `dark_factor`, `defect_s_min`) + the worst-clean-training defect % from `cube_labels/`. The runtime `DefectDetector` falls back to `max(1.5, 2 × train_max_defect_pct)` if no explicit threshold is configured.
+
+The inference loop smooths each detection's `defect_pct` over the last `DEFECT_SMOOTH_WINDOW = 5` frames per class. `is_defective` uses the smoothed value, so a single-frame flutter doesn't fire the PLC pulse.
+
+### Defect bit on DB124.DBX0.4 (edge-pulse)
+
+Driven by `_defect_watcher_loop` (100 ms tick) — separate from the 1 Hz YOLO cycle. State machine:
+
+```
+IDLE     defective rising edge -> fire 800 ms HIGH pulse, state=PULSING
+PULSING  hold HIGH until pulse_until, then state=HELD (write LOW)
+HELD     hold LOW until either
+           (a) defective condition clears -> IDLE
+           (b) 1.8 s of continuous defect elapsed -> assume next cube
+               flowed in behind the first; fire another pulse
+```
+
+Pulse duration (800 ms) is comfortably longer than the observed worst PLC-worker cycle time (~550 ms) so the TRUE write and FALSE write always land in DIFFERENT worker cycles. Without the gap, both writes could batch into one cycle and the PLC scan would never see the TRUE.
+
+The "defective condition" the watcher reads is `sensor_present AND (dominant is None OR any_defective)`. So defect fires for both:
+- Unrecognised object (sensor sees something, YOLO returns nothing or got hue-filtered)
+- Recognised cube with contamination
+
+### Vision page (`vision.html`)
+
+Passive monitor — polls `/api/poe-vision/latest-result` (~5 Hz) and `/api/plc/io/read`. Detection itself never depends on the browser. Page layout:
+
+- **Camera feed + Detection results panel** — always visible at top of the AI section.
+- **Collapsible settings** below:
+  - Per-class YOLO confidence sliders (POST to `poe_camera.class_conf`)
+  - Max defect % sliders (POST to `poe_camera.defect_detection.thresholds`)
+  - Camera focus (autofocus toggle + 0–1023 slider)
+  - Camera settings — dynamically populated from `/api/camera/controls` (brightness, contrast, exposure, white balance, etc.)
+- Debug Console collapsed at the bottom.
+
+All collapsibles are native `<details>`/`<summary>` with a `sf-collapsible` CSS class for the explicit chevron + hover styling.
+
+### Endpoints
+
+- `GET /api/poe-vision/latest-result` — JSON of latest result (`detections[]` includes `defect_pct`, `defect_pct_raw`, `is_defective`, `class_match`, `defect_debug`)
+- `GET /api/poe-vision/annotated` — latest annotated JPEG (with `?stream=1` for MJPEG)
 - `GET /api/poe-vision/status` — model load status
 - `GET /api/poe-camera/capture` — cached raw JPEG (training data)
-- `GET /api/poe-camera/status` — camera reachability
-- `GET /api/poe-camera/stream` — proxied MJPEG stream from the camera
+- `GET /api/camera/stream` — USB camera MJPEG passthrough
+- `GET /api/camera/controls`, `POST /api/camera/controls` — v4l2 control list / set
+- `GET /api/camera/focus`, `POST /api/camera/focus` — focus settings
+- `GET /api/vision/annotated-result?stream=1` — legacy alias forwards to the PoE annotated handler so the HMI iframe URL never changed
+- `POST /api/config` — operator overrides; handles `vision`, `plc`, `camera`, and `poe_camera` keys with deep-merge into `~/.sf2/config.local.json`
 
-`vision.html` is a passive monitor that polls `/latest-result` and `/api/plc/io/read` once a second. Detection itself never depends on the browser. The page-side `Live` / `Pause display` button only toggles the page poll, not the backend loop.
-
-The legacy USB camera pipeline (HSV colour voting in `camera_service.py` + `vision_service.py`) is preserved in the repo but **all of its routes are commented out** (`# DISABLED (USB / color-voting retired)`). `camera_service` is never instantiated; the old DB124 vision-handshake callback is wired to `vision_callback=None`. The files stay for reference only.
+The legacy USB colour-voting pipeline (`vision_service.py`) is still in the repo but **all its routes are commented out**. `CameraService` is now active again (it was disabled in the PoE era) and feeds the YOLO loop directly.
 
 ## PLC worker write path
 
@@ -244,13 +351,23 @@ The legacy USB camera pipeline (HSV colour voting in `camera_service.py` + `visi
 
 Local workflow in `cube-training/` — Windows-side, never on the Pi.
 
-1. **Capture** — vision.html has a Capture Training Image button that downloads the loop's most recent raw JPEG (already cropped/masked the same as production inference, which is what you want). Save into `cube-training/cube_images/`.
-2. **Annotate** — CVAT (self-hosted Docker or app.cvat.ai). Export as **Ultralytics YOLO Detection 1.0**. Class order must be `yellow_cube` (0), `purple_cube` (1), `metal_cube` (2). Drop the `.txt` files into `cube_labels/`.
-3. **Organise** — `python organize_cube_dataset.py` splits 80/20 into `dataset/images/{train,val}` and `dataset/labels/{train,val}`. Re-runnable.
-4. **Train** — `python train_cube_detector.py`. CPU-only by default (no NVIDIA GPU on the dev box). YOLO11n base downloads on first run. Stops early on `patience=20`. Output: `runs/detect/cube_train/weights/cube_detector.pt`.
-5. **Deploy** — `scp cube-training/runs/detect/cube_train/weights/cube_detector.pt pi@192.168.7.5:/home/pi/cube_detector.pt` + `sudo systemctl restart smart-factory`. The backend's `poe_vision_service.resolve_model_path()` searches `~/cube_detector.pt` first.
+1. **Capture** — vision.html has a Capture Training Image button that downloads the pump's most recent raw frame (already rotated 90° CCW the same as production inference). Save into `cube-training/cube_images/`.
+2. **Annotate** — CVAT (self-hosted Docker or app.cvat.ai). Export as **Ultralytics YOLO Detection 1.0**. Class order must be `yellow_cube` (0), `purple_cube` (1), `metal_cube` (2). Drop the `.txt` files into `cube_labels/`. **CVAT's class order often disagrees with the project's** — the export uses whichever order you set up in CVAT (often `metal=0`, `yellow=1`, `purple=2`). A remap step is required: rewrite each .txt to swap class IDs back into project order. See the previous training cycle commits for the script.
+3. **Add negative examples** — heavily impacts model quality on small datasets. ~20% of images should be empty-bench frames with empty `.txt` files. Without negatives, the model fires confidently on every plausible blob.
+4. **Organise** — `python organize_cube_dataset.py` splits 80/20 into `dataset/images/{train,val}` and `dataset/labels/{train,val}`. Re-runnable.
+5. **Train** — `python train_cube_detector.py`. CPU-only by default. YOLO11n base downloads on first run. Augmentation is cranked up (`mosaic=1.0`, `mixup`, `copy_paste`, `erasing`, wider `degrees`/`scale`/`translate`) — necessary because the dataset is small (<70 images). The script reads `results.save_dir` so it picks the actual Ultralytics-versioned output dir (cube_train, cube_train2, ...).
+6. **Rebuild defect envelopes** — `python pwa-dobot-plc/backend/compute_defect_references.py`. Reads the same `cube_labels/`, produces `defect_references.json`. Re-run after every retrain so the per-class HSV envelopes match the new dataset.
+7. **Deploy** — `scp cube-training/runs/detect/cube_train*/weights/cube_detector.pt pi@192.168.7.5:/home/pi/cube_detector.pt` and `scp pwa-dobot-plc/backend/defect_references.json pi@192.168.7.5:/home/pi/sf2/pwa-dobot-plc/backend/`. Then `sudo systemctl restart smart-factory`. `poe_vision_service.resolve_model_path()` searches `~/cube_detector.pt` first.
 
-See `cube-training/CUBE_TRAINING_GUIDE.md` for the full procedure including CVAT setup.
+See `cube-training/Guides/CUBE_TRAINING_GUIDE.md` for the full procedure including CVAT setup.
+
+### Lessons hard-won the painful way
+
+- **Negative examples matter more than positive ones for small datasets.** Adding 10 empty-bench frames took confidence from 11% wrong-class to 99% right-class on a 33-image set.
+- **Mask state must be consistent between training and inference.** Training captures unmasked, inference applying mask = distribution shift = catastrophic confidence drop.
+- **Rotation state must be consistent too.** Same trap: training captured pre-rotation, inference rotated = model never saw this orientation.
+- **The script's hard-coded output path won't match Ultralytics' auto-versioned run dir** (it makes `cube_train2`, `cube_train3` if `cube_train` exists). Use `results.save_dir` from the train() return value.
+- **CVAT class order is per-project**, not standardised. Check `data.yaml` in the export and remap to project order (yellow=0, purple=1, metal=2) before placing in `cube_labels/`.
 
 ## Common tasks
 
