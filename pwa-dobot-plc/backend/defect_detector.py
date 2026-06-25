@@ -132,7 +132,15 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
     patch = _centre_crop(crop_bgr)
     hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
 
-    # Stage 1: identify the cube surface, then erode to drop edges.
+    # Stage 1: cube surface mask. We need two views of the cube:
+    #   * cube_inner: tightly-eroded STRICT mask. Represents the
+    #     definitely-clean cube surface; used to compute baseline V.
+    #   * cube_area:  the convex hull of the strict mask. A dark stain
+    #     on the cube creates a "hole" in the strict mask (the pixels
+    #     fail v_min). Morphological closing can fill small holes but
+    #     not large ones — the convex hull works regardless of stain
+    #     size, giving us the cube's full outline as a solid polygon
+    #     so the defect search can see every pixel of the cube.
     cube_mask = _build_cube_mask(hsv, envelope)
     kernel = np.ones((KERNEL_SIZE, KERNEL_SIZE), np.uint8)
     cube_inner = cv2.erode(cube_mask, kernel, iterations=2)
@@ -142,8 +150,20 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
             'reason': 'cube_mask_too_small',
             'cube_pixels': cube_pixels,
         }
+    cube_area = np.zeros_like(cube_mask)
+    contours, _ = cv2.findContours(cube_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        # Largest contour = cube body. Convex hull fills any stain holes.
+        largest = max(contours, key=cv2.contourArea)
+        hull = cv2.convexHull(largest)
+        cv2.drawContours(cube_area, [hull], 0, 255, -1)
+    else:
+        cube_area = cube_mask  # degenerate, fall back to raw mask
 
-    # Stage 2: dark-blob candidate mask inside the cube.
+    # Stage 2: dark-blob candidate mask inside the cube area (the
+    # dilated mask). mean_v comes only from cube_inner so it reflects
+    # the clean cube's brightness, not the dragged-down mean a stain
+    # would produce if included.
     v_ch = hsv[..., 2]
     s_ch = hsv[..., 1]
     cube_mean_v = float(cv2.mean(v_ch, mask=cube_inner)[0])
@@ -151,7 +171,7 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
     dark_threshold = cube_mean_v * dark_factor
 
     candidate = np.zeros_like(v_ch, dtype=np.uint8)
-    candidate[(cube_inner > 0) & (v_ch < dark_threshold)] = 255
+    candidate[(cube_area > 0) & (v_ch < dark_threshold)] = 255
 
     # Metal also flags highly-saturated patches: a coloured tape /
     # sticker on a grey cube barely changes brightness but spikes
@@ -161,7 +181,7 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
         defect_s_min = float(
             envelope.get('defect_s_min', envelope.get('s_max', 100) + 30)
         )
-        candidate[(cube_inner > 0) & (s_ch >= defect_s_min)] = 255
+        candidate[(cube_area > 0) & (s_ch >= defect_s_min)] = 255
 
     # Stage 3: morphology cleanup. Open removes noise pixels, close
     # joins near-adjacent ones into a single blob.

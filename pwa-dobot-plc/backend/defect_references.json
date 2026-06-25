@@ -36,8 +36,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 54.0
     },
-    "train_max_defect_pct": 3.255084584679719,
-    "train_mean_defect_pct": 0.6628022793238815,
+    "train_max_defect_pct": 35.86389256140839,
+    "train_mean_defect_pct": 4.871398252911265,
     "crop_count": 19
   }
 }
