@@ -640,16 +640,71 @@
               <span id="poeModelStatus" class="text-xs text-base-content/50 ml-auto"></span>
             </div>
 
-            <!-- Per-class confidence thresholds. Each slider updates the value
-                 next to it on input; on release we debounce-save to /api/config
-                 so the backend detection loop picks up the new threshold within
-                 a cycle. Useful when one class consistently under- or
-                 over-detects relative to the others. -->
-            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
-              <div class="flex items-center justify-between gap-3 flex-wrap">
+            <!-- ==================================================================
+                 CAMERA FEED  (moved to top so it's always visible without scrolling)
+                 ================================================================== -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div class="sf-vision-media-shell" style="min-height:220px">
+                <img id="poeAnnotatedImg" class="sf-vision-frame is-centered" src="" alt="Annotated Detection" style="display:none">
+                <div id="poeAnnotatedPlaceholder" class="sf-vision-placeholder">
+                  <div class="sf-vision-placeholder-icon">AI</div>
+                  <div class="sf-vision-placeholder-title">Press Detect Cubes</div>
+                  <div class="sf-vision-placeholder-copy">YOLO will annotate detected cubes here</div>
+                </div>
+              </div>
+              <div class="space-y-3">
+                <div id="poeDominantBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3" style="display:none">
+                  <div id="poeDominantDot" class="w-4 h-4 rounded-full flex-shrink-0"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Dominant</div>
+                    <div id="poeDominantLabel" class="font-bold text-base-content text-base"></div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">Detections</div>
+                    <div id="poeDetCount" class="font-mono text-lg font-bold text-info">0</div>
+                  </div>
+                </div>
+                <div id="poeSensorBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3">
+                  <div id="poeSensorDot" class="w-4 h-4 rounded-full flex-shrink-0" style="background:#9e9e9e"></div>
+                  <div>
+                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Light Sensor 1 (%I0.5)</div>
+                    <div id="poeSensorLabel" class="font-bold text-base-content text-base">—</div>
+                  </div>
+                  <div class="ml-auto text-right">
+                    <div class="text-xs text-base-content/50">PLC read</div>
+                    <div id="poeSensorAge" class="font-mono text-xs text-base-content/60">—</div>
+                  </div>
+                </div>
+                <div id="poeMismatchWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">priority_high</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">AI missed the object</div>
+                    <div>Photoelectric sensor reports an object on the conveyor but YOLO returned zero detections. Likely an untrained class (e.g. a green cube) or low confidence — capture and label more training data.</div>
+                  </div>
+                </div>
+                <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
+                <div id="poeModelMissingWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
+                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">warning</i>
+                  <div>
+                    <div class="font-semibold text-base-content mb-0.5">Model not trained yet</div>
+                    <div>Follow the <strong>CUBE_TRAINING_GUIDE.md</strong> in cube-training/ to capture images, annotate, and train the detector. Then SCP <code>cube_detector.pt</code> to the Pi.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================================================================
+                 SETTINGS - each block is a collapsible <details> so the camera
+                 feed above stays uncluttered. Click any header to expand/collapse.
+                 ================================================================== -->
+
+            <!-- Per-class YOLO confidence thresholds -->
+            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Per-class confidence</span>
                 <span id="poeClassConfSaveStatus" class="text-xs text-base-content/50"></span>
-              </div>
+              </summary>
+              <div class="pt-2 space-y-2">
               <div class="flex items-center gap-2">
                 <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#f59e0b;"></span>
                 <label for="poeConfYellow" class="text-xs w-16">Yellow</label>
@@ -668,19 +723,16 @@
                 <input type="range" id="poeConfMetal" min="10" max="90" value="60" step="5" class="range range-xs range-neutral w-40">
                 <span id="poeConfMetalVal" class="text-xs font-mono w-10 text-right">60%</span>
               </div>
-            </div>
+              </div>
+            </details>
 
-            <!-- Per-class minimum purity threshold for the histogram-based
-                 anomaly stage. Lower = stricter (more cubes flagged as defective);
-                 higher = more forgiving. Clean training cubes typically score
-                 80-99% purity, so set the threshold somewhere below your worst
-                 known-good cube. POSTs back to poe_camera.defect_detection
-                 .thresholds and the detection loop refreshes within one cycle. -->
-            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
-              <div class="flex items-center justify-between gap-3 flex-wrap">
+            <!-- Max defect % thresholds -->
+            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Max defect % (reject threshold)</span>
                 <span id="poeDefectSaveStatus" class="text-xs text-base-content/50"></span>
-              </div>
+              </summary>
+              <div class="pt-2 space-y-2">
               <div class="flex items-center gap-2">
                 <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#f59e0b;"></span>
                 <label for="poeDefectYellow" class="text-xs w-16">Yellow</label>
@@ -702,17 +754,16 @@
               <div class="text-[0.65rem] text-base-content/50 pt-1">
                 Fraction of the cube surface covered by dark blobs / foreign saturation. Above this fires DB124.DBX0.4 = defect_detected. Lower = stricter, more rejects.
               </div>
-            </div>
+              </div>
+            </details>
 
-            <!-- USB camera focus. The IMX179 module hunts for focus as the
-                 cube moves through frame, which softens the edges YOLO needs.
-                 Disable autofocus and lock manual focus to a fixed value (the
-                 tray sits at a fixed distance from the lens). -->
-            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
-              <div class="flex items-center justify-between gap-3 flex-wrap">
+            <!-- Camera focus -->
+            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera focus</span>
                 <span id="cameraFocusSaveStatus" class="text-xs text-base-content/50"></span>
-              </div>
+              </summary>
+              <div class="pt-2 space-y-2">
               <div class="flex items-center gap-3 flex-wrap">
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" id="cameraAutofocusToggle" class="toggle toggle-sm toggle-info">
@@ -725,104 +776,40 @@
               <div class="text-[0.65rem] text-base-content/50">
                 Range 0&ndash;1023 (near&nbsp;&rarr;&nbsp;far), default 550. Sweep until the cube edges look crisp in the annotated view, then leave it.
               </div>
-            </div>
+              </div>
+            </details>
 
-            <!-- USB camera v4l2 controls (brightness, contrast etc).
-                 Dynamically populated from /api/camera/controls so we
-                 surface whatever the actual webcam supports. Persisted
-                 to config.camera.v4l2_controls and re-applied on every
-                 camera reopen. Always expanded so operators can see it. -->
-            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2" id="cameraControlsBlock">
-              <div class="flex items-center justify-between gap-3 flex-wrap">
+            <!-- Camera settings (brightness, contrast, etc.) -->
+            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2" id="cameraControlsBlock">
+              <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera settings (brightness, contrast, exposure, white balance)</span>
                 <span id="cameraControlsSaveStatus" class="text-xs text-base-content/50"></span>
-              </div>
+              </summary>
               <div id="cameraControlsList" class="space-y-2 pt-2 text-xs text-base-content/80">
                 <div class="text-base-content/50">Loading available controls&hellip;</div>
               </div>
               <div class="text-[0.65rem] text-base-content/50 pt-1">
                 Sliders persist to <code>config.camera.v4l2_controls</code> and re-apply via <code>v4l2-ctl</code> after every camera open. Lock exposure / white balance so the defect detector's brightness baseline doesn't drift with lighting.
               </div>
-            </div>
-
-            <!-- Two-column: annotated image + results -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <!-- Annotated image -->
-              <div class="sf-vision-media-shell" style="min-height:220px">
-                <img id="poeAnnotatedImg" class="sf-vision-frame is-centered" src="" alt="Annotated Detection" style="display:none">
-                <div id="poeAnnotatedPlaceholder" class="sf-vision-placeholder">
-                  <div class="sf-vision-placeholder-icon">AI</div>
-                  <div class="sf-vision-placeholder-title">Press Detect Cubes</div>
-                  <div class="sf-vision-placeholder-copy">YOLO will annotate detected cubes here</div>
-                </div>
-              </div>
-
-              <!-- Detection results panel -->
-              <div class="space-y-3">
-                <!-- Dominant result badge -->
-                <div id="poeDominantBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3" style="display:none">
-                  <div id="poeDominantDot" class="w-4 h-4 rounded-full flex-shrink-0"></div>
-                  <div>
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Dominant</div>
-                    <div id="poeDominantLabel" class="font-bold text-base-content text-base"></div>
-                  </div>
-                  <div class="ml-auto text-right">
-                    <div class="text-xs text-base-content/50">Detections</div>
-                    <div id="poeDetCount" class="font-mono text-lg font-bold text-info">0</div>
-                  </div>
-                </div>
-
-                <!-- Photoelectric sensor (%I0.5 Light Sensor 1) — cross-check
-                     against the AI. When the sensor sees something but the AI
-                     says nothing, an "AI MISSED IT" warning lights up below. -->
-                <div id="poeSensorBadge" class="rounded-box p-3 border border-base-300 bg-base-200 flex items-center gap-3">
-                  <div id="poeSensorDot" class="w-4 h-4 rounded-full flex-shrink-0" style="background:#9e9e9e"></div>
-                  <div>
-                    <div class="text-xs text-base-content/50 uppercase tracking-wider">Light Sensor 1 (%I0.5)</div>
-                    <div id="poeSensorLabel" class="font-bold text-base-content text-base">—</div>
-                  </div>
-                  <div class="ml-auto text-right">
-                    <div class="text-xs text-base-content/50">PLC read</div>
-                    <div id="poeSensorAge" class="font-mono text-xs text-base-content/60">—</div>
-                  </div>
-                </div>
-
-                <!-- Mismatch warning -->
-                <div id="poeMismatchWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
-                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">priority_high</i>
-                  <div>
-                    <div class="font-semibold text-base-content mb-0.5">AI missed the object</div>
-                    <div>Photoelectric sensor reports an object on the conveyor but YOLO returned zero detections. Likely an untrained class (e.g. a green cube) or low confidence — capture and label more training data.</div>
-                  </div>
-                </div>
-
-                <!-- Detections list -->
-                <div id="poeDetectionsList" class="space-y-1 max-h-48 overflow-y-auto"></div>
-
-                <!-- Model not loaded warning -->
-                <div id="poeModelMissingWarning" class="rounded-box border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80 flex items-start gap-2" style="display:none">
-                  <i class="material-icons text-warning mt-0.5" style="font-size:1rem">warning</i>
-                  <div>
-                    <div class="font-semibold text-base-content mb-0.5">Model not trained yet</div>
-                    <div>Follow the <strong>CUBE_TRAINING_GUIDE.md</strong> in cube-training/ to capture images, annotate, and train the detector. Then SCP <code>cube_detector.pt</code> to the Pi.</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </details>
           </section>
 
           <section class="sf-stage sf-stage-3">
-            <article class="sf-panel sf-vision-hidden">
-              <header class="sf-panel-head">
-                <h3>Debug Console</h3>
-                <p>Checks and debug events for engineering use.</p>
-              </header>
-              <div class="flex gap-2 mb-3">
-                <button class="btn btn-sm btn-outline" onclick="runDebugChecks()">Run Checks</button>
-                <button class="btn btn-sm btn-outline" onclick="clearDebugLog()">Clear</button>
-              </div>
-              <div id="debugSummary" class="text-xs text-base-content/60 mb-2">No debug events yet.</div>
-              <pre id="debugLog" class="sf-template-code rounded-box border border-base-300 bg-base-100 p-3 max-h-56 overflow-auto text-xs leading-relaxed">(waiting)</pre>
+            <article class="sf-panel">
+              <details class="space-y-2">
+                <summary class="cursor-pointer flex items-center gap-2">
+                  <h3 class="text-base font-semibold">Debug Console</h3>
+                  <span class="text-xs text-base-content/50">— checks &amp; engineering events</span>
+                </summary>
+                <div class="pt-3">
+                  <div class="flex gap-2 mb-3">
+                    <button class="btn btn-sm btn-outline" onclick="runDebugChecks()">Run Checks</button>
+                    <button class="btn btn-sm btn-outline" onclick="clearDebugLog()">Clear</button>
+                  </div>
+                  <div id="debugSummary" class="text-xs text-base-content/60 mb-2">No debug events yet.</div>
+                  <pre id="debugLog" class="sf-template-code rounded-box border border-base-300 bg-base-100 p-3 max-h-56 overflow-auto text-xs leading-relaxed">(waiting)</pre>
+                </div>
+              </details>
             </article>
           </section>
 
