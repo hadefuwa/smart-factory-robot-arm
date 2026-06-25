@@ -23,8 +23,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 217.0
     },
-    "train_max_defect_pct": 12.039877300613497,
-    "train_mean_defect_pct": 0.9261444077394998,
+    "train_max_defect_pct": 22.385740402193786,
+    "train_mean_defect_pct": 1.7596776637100788,
     "crop_count": 13
   },
   "metal_cube": {
@@ -36,8 +36,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 54.0
     },
-    "train_max_defect_pct": 35.86389256140839,
-    "train_mean_defect_pct": 4.871398252911265,
+    "train_max_defect_pct": 21.98598695337038,
+    "train_mean_defect_pct": 3.129313818225165,
     "crop_count": 19
   }
 }

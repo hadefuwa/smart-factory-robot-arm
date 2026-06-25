@@ -63,8 +63,10 @@ DEFAULT_DARK_FACTOR = 0.55
 # Minimum cube-mask pixel count before we trust the analysis. If the
 # cube mask is tiny, the bbox probably didn't catch the cube cleanly
 # (e.g. cube partially out of frame) — return "not defective" rather
-# than guessing.
-MIN_CUBE_PIXELS = 200
+# than guessing. Lowered from 200 so heavily-stained cubes (which
+# have very few clean-yellow pixels left to register in the strict
+# mask) still get checked.
+MIN_CUBE_PIXELS = 50
 
 
 def _centre_crop(crop_bgr: np.ndarray, fraction: float = CENTRE_FRACTION) -> np.ndarray:
@@ -83,26 +85,47 @@ def _build_cube_mask(hsv: np.ndarray, envelope: dict) -> np.ndarray:
     """Build a binary mask of pixels that look like this cube class.
 
     Returns a uint8 mask, 255 = cube surface, 0 = anything else.
+
+    S / V floors here are intentionally LOOSER than the envelope's own
+    floors (which come from clean-training-data percentiles). The
+    training data is bright + perfectly framed; real production cubes
+    can be dimmer or sit at angles where part of the surface is in
+    shadow. A too-tight mask leaves the detector with "cube_mask_too
+    _small" and a 0.0% defect reading even when there's an obvious
+    blob on the cube. We use the loose floors recommended by the
+    domain reviewer (S>80, V>80 chromatic; metal V>50) so the cube
+    is always identified, then rely on the convex hull + dark-blob
+    test to find the actual defects.
     """
     h_ch, s_ch, v_ch = hsv[..., 0], hsv[..., 1], hsv[..., 2]
 
+    # Loose CAPS, not floors. The training envelope's S/V minimums are
+    # often too strict (clean cubes only); we want the cube mask to be
+    # at least as forgiving as these caps. min() means: yellow with
+    # envelope.s_min=182 gets capped to 80 (loose), purple with
+    # envelope.s_min=160 also goes to 80, while a hypothetical
+    # already-loose class with envelope.s_min=40 keeps its 40.
+    MASK_S_MIN_CAP_CHROMATIC = 80
+    MASK_V_MIN_CAP_CHROMATIC = 80
+    MASK_V_MIN_CAP_METAL = 50
+    MASK_S_MAX_METAL_PAD = 20
+
     if envelope.get('kind') == 'low_sat':
-        # Metal: low saturation + reasonable brightness identifies the
-        # cube surface. Highlights (V > 245) and shadows (V < v_min)
-        # are excluded.
-        s_max = envelope['s_max']
-        v_min = envelope['v_min']
+        s_max = float(envelope['s_max']) + MASK_S_MAX_METAL_PAD
+        v_min = min(float(envelope.get('v_min', MASK_V_MIN_CAP_METAL)),
+                    MASK_V_MIN_CAP_METAL)
         mask = (
             (s_ch <= s_max) &
             (v_ch >= v_min) &
             (v_ch <= 245)
         ).astype(np.uint8) * 255
     else:
-        # Chromatic: right hue, enough saturation, enough brightness.
-        h_low = envelope['h_low']
-        h_high = envelope['h_high']
-        s_min = envelope['s_min']
-        v_min = envelope['v_min']
+        h_low = float(envelope['h_low'])
+        h_high = float(envelope['h_high'])
+        s_min = min(float(envelope.get('s_min', MASK_S_MIN_CAP_CHROMATIC)),
+                    MASK_S_MIN_CAP_CHROMATIC)
+        v_min = min(float(envelope.get('v_min', MASK_V_MIN_CAP_CHROMATIC)),
+                    MASK_V_MIN_CAP_CHROMATIC)
         mask = (
             (h_ch >= h_low) & (h_ch <= h_high) &
             (s_ch >= s_min) &
