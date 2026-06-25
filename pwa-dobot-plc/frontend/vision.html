@@ -670,6 +670,40 @@
               </div>
             </div>
 
+            <!-- Per-class minimum purity threshold for the histogram-based
+                 anomaly stage. Lower = stricter (more cubes flagged as defective);
+                 higher = more forgiving. Clean training cubes typically score
+                 80-99% purity, so set the threshold somewhere below your worst
+                 known-good cube. POSTs back to poe_camera.defect_detection
+                 .thresholds and the detection loop refreshes within one cycle. -->
+            <div class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Min purity (defect threshold)</span>
+                <span id="poeDefectSaveStatus" class="text-xs text-base-content/50"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#f59e0b;"></span>
+                <label for="poeDefectYellow" class="text-xs w-16">Yellow</label>
+                <input type="range" id="poeDefectYellow" min="10" max="95" value="75" step="5" class="range range-xs range-warning w-40">
+                <span id="poeDefectYellowVal" class="text-xs font-mono w-10 text-right">75%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#a855f7;"></span>
+                <label for="poeDefectPurple" class="text-xs w-16">Purple</label>
+                <input type="range" id="poeDefectPurple" min="10" max="95" value="65" step="5" class="range range-xs w-40" style="--range-shdw:#a855f7;">
+                <span id="poeDefectPurpleVal" class="text-xs font-mono w-10 text-right">65%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background:#6b7280;"></span>
+                <label for="poeDefectMetal" class="text-xs w-16">Metal</label>
+                <input type="range" id="poeDefectMetal" min="10" max="95" value="60" step="5" class="range range-xs range-neutral w-40">
+                <span id="poeDefectMetalVal" class="text-xs font-mono w-10 text-right">60%</span>
+              </div>
+              <div class="text-[0.65rem] text-base-content/50 pt-1">
+                Purity below this fires DB124.DBX0.4 = defect_detected. Lower the slider if too many clean cubes are flagged; raise it to catch more subtle contamination.
+              </div>
+            </div>
+
             <!-- USB camera focus. The IMX179 module hunts for focus as the
                  cube moves through frame, which softens the edges YOLO needs.
                  Disable autofocus and lock manual focus to a fixed value (the
@@ -825,8 +859,9 @@
     }
 
     async function loadClassConfFromConfig() {
-      // Per-class confidence — pull from the full config so the sliders start
-      // at the values the backend is actually using.
+      // Per-class YOLO confidence + defect-purity thresholds — pull both
+      // from /api/config so the sliders start at the values the backend
+      // is actually using.
       try {
         const r = await fetch(`${API_BASE}/api/config?t=${Date.now()}`, {
           signal: AbortSignal.timeout(6000), cache: 'no-store',
@@ -837,6 +872,12 @@
           _setClassConfSlider('poeConfYellow', 'poeConfYellowVal', cc.yellow_cube ?? 0.35);
           _setClassConfSlider('poeConfPurple', 'poeConfPurpleVal', cc.purple_cube ?? 0.50);
           _setClassConfSlider('poeConfMetal',  'poeConfMetalVal',  cc.metal_cube  ?? 0.60);
+
+          const dt = (cfg && cfg.poe_camera && cfg.poe_camera.defect_detection
+                      && cfg.poe_camera.defect_detection.thresholds) || {};
+          _setClassConfSlider('poeDefectYellow', 'poeDefectYellowVal', dt.yellow_cube ?? 0.75);
+          _setClassConfSlider('poeDefectPurple', 'poeDefectPurpleVal', dt.purple_cube ?? 0.65);
+          _setClassConfSlider('poeDefectMetal',  'poeDefectMetalVal',  dt.metal_cube  ?? 0.60);
         }
       } catch (e) {
         addDebugLog('class_conf load failed', e.message, 'warn');
@@ -886,6 +927,42 @@
       } catch (e) {
         if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
         addDebugLog('class_conf save failed', e.message, 'error');
+      }
+    }
+
+    // ---- Per-class defect purity thresholds (the histogram anomaly stage) ----
+    let _defectSaveTimer = null;
+    function queueSaveDefectThresholds() {
+      const status = document.getElementById('poeDefectSaveStatus');
+      if (status) { status.textContent = 'Saving...'; status.style.color = ''; }
+      if (_defectSaveTimer) clearTimeout(_defectSaveTimer);
+      _defectSaveTimer = setTimeout(saveDefectThresholds, 400);
+    }
+
+    async function saveDefectThresholds() {
+      const status = document.getElementById('poeDefectSaveStatus');
+      const yellow = Number(document.getElementById('poeDefectYellow').value) / 100;
+      const purple = Number(document.getElementById('poeDefectPurple').value) / 100;
+      const metal  = Number(document.getElementById('poeDefectMetal').value)  / 100;
+      try {
+        const res = await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            poe_camera: { defect_detection: { thresholds: {
+              yellow_cube: yellow, purple_cube: purple, metal_cube: metal,
+            }}},
+          }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (status) {
+          status.textContent = `Saved Y${Math.round(yellow*100)}% P${Math.round(purple*100)}% M${Math.round(metal*100)}%`;
+          status.style.color = 'var(--sf-success-ui, #4caf50)';
+        }
+        addDebugLog('defect_thresholds saved', { yellow, purple, metal });
+      } catch (e) {
+        if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
+        addDebugLog('defect_thresholds save failed', e.message, 'error');
       }
     }
 
@@ -984,6 +1061,22 @@
         slider.addEventListener('input', () => {
           label.textContent = slider.value + '%';
           queueSaveClassConf();
+        });
+      }
+
+      // Defect threshold sliders use the same drag-with-debounce pattern.
+      const defectPairs = [
+        ['poeDefectYellow', 'poeDefectYellowVal'],
+        ['poeDefectPurple', 'poeDefectPurpleVal'],
+        ['poeDefectMetal',  'poeDefectMetalVal'],
+      ];
+      for (const [s, l] of defectPairs) {
+        const slider = document.getElementById(s);
+        const label  = document.getElementById(l);
+        if (!slider || !label) continue;
+        slider.addEventListener('input', () => {
+          label.textContent = slider.value + '%';
+          queueSaveDefectThresholds();
         });
       }
     }

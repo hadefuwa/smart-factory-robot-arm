@@ -5193,6 +5193,44 @@ def _poe_pump_loop():
 
             # Annotated cache (unmasked + most-recent detection boxes) for HMI stream.
             annotated = poe_vision_service.draw_detections(frame_unmasked, cached_detections)
+
+            # "REJECT" overlay: photoelectric sensor I0.5 sees an object
+            # but YOLO returned zero detections this cycle — foreign /
+            # unrecognised object on the conveyor. Paint a big red badge
+            # so the HMI stream + Capture button preview both surface it.
+            # Sensor read uses the PLC IO cache so it's < 1 ms; falsy
+            # snapshot just skips the overlay rather than guessing.
+            try:
+                _io = get_plc_io_snapshot() or {}
+                _sensor = bool(_io.get('inputs', {}).get('I0.5', False))
+            except Exception:
+                _sensor = False
+            if _sensor and not cached_detections:
+                ah, aw = annotated.shape[:2]
+                text = 'REJECT'
+                # Pick the largest font scale that fits inside 80% of width.
+                scale = 4.0
+                thickness = 8
+                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, scale, thickness)
+                while tw > aw * 0.8 and scale > 1.0:
+                    scale -= 0.2
+                    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, scale, thickness)
+                # Centred banner with a semi-transparent black backing so
+                # the text is legible over any cube colour. Done with a
+                # weighted blend on a single rectangle region.
+                pad = max(12, int(scale * 8))
+                cx, cy = aw // 2, ah // 2
+                rx1, ry1 = cx - tw // 2 - pad, cy - th // 2 - pad
+                rx2, ry2 = cx + tw // 2 + pad, cy + th // 2 + pad
+                overlay = annotated.copy()
+                cv2.rectangle(overlay, (rx1, ry1), (rx2, ry2), (0, 0, 0), -1)
+                cv2.addWeighted(overlay, 0.55, annotated, 0.45, 0, annotated)
+                cv2.putText(
+                    annotated, text,
+                    (cx - tw // 2, cy + th // 2),
+                    cv2.FONT_HERSHEY_DUPLEX, scale, (0, 0, 220), thickness, cv2.LINE_AA,
+                )
+
             ok_anno, anno_buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
             if ok_anno:
                 with _poe_loop_lock:
@@ -5264,12 +5302,23 @@ def _poe_detection_loop():
             result.pop('annotated', None)
 
             # Anomaly-detection stage: for each YOLO detection, crop the
-            # bbox out of the UNMASKED frame and compare its colour
-            # histogram against the per-class reference. Distance above
-            # threshold = defective. The class-conf-filtered detections
-            # already passed YOLO's confidence floor; here we add a second
-            # gate for purity / contamination (tape, marker, sticker, etc).
+            # bbox out of the UNMASKED frame and compare against the
+            # per-class purity envelope. Below threshold = defective.
+            #
+            # Refresh the detector's thresholds from config every cycle
+            # so the frontend purity sliders take effect live without a
+            # service restart. The dict is tiny so this is essentially
+            # free, and idempotent if nothing changed.
             detector = defect_detector.get_singleton()
+            if detector.enabled:
+                _live_thr = (
+                    cfg.get('poe_camera', {})
+                       .get('defect_detection', {})
+                       .get('thresholds') or {}
+                )
+                detector.thresholds = {
+                    k: float(v) for k, v in _live_thr.items() if v is not None
+                }
             any_defective = False
             for det in result.get('detections', []):
                 x = int(det.get('x', 0))
