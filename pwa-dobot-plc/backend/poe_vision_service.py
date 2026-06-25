@@ -224,6 +224,7 @@ def draw_detections(frame, detections):
     out = frame.copy()
     if not detections:
         return out
+    DEFECT_RED = (0, 0, 220)  # BGR — solid red for any defective cube
     for d in detections:
         x1 = int(d.get('x', 0))
         y1 = int(d.get('y', 0))
@@ -231,13 +232,42 @@ def draw_detections(frame, detections):
         y2 = y1 + int(d.get('height', 0))
         label = str(d.get('class', ''))
         conf_v = float(d.get('confidence', 0.0))
-        colour = CUBE_COLOURS.get(label, (0, 255, 0))
-        cv2.rectangle(out, (x1, y1), (x2, y2), colour, 2)
+        is_defective = bool(d.get('is_defective', False))
+        purity = float(d.get('defect_distance', 1.0))
+
+        # Defective cubes are drawn red and thicker so the operator can't
+        # miss it. Clean cubes use the per-class colour.
+        if is_defective:
+            colour = DEFECT_RED
+            thickness = 3
+        else:
+            colour = CUBE_COLOURS.get(label, (0, 255, 0))
+            thickness = 2
+        cv2.rectangle(out, (x1, y1), (x2, y2), colour, thickness)
+
+        # Top-left label: class + confidence (always shown).
         text = f"{label} {conf_v:.0%}"
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
         cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw + 4, y1), colour, -1)
         cv2.putText(out, text, (x1 + 2, y1 - 4),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1)
+
+        # Bottom-right purity badge: "DEFECT 33%" red or "OK 95%" green.
+        # Always shown so the operator can read the purity number off any
+        # cube — both for tuning the threshold and for QA sanity-checks.
+        purity_pct = int(round(purity * 100))
+        if is_defective:
+            badge_text = f"DEFECT {purity_pct}%"
+            badge_bg = DEFECT_RED
+        else:
+            badge_text = f"OK {purity_pct}%"
+            badge_bg = (0, 180, 0)  # green
+        (bw, bh), _ = cv2.getTextSize(badge_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        bx2, by2 = x2, y2 + bh + 8
+        bx1 = bx2 - bw - 8
+        cv2.rectangle(out, (bx1, y2), (bx2, by2), badge_bg, -1)
+        cv2.putText(out, badge_text, (bx1 + 4, by2 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
     return out
 
 

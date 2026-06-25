@@ -1222,16 +1222,39 @@
       list.innerHTML = '';
       (result.detections || []).forEach(d => {
         const colour = POE_CUBE_COLOURS[d.class] || '#888';
+        const purityPct = Math.round((d.defect_distance ?? 1) * 100);
+        const defective = !!d.is_defective;
+        // Defective rows get a red left-border + DEFECT badge so they
+        // stand out at a glance. Purity % always shown so the operator
+        // can see how close clean cubes are to threshold.
+        const rowClasses = defective
+          ? 'flex items-center gap-2 px-2 py-1 rounded bg-error/15 border-l-4 border-error text-xs'
+          : 'flex items-center gap-2 px-2 py-1 rounded bg-base-200 text-xs';
+        const badgeHTML = defective
+          ? `<span class="px-2 py-0.5 rounded bg-error text-white text-xs font-bold">DEFECT</span>`
+          : `<span class="px-2 py-0.5 rounded bg-success/20 text-success text-xs">OK</span>`;
         const row = document.createElement('div');
-        row.className = 'flex items-center gap-2 px-2 py-1 rounded bg-base-200 text-xs';
+        row.className = rowClasses;
         row.innerHTML = `
           <span style="width:10px;height:10px;border-radius:50%;background:${colour};flex-shrink:0;display:inline-block"></span>
           <span class="font-medium flex-1">${d.class.replace('_', ' ')}</span>
-          <span class="font-mono text-base-content/60">${(d.confidence*100).toFixed(0)}%</span>
-          <span class="font-mono text-base-content/40">${d.width}×${d.height}px</span>
+          ${badgeHTML}
+          <span class="font-mono text-base-content/60" title="YOLO confidence">${(d.confidence*100).toFixed(0)}%</span>
+          <span class="font-mono ${defective ? 'text-error font-bold' : 'text-base-content/60'}" title="Purity index (higher = cleaner)">purity ${purityPct}%</span>
         `;
         list.appendChild(row);
       });
+
+      // Top-level dominant badge: switch its text + colour when any
+      // detection is defective so the operator sees the QC verdict at
+      // the same spot they already look for the class.
+      const anyDefective = (result.detections || []).some(d => d.is_defective);
+      const dominantLabelEl = document.getElementById('poeDominantLabel');
+      const dominantDotEl   = document.getElementById('poeDominantDot');
+      if (anyDefective && dominantLabelEl) {
+        dominantLabelEl.innerHTML = `${(result.dominant || 'cube').replace('_',' ')} <span class="text-error font-bold ml-1">DEFECT</span>`;
+        if (dominantDotEl) dominantDotEl.style.backgroundColor = '#ef4444';
+      }
     }
 
     async function checkPoeModelStatus() {
