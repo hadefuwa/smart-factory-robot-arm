@@ -102,13 +102,14 @@ def _build_cube_mask(hsv: np.ndarray, envelope: dict) -> np.ndarray:
     # Loose CAPS, not floors. The training envelope's S/V minimums are
     # often too strict (clean cubes only); we want the cube mask to be
     # at least as forgiving as these caps. min() means: yellow with
-    # envelope.s_min=182 gets capped to 80 (loose), purple with
-    # envelope.s_min=160 also goes to 80, while a hypothetical
-    # already-loose class with envelope.s_min=40 keeps its 40.
-    MASK_S_MIN_CAP_CHROMATIC = 80
-    MASK_V_MIN_CAP_CHROMATIC = 80
-    MASK_V_MIN_CAP_METAL = 50
-    MASK_S_MAX_METAL_PAD = 20
+    # envelope.s_min=182 gets capped to 50 (loose), purple with
+    # envelope.s_min=160 also goes to 50, etc. Cubes in production can
+    # be noticeably dimmer than training data so the caps go lower
+    # than the domain-reviewer's S>80/V>80 recommendation.
+    MASK_S_MIN_CAP_CHROMATIC = 50
+    MASK_V_MIN_CAP_CHROMATIC = 50
+    MASK_V_MIN_CAP_METAL = 40
+    MASK_S_MAX_METAL_PAD = 30
 
     if envelope.get('kind') == 'low_sat':
         s_max = float(envelope['s_max']) + MASK_S_MAX_METAL_PAD
