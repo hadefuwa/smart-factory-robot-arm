@@ -5525,7 +5525,15 @@ def _poe_detection_loop():
             # stale colour bit high.
             io_snap = get_plc_io_snapshot() or {}
             sensor_present = bool(io_snap.get('inputs', {}).get('I0.5', False))
-            if sensor_present:
+            # Suppress the colour bits when ANY cube in frame is defective.
+            # A defective cube is treated as a rejecto-be — the PLC should
+            # see only `defect_detected` (DB124.DBX0.4) and route the cube
+            # to quarantine, not into a colour-specific bin. Without this,
+            # a yellow cube with a black tape on it would set both
+            # yellow_cube_detected (0.6) AND defect_detected (0.4), and a
+            # downstream PLC routine that latches the colour first would
+            # bin it as a clean yellow.
+            if sensor_present and not any_defective:
                 queue_cube_detection_bits(
                     yellow=(_poe_confirmed_dominant == 'yellow_cube'),
                     purple=(_poe_confirmed_dominant == 'purple_cube'),
