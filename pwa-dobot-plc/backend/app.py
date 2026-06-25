@@ -3254,7 +3254,22 @@ def update_config():
                     current_config['camera'][key].update(value)
                 else:
                     current_config['camera'][key] = value
-        
+
+        # Update poe_camera config if provided. The vision page sliders POST
+        # poe_camera.class_conf here; without this branch the payload was
+        # silently dropped and the per-class confidence thresholds never
+        # changed even though the slider UI claimed to save. Deep-merge so
+        # an update to class_conf doesn't wipe crop / mask / ip / etc.
+        if 'poe_camera' in new_config:
+            current_config.setdefault('poe_camera', {})
+            poe_update = new_config['poe_camera']
+            for key, value in poe_update.items():
+                if isinstance(value, dict):
+                    current_config['poe_camera'].setdefault(key, {})
+                    current_config['poe_camera'][key].update(value)
+                else:
+                    current_config['poe_camera'][key] = value
+
         save_config(current_config)
         apply_runtime_plc_config(current_config)
         return jsonify({'success': True, 'message': 'Configuration saved'})
