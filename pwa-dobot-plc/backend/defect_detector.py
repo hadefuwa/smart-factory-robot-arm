@@ -156,56 +156,57 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
     patch = _centre_crop(crop_bgr)
     hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
 
-    # Stage 1: cube surface mask. We need two views of the cube:
-    #   * cube_inner: tightly-eroded STRICT mask. Represents the
-    #     definitely-clean cube surface; used to compute baseline V.
-    #   * cube_area:  the convex hull of the strict mask. A dark stain
-    #     on the cube creates a "hole" in the strict mask (the pixels
-    #     fail v_min). Morphological closing can fill small holes but
-    #     not large ones — the convex hull works regardless of stain
-    #     size, giving us the cube's full outline as a solid polygon
-    #     so the defect search can see every pixel of the cube.
-    cube_mask = _build_cube_mask(hsv, envelope)
-    kernel = np.ones((KERNEL_SIZE, KERNEL_SIZE), np.uint8)
-    cube_inner = cv2.erode(cube_mask, kernel, iterations=2)
-    cube_pixels = int(cv2.countNonZero(cube_inner))
-    if cube_pixels < MIN_CUBE_PIXELS:
-        return 0.0, {
-            'reason': 'cube_mask_too_small',
-            'cube_pixels': cube_pixels,
-        }
-    cube_area = np.zeros_like(cube_mask)
-    contours, _ = cv2.findContours(cube_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if contours:
-        # Largest contour = cube body. Convex hull fills any stain holes.
-        largest = max(contours, key=cv2.contourArea)
-        hull = cv2.convexHull(largest)
-        cv2.drawContours(cube_area, [hull], 0, 255, -1)
-    else:
-        cube_area = cube_mask  # degenerate, fall back to raw mask
-
-    # Stage 2: dark-blob candidate mask inside the cube area (the
-    # dilated mask). mean_v comes only from cube_inner so it reflects
-    # the clean cube's brightness, not the dragged-down mean a stain
-    # would produce if included.
+    # Stage 1: trust YOLO's bbox as the cube area. The centre patch
+    # is, by construction, mostly cube — YOLO already told us this is
+    # a cube AND we trimmed the 25% bbox margin most likely to contain
+    # background. Earlier versions tried to re-identify the cube here
+    # using HSV thresholds (strict envelope) but that consistently
+    # under-matched on dim / heavily-stained cubes, leaving a tiny
+    # convex hull that missed the actual defect area.
     v_ch = hsv[..., 2]
     s_ch = hsv[..., 1]
-    cube_mean_v = float(cv2.mean(v_ch, mask=cube_inner)[0])
+    patch_pixels = int(v_ch.size)
+
+    # "Clean cube reference" = top quartile of brightness within the
+    # patch. The cube's clean (un-stained) surface dominates the bright
+    # end of the V distribution; even a heavily-contaminated cube has
+    # SOME clean pixels that show up here, and their mean V is a
+    # robust baseline for what "clean cube" looks like RIGHT NOW
+    # (handles lighting drift, doesn't need training data to match
+    # the current scene).
+    v_p75 = float(np.percentile(v_ch, 75))
+    clean_mask = (v_ch >= v_p75) & (v_ch <= 245)
+    clean_pixels = int(clean_mask.sum())
+    if clean_pixels < MIN_CUBE_PIXELS:
+        return 0.0, {
+            'reason': 'clean_reference_too_small',
+            'clean_pixels': clean_pixels,
+            'patch_pixels': patch_pixels,
+        }
+    cube_mean_v = float(v_ch[clean_mask].mean())
+
     dark_factor = float(envelope.get('dark_factor', DEFAULT_DARK_FACTOR))
     dark_threshold = cube_mean_v * dark_factor
 
-    candidate = np.zeros_like(v_ch, dtype=np.uint8)
-    candidate[(cube_area > 0) & (v_ch < dark_threshold)] = 255
+    # Stage 2: dark-blob candidate mask. Anything in the patch darker
+    # than the threshold is a candidate contamination pixel.
+    candidate = (v_ch < dark_threshold).astype(np.uint8) * 255
 
     # Metal also flags highly-saturated patches: a coloured tape /
     # sticker on a grey cube barely changes brightness but spikes
-    # saturation. Skip for chromatic classes (their cube mask already
-    # rejects out-of-range hues / low S).
+    # saturation. Skip for chromatic classes (their dark-blob check
+    # already catches most contamination).
     if envelope.get('kind') == 'low_sat':
         defect_s_min = float(
             envelope.get('defect_s_min', envelope.get('s_max', 100) + 30)
         )
-        candidate[(cube_area > 0) & (s_ch >= defect_s_min)] = 255
+        candidate[s_ch >= defect_s_min] = 255
+
+    # Re-purpose kernel for the morphology cleanup below.
+    kernel = np.ones((KERNEL_SIZE, KERNEL_SIZE), np.uint8)
+    # For the debug + return values we no longer have a separate cube
+    # mask, so cube_pixels = patch_pixels (denominator for defect %).
+    cube_pixels = patch_pixels
 
     # Stage 3: morphology cleanup. Open removes noise pixels, close
     # joins near-adjacent ones into a single blob.

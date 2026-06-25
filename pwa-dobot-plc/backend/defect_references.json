@@ -9,8 +9,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 224.0
     },
-    "train_max_defect_pct": 0.0,
-    "train_mean_defect_pct": 0.0,
+    "train_max_defect_pct": 0.30236393622869706,
+    "train_mean_defect_pct": 0.02748763056624519,
     "crop_count": 11
   },
   "purple_cube": {
@@ -23,8 +23,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 217.0
     },
-    "train_max_defect_pct": 22.385740402193786,
-    "train_mean_defect_pct": 1.7596776637100788,
+    "train_max_defect_pct": 77.78815617410798,
+    "train_mean_defect_pct": 41.25088627814253,
     "crop_count": 13
   },
   "metal_cube": {
@@ -36,8 +36,8 @@
       "dark_factor": 0.55,
       "median_sat_train": 54.0
     },
-    "train_max_defect_pct": 17.278957420514548,
-    "train_mean_defect_pct": 2.643932648806381,
+    "train_max_defect_pct": 49.13837388502312,
+    "train_mean_defect_pct": 18.46898205683013,
     "crop_count": 19
   }
 }
