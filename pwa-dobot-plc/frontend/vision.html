@@ -472,6 +472,47 @@
     color: var(--sf-base-muted);
     font-weight: 600;
   }
+
+  /* Collapsible settings sections under the camera feed. Native
+     <details> works but its default disclosure triangle is easy to
+     miss; we hide it and render an explicit chevron that rotates on
+     open, plus a hover background that signals "click me". */
+  .sf-collapsible {
+    transition: background-color 0.15s ease;
+  }
+  .sf-collapsible > summary {
+    list-style: none;
+    user-select: none;
+    padding: 0.25rem 0.25rem 0.25rem 0;
+    border-radius: 0.5rem;
+    transition: background-color 0.15s ease;
+    position: relative;
+    padding-left: 1.75rem;
+  }
+  .sf-collapsible > summary::-webkit-details-marker {
+    display: none;
+  }
+  .sf-collapsible > summary::before {
+    content: '\25B6';            /* ▶ — rotates to ▼ when open */
+    position: absolute;
+    left: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    color: var(--sf-base-muted, #9ca3af);
+    transition: transform 0.15s ease, color 0.15s ease;
+    display: inline-block;
+  }
+  .sf-collapsible[open] > summary::before {
+    transform: translateY(-50%) rotate(90deg);
+    color: var(--sf-info-ui, #2196f3);
+  }
+  .sf-collapsible > summary:hover {
+    background: color-mix(in srgb, var(--sf-info-ui, #2196f3) 10%, transparent);
+  }
+  .sf-collapsible > summary:hover::before {
+    color: var(--sf-info-ui, #2196f3);
+  }
  </style>
  
  <!-- PWA Manifest -->
@@ -699,7 +740,7 @@
                  ================================================================== -->
 
             <!-- Per-class YOLO confidence thresholds -->
-            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+            <details class="sf-collapsible mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
               <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Per-class confidence</span>
                 <span id="poeClassConfSaveStatus" class="text-xs text-base-content/50"></span>
@@ -727,7 +768,7 @@
             </details>
 
             <!-- Max defect % thresholds -->
-            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+            <details class="sf-collapsible mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
               <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Max defect % (reject threshold)</span>
                 <span id="poeDefectSaveStatus" class="text-xs text-base-content/50"></span>
@@ -758,7 +799,7 @@
             </details>
 
             <!-- Camera focus -->
-            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
+            <details class="sf-collapsible mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2">
               <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera focus</span>
                 <span id="cameraFocusSaveStatus" class="text-xs text-base-content/50"></span>
@@ -780,7 +821,7 @@
             </details>
 
             <!-- Camera settings (brightness, contrast, etc.) -->
-            <details class="mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2" id="cameraControlsBlock">
+            <details class="sf-collapsible mb-2 p-3 rounded-box border border-base-300 bg-base-200 space-y-2" id="cameraControlsBlock">
               <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
                 <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera settings (brightness, contrast, exposure, white balance)</span>
                 <span id="cameraControlsSaveStatus" class="text-xs text-base-content/50"></span>
@@ -796,7 +837,7 @@
 
           <section class="sf-stage sf-stage-3">
             <article class="sf-panel">
-              <details class="space-y-2">
+              <details class="sf-collapsible space-y-2">
                 <summary class="cursor-pointer flex items-center gap-2">
                   <h3 class="text-base font-semibold">Debug Console</h3>
                   <span class="text-xs text-base-content/50">— checks &amp; engineering events</span>
