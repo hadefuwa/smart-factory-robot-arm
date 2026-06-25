@@ -5309,6 +5309,24 @@ def _poe_detection_loop():
             # Drop the inline annotated frame — the pump owns the cache.
             result.pop('annotated', None)
 
+            # Cap to N highest-confidence detections per frame. The
+            # glass conveyor surface causes mirror reflections that
+            # YOLO sees as a second (lower-confidence) cube below the
+            # real one. Sorting by YOLO confidence and keeping only the
+            # top N drops the reflection cleanly without any geometric
+            # heuristic. Default = 1; raise via config if you actually
+            # want multi-cube tracking in frame.
+            max_dets = int(cfg.get('poe_camera', {}).get('max_detections', 1))
+            if max_dets > 0:
+                dets = result.get('detections', [])
+                if len(dets) > max_dets:
+                    dets.sort(key=lambda d: float(d.get('confidence', 0)), reverse=True)
+                    dets[:] = dets[:max_dets]
+                    result['detections'] = dets
+                    # Refresh dominant + count to match the trimmed list.
+                    result['count'] = len(dets)
+                    result['dominant'] = dets[0]['class'] if dets else None
+
             # Anomaly-detection stage: for each YOLO detection, crop the
             # bbox out of the UNMASKED frame and compare against the
             # per-class purity envelope. Below threshold = defective.

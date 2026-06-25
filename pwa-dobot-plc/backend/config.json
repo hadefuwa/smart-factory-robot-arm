@@ -211,6 +211,8 @@
       "metal_cube": 0.60
     },
     "class_conf_note": "Per-class minimum confidence. Yellow is permissive because the trained model under-detects it; metal is strict because it produces frequent false positives at low confidence. Tune from the Vision page sliders.",
+    "max_detections": 1,
+    "max_detections_note": "Cap on cubes per frame after YOLO. The glass conveyor surface produces mirror reflections that YOLO scores as a second lower-confidence cube. Keep at 1 so only the real cube survives. Raise to 2-3 only if multi-cube tracking in frame is genuinely needed.",
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
     "crop": {
       "enabled": false,
