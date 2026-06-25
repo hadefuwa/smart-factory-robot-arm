@@ -5436,6 +5436,38 @@ def _poe_detection_loop():
                 detector.thresholds = {
                     k: float(v) for k, v in _live_thr.items() if v is not None
                 }
+
+            # Hue sanity-check filter. YOLO was only trained on yellow /
+            # purple / metal cubes — any other colour (red, green) ends
+            # up classified as the nearest hue neighbour. Drop any
+            # detection whose actual cube colour disagrees with the YOLO
+            # label by comparing the bbox-centre patch against the
+            # class's HSV envelope. <MIN_CLASS_MATCH = wrong class.
+            MIN_CLASS_MATCH = float(
+                cfg.get('poe_camera', {}).get('min_class_match', 0.10)
+            )
+            if detector.enabled and MIN_CLASS_MATCH > 0.0:
+                kept = []
+                for det in result.get('detections', []):
+                    envelope = detector.envelopes.get(det.get('class'))
+                    if envelope is None:
+                        kept.append(det)
+                        continue
+                    cx = int(det.get('x', 0)); cy = int(det.get('y', 0))
+                    cw = int(det.get('width', 0)); ch = int(det.get('height', 0))
+                    if cw <= 0 or ch <= 0:
+                        kept.append(det)
+                        continue
+                    crop = unmasked[max(0, cy):cy + ch, max(0, cx):cx + cw]
+                    match = defect_detector.class_match_fraction(crop, envelope)
+                    det['class_match'] = round(match, 3)
+                    if match >= MIN_CLASS_MATCH:
+                        kept.append(det)
+                # Refresh dominant / count to match the surviving list.
+                if len(kept) != len(result.get('detections', [])):
+                    result['detections'] = kept
+                    result['count'] = len(kept)
+                    result['dominant'] = kept[0]['class'] if kept else None
             any_defective = False
             # Track if any class was seen this cycle so we can clear
             # stale buffers when a cube leaves the frame.

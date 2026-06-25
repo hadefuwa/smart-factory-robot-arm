@@ -293,6 +293,34 @@ class DefectDetector:
         return (defect_pct > thr, defect_pct, debug)
 
 
+def class_match_fraction(crop_bgr: np.ndarray, envelope: dict) -> float:
+    """Return 0..1 = fraction of centre-patch pixels that match the
+    class's loose HSV envelope.
+
+    Used to drop YOLO mis-classifications: if YOLO says "yellow_cube"
+    but the cube is actually red (hue 0..5), almost none of the patch
+    passes the yellow envelope (hue 8..34) so this returns ~0.0 and
+    the caller drops the detection. Likewise green called "yellow",
+    red called "purple", etc.
+
+    The envelope used is the same loose one the cube mask itself
+    uses (S/V caps at 50), so dim cubes of the right colour still
+    score high.
+    """
+    if crop_bgr is None or crop_bgr.size == 0:
+        return 0.0
+    if crop_bgr.ndim != 3 or crop_bgr.shape[2] != 3:
+        return 0.0
+    if not envelope:
+        return 1.0  # no envelope = no opinion = let it through
+    patch = _centre_crop(crop_bgr)
+    if patch.size == 0:
+        return 0.0
+    hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+    cube_mask = _build_cube_mask(hsv, envelope)
+    return float(cv2.countNonZero(cube_mask)) / float(cube_mask.size)
+
+
 _singleton = DefectDetector()
 
 
