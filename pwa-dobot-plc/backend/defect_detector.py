@@ -175,9 +175,14 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
     # avoids polluting the reference with mirror-bright reflections,
     # which would otherwise drag the baseline up and miss real stains.
     # Skipping V<p60 keeps the band restricted to the brighter half.
-    HIGHLIGHT_CAP = 240
-    v_p60 = float(np.percentile(v_ch, 60))
-    clean_mask = (v_ch >= v_p60) & (v_ch < HIGHLIGHT_CAP)
+    # Use median+ as the clean band. Highlights are fine in the
+    # reference — if the cube has reflective spots, those define
+    # "this is what bright cube looks like" and a stain still reads
+    # much darker. Earlier versions tried capping highlights at 240
+    # but on cubes that have specular reflections covering most of
+    # the patch, that cap left zero pixels for the reference.
+    v_p50 = float(np.percentile(v_ch, 50))
+    clean_mask = v_ch >= v_p50
     clean_pixels = int(clean_mask.sum())
     if clean_pixels < MIN_CUBE_PIXELS:
         return 0.0, {
