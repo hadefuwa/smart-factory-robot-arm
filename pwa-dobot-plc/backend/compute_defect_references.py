@@ -1,16 +1,16 @@
 """
-Build per-class purity envelopes for the defect detector.
+Build per-class envelopes for the two-stage defect detector.
 
-Walks the YOLO training labels in cube-training/, crops each positive
-bbox from its source image, learns the expected HSV envelope per class,
-and records the worst clean-training purity seen so the inference path
-has a sensible auto-threshold floor.
+Walks the YOLO training labels, crops each positive bbox, learns the
+HSV envelope that identifies clean cube pixels, and runs the same
+detect() the inference loop uses against each clean training crop. The
+worst defect_pct seen on the clean data becomes train_max_defect_pct —
+the noise floor — so the inference auto-threshold can sit above it.
 
-Run after every retrain (envelopes change with the dataset):
+Run after every retrain (envelopes adapt to the dataset):
     python compute_defect_references.py
 
-Output: defect_references.json next to this script. Plain JSON so you
-can eyeball envelopes and tune by hand if needed.
+Output: defect_references.json next to this script.
 """
 
 import json
@@ -22,9 +22,8 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from defect_detector import collect_cube_pixels, build_envelope, purity_index  # noqa: E402
+from defect_detector import detect, _centre_crop  # noqa: E402
 
-# Project class order: 0=yellow_cube, 1=purple_cube, 2=metal_cube.
 CLASS_NAMES = {0: 'yellow_cube', 1: 'purple_cube', 2: 'metal_cube'}
 
 CANDIDATE_ROOTS = [
@@ -33,6 +32,14 @@ CANDIDATE_ROOTS = [
 ]
 
 OUTPUT_PATH = os.path.join(HERE, 'defect_references.json')
+
+# Hue-range margins added to the p5-p95 of training hues so single
+# crops with hue drift don't fall outside the envelope.
+HUE_MARGIN = 10
+# Floor / cap absolute defaults so envelopes never collapse to nonsense
+# on small / noisy training sets.
+MIN_V_FLOOR = 5
+DEFAULT_DARK_FACTOR = 0.55
 
 
 def find_training_root():
@@ -62,6 +69,41 @@ def crop_from_label_line(img, line):
     return cls, img[y0:y1, x0:x1]
 
 
+def build_envelope_from_pixels(all_h, all_s, all_v):
+    """Decide chromatic vs low-sat from the saturation distribution,
+    then derive envelope thresholds with margins applied."""
+    median_sat = float(np.median(all_s))
+    if median_sat < 60:
+        # Metal: low saturation defines the cube surface.
+        s_max = float(np.percentile(all_s, 95)) + 10.0
+        v_min = max(MIN_V_FLOOR, float(np.percentile(all_v, 2)) - 10.0)
+        # Coloured-tape defect signal: anything more saturated than this
+        # is foreign. Sits well above the cube's own s_max.
+        defect_s_min = s_max + 40.0
+        return {
+            'kind': 'low_sat',
+            's_max': round(s_max, 1),
+            'v_min': round(v_min, 1),
+            'defect_s_min': round(defect_s_min, 1),
+            'dark_factor': DEFAULT_DARK_FACTOR,
+            'median_sat_train': round(median_sat, 1),
+        }
+    # Chromatic: hue range + S floor + V floor.
+    h_low = max(0.0, float(np.percentile(all_h, 5)) - HUE_MARGIN)
+    h_high = min(179.0, float(np.percentile(all_h, 95)) + HUE_MARGIN)
+    s_min = max(40.0, float(np.percentile(all_s, 10)) - 20.0)
+    v_min = max(MIN_V_FLOOR, float(np.percentile(all_v, 2)) - 10.0)
+    return {
+        'kind': 'hue_range',
+        'h_low': round(h_low, 1),
+        'h_high': round(h_high, 1),
+        's_min': round(s_min, 1),
+        'v_min': round(v_min, 1),
+        'dark_factor': DEFAULT_DARK_FACTOR,
+        'median_sat_train': round(median_sat, 1),
+    }
+
+
 def main():
     root = find_training_root()
     if root is None:
@@ -72,7 +114,6 @@ def main():
     labels_dir = os.path.join(root, 'cube_labels')
     print(f"Using training root: {root}")
 
-    per_class_pixels = {name: [] for name in CLASS_NAMES.values()}
     per_class_crops = {name: [] for name in CLASS_NAMES.values()}
     processed = 0
     skipped = 0
@@ -102,46 +143,62 @@ def main():
             if cls_name is None:
                 skipped += 1
                 continue
-            pixels = collect_cube_pixels(crop)
-            if pixels is None or len(pixels) == 0:
-                skipped += 1
-                continue
-            per_class_pixels[cls_name].append(pixels)
             per_class_crops[cls_name].append(crop)
             processed += 1
 
     print(f"\nProcessed {processed} crops; skipped {skipped}.")
-    for name, pix_list in per_class_pixels.items():
-        print(f"  {name:13s}: {len(pix_list)} crops")
+    for name, crops in per_class_crops.items():
+        print(f"  {name:13s}: {len(crops)} crops")
 
     output = {}
-    print("\nClass envelopes + training-data purity:")
-    for cls_name, pix_list in per_class_pixels.items():
-        if len(pix_list) < 2:
-            print(f"  {cls_name:13s}: skipped (only {len(pix_list)} crops)")
+    print("\nClass envelopes + training-data defect %:")
+    for cls_name, crops in per_class_crops.items():
+        if len(crops) < 2:
+            print(f"  {cls_name:13s}: skipped ({len(crops)} crops)")
             continue
 
-        envelope = build_envelope(pix_list)
-        purities = [purity_index(c, envelope) for c in per_class_crops[cls_name]]
-        worst = float(min(purities))
-        mean = float(np.mean(purities))
+        # Aggregate HSV pixels across all crops to learn the envelope.
+        all_h = []
+        all_s = []
+        all_v = []
+        for c in crops:
+            patch = _centre_crop(c)
+            hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+            all_h.append(hsv[..., 0].ravel())
+            all_s.append(hsv[..., 1].ravel())
+            all_v.append(hsv[..., 2].ravel())
+        all_h = np.concatenate(all_h)
+        all_s = np.concatenate(all_s)
+        all_v = np.concatenate(all_v)
+
+        envelope = build_envelope_from_pixels(all_h, all_s, all_v)
+
+        # Run the actual two-stage detect() against each clean crop.
+        # Worst (max) defect_pct = the noise floor; the inference path
+        # uses 2× this as the auto-threshold so clean cubes are safe.
+        defect_pcts = []
+        for c in crops:
+            pct, _ = detect(c, envelope)
+            defect_pcts.append(pct)
+        worst = float(max(defect_pcts))
+        mean = float(np.mean(defect_pcts))
 
         output[cls_name] = {
             'envelope': envelope,
-            'train_min_purity': worst,
-            'train_mean_purity': mean,
-            'crop_count': len(pix_list),
+            'train_max_defect_pct': worst,
+            'train_mean_defect_pct': mean,
+            'crop_count': len(crops),
         }
 
         if envelope['kind'] == 'low_sat':
-            print(f"  {cls_name:13s}: low-sat envelope s<={envelope['s_max']:.0f}  "
-                  f"train mean purity={mean:.3f}  worst={worst:.3f}  "
-                  f"-> suggested threshold={0.5*worst:.3f}")
+            print(f"  {cls_name:13s}: low-sat s<={envelope['s_max']:.0f} v>={envelope['v_min']:.0f}  "
+                  f"defect %: mean={mean:.2f} worst={worst:.2f}  "
+                  f"-> auto-threshold={2*worst:.2f}")
         else:
-            print(f"  {cls_name:13s}: hue [{envelope['h_low']:.0f},{envelope['h_high']:.0f}] "
-                  f"sat>={envelope['s_min']:.0f}  "
-                  f"train mean purity={mean:.3f}  worst={worst:.3f}  "
-                  f"-> suggested threshold={0.5*worst:.3f}")
+            print(f"  {cls_name:13s}: hue[{envelope['h_low']:.0f},{envelope['h_high']:.0f}] "
+                  f"s>={envelope['s_min']:.0f} v>={envelope['v_min']:.0f}  "
+                  f"defect %: mean={mean:.2f} worst={worst:.2f}  "
+                  f"-> auto-threshold={2*worst:.2f}")
 
     if not output:
         print("ERROR: no envelopes built.")

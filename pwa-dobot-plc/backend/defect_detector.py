@@ -1,33 +1,39 @@
 """
-Per-class purity-index anomaly detector for cube QC.
+Two-stage per-class defect detector for cube QC.
 
-Two-stage QC pipeline downstream of YOLO:
+Pipeline:
     USB frame --> YOLO detect --> for each cube crop:
-                                    purity index (%) vs class threshold
-                                    --> defective if below threshold
+      stage 1:  build a "cube surface" mask using the class envelope
+                (chromatic: hue + S/V floors; metal: S cap + V floor)
+                then erode it to drop cube edges + shadow halos
+      stage 2:  inside that mask, look for dark blobs (V below an
+                adaptive threshold = mean cube V × dark_factor). For
+                metal we ALSO flag highly-saturated patches because a
+                coloured stain on grey metal disrupts saturation rather
+                than brightness.
+      stage 3:  morphological opening + closing on the candidate blob
+                mask to drop noise pixels and join close-together pixels
+      stage 4:  defect_pct = blob area / cube area × 100. Defective if
+                this exceeds the configured threshold.
 
-Trained only on clean cube examples — flags ANY visual disruption (tape,
-sticker, marker, dirt, contamination) without ever having seen those
-defects during training. Pure anomaly detection, no labelled defective
-data required.
+Why this design (from a domain reviewer):
+  * Hue is unreliable for dark pixels — a dark stain still has noisy
+    "yellow-ish" H values, which fooled the earlier hue-only check.
+    Looking at V *relative to the cube's own mean V* is robust to both
+    contamination and lighting drift.
+  * Eroding the cube mask before the blob check kills the "halo of
+    dark pixels along the rounded cube edge" problem that would
+    otherwise false-positive on every clean cube.
+  * Morphological open + close removes single-pixel noise but keeps any
+    real contamination blob intact, so the metric (blob area %) tracks
+    actual defects rather than noise.
 
-Why purity index over histogram distance:
-  Histogram distance (Bhattacharyya etc.) is hard to interpret and
-  proved noisy on these cubes — within-class variance was 0.5+ even
-  between clean cubes of the same class (specular highlights, slight
-  framing differences). Bad signal-to-noise for the defect signal.
+Class envelopes are still learned at training-time from clean YOLO
+positives (see compute_defect_references.py). The dark_factor and
+max_defect_pct sit in config.json so an operator can tune them per
+class from the page sliders without retraining.
 
-  Purity index measures fraction of cube pixels that fall inside the
-  expected hue + saturation envelope for the class. A clean yellow cube
-  reads 85-95%. A yellow cube with black tape covering 30% of its face
-  reads ~65% — tape pixels fall outside the yellow envelope. Trivially
-  interpretable.
-
-Class envelopes are learned at training-time from existing positive
-YOLO labels (see compute_defect_references.py). Stored in
-defect_references.json next to this module.
-
-Lightweight: ~1 ms per crop on Pi 5. cv2 + numpy only.
+Lightweight: ~2 ms per crop on Pi 5. cv2 + numpy only.
 """
 
 import logging
@@ -39,24 +45,26 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Fraction of the bbox to keep for purity computation (centred). YOLO
-# bboxes typically have ~15-25% background around the cube. Sampling the
-# centre keeps us inside the cube proper.
-CENTRE_FRACTION = 0.65
+# Fraction of the bbox to keep for analysis (centred). YOLO bboxes often
+# have ~15-25% background around the cube; the centre patch keeps us
+# inside the cube proper. Combined with mask erosion below, edges and
+# shadow halos are reliably excluded.
+CENTRE_FRACTION = 0.75
 
-# Specular highlights (V > MAX_VALUE) are reflections from lights —
-# they're not the cube colour and they're not a defect, so we drop them
-# from the denominator entirely. Dark pixels are NOT pre-filtered: a
-# black mark / tape / marker is the cube's surface, just defective, so
-# it must register as "out of envelope" (defect signal) rather than be
-# ignored. The envelope itself enforces a minimum value to catch this.
-MAX_VALUE = 245
-# Absolute hard floor for v_min — pixels below this are basically black
-# and never represent the cube's intended colour, regardless of how dark
-# the class is. Set low enough that genuinely-dark classes (like the
-# purple-cube training set which has V medians of 24-33) still pass.
-DEFAULT_MIN_VALUE = 8
-DEFAULT_MIN_SAT = 25
+# Morphology kernel for mask erosion + open/close. 5x5 is large enough
+# to drop single-pixel noise on a 480x640 frame.
+KERNEL_SIZE = 5
+
+# Default dark threshold = cube_mean_v × this. 0.55 means "anything
+# darker than 55% of the cube's average brightness is a candidate
+# defect". Per-class override lives in the envelope.
+DEFAULT_DARK_FACTOR = 0.55
+
+# Minimum cube-mask pixel count before we trust the analysis. If the
+# cube mask is tiny, the bbox probably didn't catch the cube cleanly
+# (e.g. cube partially out of frame) — return "not defective" rather
+# than guessing.
+MIN_CUBE_PIXELS = 200
 
 
 def _centre_crop(crop_bgr: np.ndarray, fraction: float = CENTRE_FRACTION) -> np.ndarray:
@@ -71,121 +79,114 @@ def _centre_crop(crop_bgr: np.ndarray, fraction: float = CENTRE_FRACTION) -> np.
     return crop_bgr[y0:y0 + keep_h, x0:x0 + keep_w]
 
 
-def collect_cube_pixels(crop_bgr: np.ndarray) -> Optional[np.ndarray]:
-    """Return an (N, 3) array of HSV pixels from the cube's centre patch.
+def _build_cube_mask(hsv: np.ndarray, envelope: dict) -> np.ndarray:
+    """Build a binary mask of pixels that look like this cube class.
 
-    Only specular highlights (V > MAX_VALUE) are stripped — they're
-    reflections, not the cube. Dark pixels are KEPT in the denominator
-    so black tape / marker shows up as out-of-envelope defect signal.
+    Returns a uint8 mask, 255 = cube surface, 0 = anything else.
+    """
+    h_ch, s_ch, v_ch = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+
+    if envelope.get('kind') == 'low_sat':
+        # Metal: low saturation + reasonable brightness identifies the
+        # cube surface. Highlights (V > 245) and shadows (V < v_min)
+        # are excluded.
+        s_max = envelope['s_max']
+        v_min = envelope['v_min']
+        mask = (
+            (s_ch <= s_max) &
+            (v_ch >= v_min) &
+            (v_ch <= 245)
+        ).astype(np.uint8) * 255
+    else:
+        # Chromatic: right hue, enough saturation, enough brightness.
+        h_low = envelope['h_low']
+        h_high = envelope['h_high']
+        s_min = envelope['s_min']
+        v_min = envelope['v_min']
+        mask = (
+            (h_ch >= h_low) & (h_ch <= h_high) &
+            (s_ch >= s_min) &
+            (v_ch >= v_min) & (v_ch <= 245)
+        ).astype(np.uint8) * 255
+
+    return mask
+
+
+def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
+    """Run the two-stage defect detector on a single cube crop.
+
+    Returns (defect_pct, debug). defect_pct is 0..100. The caller
+    decides defective-or-not based on the configured threshold.
+
+    debug holds intermediate measurements useful for logging / HMI:
+        cube_pixels:   int   pixels in the eroded cube mask
+        cube_mean_v:   float average brightness of the cube surface
+        dark_threshold:float V cutoff used for blob detection
+        defect_pixels: int   pixels in the cleaned defect mask
     """
     if crop_bgr is None or crop_bgr.size == 0:
-        return None
+        return 0.0, {'reason': 'empty_crop'}
     if crop_bgr.ndim != 3 or crop_bgr.shape[2] != 3:
-        return None
+        return 0.0, {'reason': 'bad_shape'}
+
     patch = _centre_crop(crop_bgr)
     hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
-    v_ch = hsv[..., 2]
-    valid = v_ch <= MAX_VALUE
-    if not valid.any():
-        return None
-    return hsv[valid]
 
-
-def build_envelope(pixels_per_crop: list) -> dict:
-    """Build a single class envelope from many crops' worth of HSV pixels.
-
-    Strategy:
-      * For chromatic classes (yellow / purple), constrain by hue range
-        AND a brightness floor learned from training data. Dark stains /
-        ink / tape on a brightly-coloured cube fall in the right hue but
-        with low V, so the floor catches them.
-      * For low-saturation classes (metal), hue is unstable so we use a
-        saturation cap + brightness floor instead — anything more
-        saturated than the cap is "foreign", anything darker than the
-        floor is dirt / tape.
-    """
-    all_h = np.concatenate([p[:, 0] for p in pixels_per_crop])
-    all_s = np.concatenate([p[:, 1] for p in pixels_per_crop])
-    all_v = np.concatenate([p[:, 2] for p in pixels_per_crop])
-
-    median_sat = float(np.median(all_s))
-
-    # Per-class V floor: 2nd percentile of training V minus 10. This
-    # adapts to the actual brightness distribution of the class. Bright
-    # yellow ends up with a floor around 100 (so a dark ink stain on
-    # yellow at V≈50 reads as out-of-envelope = defective). Darker
-    # purple ends up around 10 (purple has V medians of 24-33 in the
-    # training data — its floor catches near-black stains only).
-    v_min = max(DEFAULT_MIN_VALUE, float(np.percentile(all_v, 2)) - 10.0)
-
-    if median_sat < 60:
-        s_cap = float(np.percentile(all_s, 95)) + 5.0
-        return {
-            'kind': 'low_sat',
-            's_max': s_cap,
-            'v_min': v_min,
-            'median_sat_train': median_sat,
+    # Stage 1: identify the cube surface, then erode to drop edges.
+    cube_mask = _build_cube_mask(hsv, envelope)
+    kernel = np.ones((KERNEL_SIZE, KERNEL_SIZE), np.uint8)
+    cube_inner = cv2.erode(cube_mask, kernel, iterations=2)
+    cube_pixels = int(cv2.countNonZero(cube_inner))
+    if cube_pixels < MIN_CUBE_PIXELS:
+        return 0.0, {
+            'reason': 'cube_mask_too_small',
+            'cube_pixels': cube_pixels,
         }
 
-    # Hue range with generous margins. The raw p5-p95 envelope was too
-    # narrow on purple (~7 H values) — individual training crops with
-    # hue 8-10 units outside the per-pixel distribution fell entirely
-    # out of range and tanked clean purity. Adding ±10 margin makes the
-    # envelope cover the natural between-crop variance without being so
-    # wide it lets defective hues sneak in (yellow is ~20 wide after
-    # margin, still far from green or red).
-    h_low = max(0.0, float(np.percentile(all_h, 5)) - 10.0)
-    h_high = min(179.0, float(np.percentile(all_h, 95)) + 10.0)
-    s_min = max(DEFAULT_MIN_SAT, float(np.percentile(all_s, 10)) - 10.0)
-    return {
-        'kind': 'hue_range',
-        'h_low': h_low,
-        'h_high': h_high,
-        's_min': s_min,
-        'v_min': v_min,
-        'median_sat_train': median_sat,
+    # Stage 2: dark-blob candidate mask inside the cube.
+    v_ch = hsv[..., 2]
+    s_ch = hsv[..., 1]
+    cube_mean_v = float(cv2.mean(v_ch, mask=cube_inner)[0])
+    dark_factor = float(envelope.get('dark_factor', DEFAULT_DARK_FACTOR))
+    dark_threshold = cube_mean_v * dark_factor
+
+    candidate = np.zeros_like(v_ch, dtype=np.uint8)
+    candidate[(cube_inner > 0) & (v_ch < dark_threshold)] = 255
+
+    # Metal also flags highly-saturated patches: a coloured tape /
+    # sticker on a grey cube barely changes brightness but spikes
+    # saturation. Skip for chromatic classes (their cube mask already
+    # rejects out-of-range hues / low S).
+    if envelope.get('kind') == 'low_sat':
+        defect_s_min = float(
+            envelope.get('defect_s_min', envelope.get('s_max', 100) + 30)
+        )
+        candidate[(cube_inner > 0) & (s_ch >= defect_s_min)] = 255
+
+    # Stage 3: morphology cleanup. Open removes noise pixels, close
+    # joins near-adjacent ones into a single blob.
+    cleaned = cv2.morphologyEx(candidate, cv2.MORPH_OPEN, kernel)
+    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel)
+    defect_pixels = int(cv2.countNonZero(cleaned))
+
+    defect_pct = (defect_pixels / cube_pixels) * 100.0
+    return defect_pct, {
+        'cube_pixels': cube_pixels,
+        'cube_mean_v': round(cube_mean_v, 1),
+        'dark_threshold': round(dark_threshold, 1),
+        'defect_pixels': defect_pixels,
     }
 
 
-def purity_index(crop_bgr: np.ndarray, envelope: dict) -> float:
-    """Fraction (0..1) of valid cube pixels that fall inside the class
-    envelope. 1.0 = perfectly clean, 0.0 = nothing matches.
-    """
-    pixels = collect_cube_pixels(crop_bgr)
-    if pixels is None or len(pixels) == 0:
-        return 0.0
-    h, s, v = pixels[:, 0], pixels[:, 1], pixels[:, 2]
-
-    v_min = envelope.get('v_min', DEFAULT_MIN_VALUE)
-
-    if envelope.get('kind') == 'low_sat':
-        # Metal: low saturation AND non-black. Black tape / ink on a
-        # metal cube is "low sat" too, so the v_min floor is what calls
-        # it defective.
-        in_range = (v >= v_min) & (s <= envelope['s_max'])
-    else:
-        # Chromatic (yellow / purple): right hue AND bright enough.
-        # Without the v_min check, dark-yellow stains (e.g. ink that's
-        # technically still in the yellow hue range but dim) would
-        # register as clean yellow and miss the defect. The brightness
-        # floor is learned per class, so it adapts to purple being
-        # naturally darker than yellow.
-        in_range = (
-            (h >= envelope['h_low']) &
-            (h <= envelope['h_high']) &
-            (v >= v_min)
-        )
-
-    return float(in_range.sum()) / float(len(pixels))
-
-
 class DefectDetector:
-    """Holds per-class envelopes + thresholds, runs the purity check."""
+    """Holds per-class envelopes + thresholds, runs the defect check."""
 
     def __init__(self):
         self.envelopes: Dict[str, dict] = {}
+        # Per-class "max defect % before rejecting". Higher = more
+        # forgiving.
         self.thresholds: Dict[str, float] = {}
-        self.training_min_purity: Dict[str, float] = {}
+        self.training_max_defect: Dict[str, float] = {}
         self.enabled: bool = False
 
     def load(self, refs_path: str, thresholds: Dict[str, float]) -> bool:
@@ -206,32 +207,38 @@ class DefectDetector:
             return False
 
         self.envelopes = {}
-        self.training_min_purity = {}
+        self.training_max_defect = {}
         for cls, entry in data.items():
             self.envelopes[cls] = entry.get('envelope', {})
-            self.training_min_purity[cls] = float(entry.get('train_min_purity', 1.0))
+            self.training_max_defect[cls] = float(entry.get('train_max_defect_pct', 1.0))
 
         self.thresholds = dict(thresholds) if thresholds else {}
         self.enabled = bool(self.envelopes)
         logger.info(
-            "DefectDetector loaded envelopes for %s; thresholds=%s; train_min_purity=%s",
-            list(self.envelopes.keys()), self.thresholds, self.training_min_purity
+            "DefectDetector loaded envelopes for %s; thresholds=%s; train_max_defect_pct=%s",
+            list(self.envelopes.keys()), self.thresholds, self.training_max_defect
         )
         return self.enabled
 
-    def check(self, crop_bgr: np.ndarray, class_name: str) -> Tuple[bool, float]:
-        """Return (is_defective, purity_0to1) for one cube crop."""
+    def check(self, crop_bgr: np.ndarray, class_name: str) -> Tuple[bool, float, dict]:
+        """Return (is_defective, defect_pct, debug) for one cube crop.
+
+        is_defective = defect_pct > class threshold (max defect %).
+        """
         if not self.enabled:
-            return (False, 1.0)
+            return (False, 0.0, {'reason': 'disabled'})
         envelope = self.envelopes.get(class_name)
         if envelope is None:
-            return (False, 1.0)
-        p = purity_index(crop_bgr, envelope)
+            return (False, 0.0, {'reason': 'unknown_class'})
+        defect_pct, debug = detect(crop_bgr, envelope)
         thr = self.thresholds.get(class_name)
         if thr is None:
-            # Auto: 0.5 × worst clean training purity.
-            thr = 0.5 * self.training_min_purity.get(class_name, 0.8)
-        return (p < thr, p)
+            # Auto-threshold: max of (1.5%, 2× worst clean-training
+            # defect %). The 1.5% floor stops yellow (which scores 0%
+            # on its clean training data) from flagging every speck of
+            # sensor noise as a defect.
+            thr = max(1.5, 2.0 * self.training_max_defect.get(class_name, 1.0))
+        return (defect_pct > thr, defect_pct, debug)
 
 
 _singleton = DefectDetector()

@@ -5326,13 +5326,14 @@ def _poe_detection_loop():
                 w = int(det.get('width', 0))
                 h = int(det.get('height', 0))
                 if w <= 0 or h <= 0:
-                    det['defect_distance'] = 0.0
+                    det['defect_pct'] = 0.0
                     det['is_defective'] = False
                     continue
                 crop = unmasked[max(0, y):y + h, max(0, x):x + w]
-                defective, dist = detector.check(crop, det.get('class', ''))
-                det['defect_distance'] = round(dist, 4)
+                defective, pct, debug = detector.check(crop, det.get('class', ''))
+                det['defect_pct'] = round(pct, 2)
                 det['is_defective'] = defective
+                det['defect_debug'] = debug
                 if defective:
                     any_defective = True
 

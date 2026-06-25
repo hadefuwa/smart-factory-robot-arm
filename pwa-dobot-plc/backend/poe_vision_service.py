@@ -233,7 +233,9 @@ def draw_detections(frame, detections):
         label = str(d.get('class', ''))
         conf_v = float(d.get('confidence', 0.0))
         is_defective = bool(d.get('is_defective', False))
-        purity = float(d.get('defect_distance', 1.0))
+        # defect_pct is 0..100 — % of cube surface covered by dark blobs
+        # / foreign saturation. Higher = more contamination.
+        defect_pct = float(d.get('defect_pct', 0.0))
 
         # Defective cubes are drawn red and thicker so the operator can't
         # miss it. Clean cubes use the per-class colour.
@@ -252,15 +254,15 @@ def draw_detections(frame, detections):
         cv2.putText(out, text, (x1 + 2, y1 - 4),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1)
 
-        # Bottom-right purity badge: "DEFECT 33%" red or "OK 95%" green.
-        # Always shown so the operator can read the purity number off any
-        # cube — both for tuning the threshold and for QA sanity-checks.
-        purity_pct = int(round(purity * 100))
+        # Bottom-right defect-% badge: "DEFECT 8.5%" red or "OK 0.2%" green.
+        # The number is the fraction of cube surface covered by detected
+        # contamination. Always shown so the operator can read it off
+        # any cube for tuning the threshold + QA sanity checks.
         if is_defective:
-            badge_text = f"DEFECT {purity_pct}%"
+            badge_text = f"DEFECT {defect_pct:.1f}%"
             badge_bg = DEFECT_RED
         else:
-            badge_text = f"OK {purity_pct}%"
+            badge_text = f"OK {defect_pct:.1f}%"
             badge_bg = (0, 180, 0)  # green
         (bw, bh), _ = cv2.getTextSize(badge_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
         bx2, by2 = x2, y2 + bh + 8
