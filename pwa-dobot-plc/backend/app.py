@@ -5415,15 +5415,21 @@ def _poe_detection_loop():
 # Tighter tick than before — 100 ms gives sharper rising edges for the
 # pulse below without burning meaningful CPU (the read is cached).
 DEFECT_WATCHER_INTERVAL_S = 0.1
-# Each defective cube fires one HIGH pulse this long. Must be at least
-# 2x the tick (so the PLC sees at least one full HIGH scan) and ideally
-# longer than the slowest PLC cycle so it can't be missed.
-DEFECT_PULSE_DURATION_S = 0.30
+# Each defective cube fires one HIGH pulse this long. Must be comfortably
+# longer than the slowest observed PLC-worker cycle so the True write and
+# the False write land in DIFFERENT worker cycles — otherwise the PLC's
+# scan could see both back-to-back and miss the rising edge entirely.
+# PLC worker has been running 300-550 ms cycles on real hardware (write
+# queue saturation); 800 ms gives enough headroom even with occasional
+# outliers.
+DEFECT_PULSE_DURATION_S = 0.80
 # If the defective condition stays True continuously beyond this, assume
 # a new cube has flowed in behind the first one (fast conveyor where the
 # I0.5 sensor never drops between cubes) and re-pulse. Without this, two
-# back-to-back defectives would produce only one rising edge.
-DEFECT_HOLD_REPULSE_S = 1.50
+# back-to-back defectives would produce only one rising edge. Must be >
+# pulse + an off margin so the PLC has time to see the LOW between two
+# back-to-back pulses.
+DEFECT_HOLD_REPULSE_S = 1.80
 
 _defect_watcher_thread = None
 
