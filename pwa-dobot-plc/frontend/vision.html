@@ -727,6 +727,24 @@
               </div>
             </div>
 
+            <!-- USB camera v4l2 controls (brightness, contrast etc).
+                 Dynamically populated from /api/camera/controls so we
+                 surface whatever the actual webcam supports. Persisted
+                 to config.camera.v4l2_controls and re-applied on every
+                 camera reopen. -->
+            <details class="mb-4 p-3 rounded-box border border-base-300 bg-base-200 space-y-2" id="cameraControlsBlock">
+              <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
+                <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Camera settings (brightness, contrast, etc.)</span>
+                <span id="cameraControlsSaveStatus" class="text-xs text-base-content/50"></span>
+              </summary>
+              <div id="cameraControlsList" class="space-y-2 pt-3 text-xs text-base-content/80">
+                <div class="text-base-content/50">Loading available controls&hellip;</div>
+              </div>
+              <div class="text-[0.65rem] text-base-content/50 pt-1">
+                Sliders persist to <code>config.camera.v4l2_controls</code> and are re-applied via <code>v4l2-ctl</code> after every camera open. Lock exposure / white balance so the defect detector's brightness baseline doesn't drift with lighting.
+              </div>
+            </details>
+
             <!-- Two-column: annotated image + results -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- Annotated image -->
@@ -1060,6 +1078,131 @@
           label.textContent = slider.value;
           queueSaveCameraFocus();
         });
+      }
+    }
+
+    // ---- USB camera v4l2 generic controls (brightness, contrast, etc.) ----
+    // Fetch the whitelist once on page load, render a slider per control,
+    // POST changes back debounced. Sliders that look like booleans
+    // (min=0 max=1) render as toggles instead.
+    const _v4l2CtrlSaveTimers = {};
+    const _v4l2CtrlPending = {};
+
+    async function loadCameraControls() {
+      const list = document.getElementById('cameraControlsList');
+      if (!list) return;
+      try {
+        const r = await fetch(`${API_BASE}/api/camera/controls?t=${Date.now()}`, {
+          signal: AbortSignal.timeout(8000), cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const controls = (data && data.controls) || [];
+        if (!controls.length) {
+          list.innerHTML = `<div class="text-base-content/50">No v4l2 controls reported by this camera.</div>`;
+          return;
+        }
+        list.innerHTML = '';
+        for (const c of controls) {
+          list.appendChild(_buildCameraControlRow(c));
+        }
+      } catch (e) {
+        list.innerHTML = `<div class="text-error">Failed to load camera controls: ${e.message}</div>`;
+        addDebugLog('camera controls load failed', e.message, 'warn');
+      }
+    }
+
+    function _buildCameraControlRow(ctrl) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2 flex-wrap';
+
+      // Pretty label - replace underscores with spaces.
+      const labelText = ctrl.name.replace(/_/g, ' ');
+      const labelEl = document.createElement('label');
+      labelEl.className = 'text-xs w-44 text-base-content/70';
+      labelEl.textContent = labelText;
+      row.appendChild(labelEl);
+
+      // Booleans / 0..1 menus -> checkbox toggle. Everything else -> slider.
+      const isBool = (ctrl.type === 'bool') ||
+                     (ctrl.min === 0 && ctrl.max === 1);
+      if (isBool) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'toggle toggle-sm toggle-info';
+        cb.checked = (Number(ctrl.value) === 1);
+        cb.addEventListener('change', () => {
+          _queueCameraControlSave(ctrl.name, cb.checked ? 1 : 0);
+        });
+        row.appendChild(cb);
+      } else if (typeof ctrl.min === 'number' && typeof ctrl.max === 'number') {
+        const s = document.createElement('input');
+        s.type = 'range';
+        s.min = String(ctrl.min);
+        s.max = String(ctrl.max);
+        s.step = String(ctrl.step || 1);
+        s.value = String(ctrl.value ?? ctrl.default ?? ctrl.min);
+        s.className = 'range range-xs range-info w-48';
+        const valEl = document.createElement('span');
+        valEl.className = 'text-xs font-mono w-12 text-right';
+        valEl.textContent = s.value;
+        s.addEventListener('input', () => {
+          valEl.textContent = s.value;
+          _queueCameraControlSave(ctrl.name, Number(s.value));
+        });
+        row.appendChild(s);
+        row.appendChild(valEl);
+        if (typeof ctrl.default === 'number') {
+          const def = document.createElement('span');
+          def.className = 'text-[0.65rem] text-base-content/40 ml-1';
+          def.textContent = `(default ${ctrl.default})`;
+          row.appendChild(def);
+        }
+      } else {
+        const txt = document.createElement('span');
+        txt.className = 'text-xs text-base-content/50';
+        txt.textContent = `${ctrl.type} (no slider)`;
+        row.appendChild(txt);
+      }
+      return row;
+    }
+
+    function _queueCameraControlSave(name, value) {
+      _v4l2CtrlPending[name] = value;
+      const status = document.getElementById('cameraControlsSaveStatus');
+      if (status) { status.textContent = 'Saving...'; status.style.color = ''; }
+      if (_v4l2CtrlSaveTimers._global) clearTimeout(_v4l2CtrlSaveTimers._global);
+      _v4l2CtrlSaveTimers._global = setTimeout(_flushCameraControlSaves, 400);
+    }
+
+    async function _flushCameraControlSaves() {
+      const status = document.getElementById('cameraControlsSaveStatus');
+      const payload = { controls: { ..._v4l2CtrlPending } };
+      // Clear pending up-front so concurrent drags queue cleanly.
+      for (const k of Object.keys(_v4l2CtrlPending)) delete _v4l2CtrlPending[k];
+      try {
+        const r = await fetch(`${API_BASE}/api/camera/controls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        const errs = Object.entries(data.results || {}).filter(([, v]) => v);
+        if (status) {
+          if (errs.length) {
+            status.textContent = `Saved with ${errs.length} error(s): ${errs.map(([k, v]) => k + ':' + v).join('; ')}`;
+            status.style.color = 'var(--sf-warning-ui, #ffb300)';
+          } else {
+            const names = Object.keys(data.applied || payload.controls || {});
+            status.textContent = `Saved ${names.length} control${names.length === 1 ? '' : 's'}`;
+            status.style.color = 'var(--sf-success-ui, #4caf50)';
+          }
+        }
+        addDebugLog('camera controls saved', data);
+      } catch (e) {
+        if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
+        addDebugLog('camera controls save failed', e.message, 'error');
       }
     }
 
@@ -1646,6 +1789,7 @@
       _wireClassConfSliders();
       loadCameraFocus();
       _wireCameraFocusControls();
+      loadCameraControls();
       checkPoeModelStatus();
       startLiveStatusPolling();
 

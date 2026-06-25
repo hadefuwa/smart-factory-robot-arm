@@ -103,6 +103,11 @@ class CameraService:
         # CAP_PROP_AUTOFOCUS / CAP_PROP_FOCUS round-trip is flaky on V4L2.
         self.focus_autofocus = False
         self.focus_value = 550
+        # Arbitrary v4l2 controls — dict[name -> int]. Loaded from
+        # config.camera.v4l2_controls and re-applied via v4l2-ctl after
+        # every successful camera open. Exposed to the frontend via the
+        # /api/camera/controls endpoint pair.
+        self.v4l2_controls: Dict[str, int] = {}
         # Crop/zoom settings (applied to camera frames)
         self.crop_enabled = False
         self.crop_x = 0  # Top-left X (as percentage 0-100)
@@ -203,6 +208,112 @@ class CameraService:
         )
         return af_ok, last_err if not af_ok else None
 
+    # Controls the UI is allowed to expose. Whitelist keeps us from
+    # accidentally surfacing controls that mess with pixel format,
+    # frame rate, or other things the rest of the pipeline depends on.
+    V4L2_CONTROL_WHITELIST = {
+        'brightness',
+        'contrast',
+        'saturation',
+        'hue',
+        'gain',
+        'sharpness',
+        'gamma',
+        'backlight_compensation',
+        'white_balance_temperature',
+        'white_balance_temperature_auto',
+        'white_balance_automatic',
+        'exposure_absolute',
+        'exposure_time_absolute',
+        'exposure_auto',
+        'auto_exposure',
+        'power_line_frequency',
+    }
+
+    def list_v4l2_controls(self, source=None) -> list:
+        """Parse the output of `v4l2-ctl --list-ctrls-menus` and return a
+        list of dicts describing each whitelisted control.
+
+        Each dict: {name, type, min, max, step, default, value}. Missing
+        keys mean the control reports it as a menu / boolean / read-only.
+        """
+        if os.name == 'nt':
+            return []
+        device = self._device_path_for(source if source is not None else self.active_camera_source)
+        if not device:
+            return []
+        try:
+            r = subprocess.run(
+                ['v4l2-ctl', '-d', device, '--list-ctrls'],
+                capture_output=True, text=True, timeout=4,
+            )
+            if r.returncode != 0:
+                return []
+        except FileNotFoundError:
+            return []
+        except Exception as e:
+            logger.warning(f"list_v4l2_controls failed: {e}")
+            return []
+
+        import re as _re
+        # Sample line:
+        #   "  brightness 0x00980900 (int)    : min=0 max=255 step=1 default=128 value=128"
+        pat = _re.compile(
+            r'^\s*(?P<name>[a-z0-9_]+)\s+0x[0-9a-f]+\s+\((?P<type>[a-z]+)\)\s*:\s*(?P<rest>.+)$',
+            _re.IGNORECASE,
+        )
+        controls = []
+        for line in r.stdout.splitlines():
+            m = pat.match(line)
+            if not m:
+                continue
+            name = m.group('name').lower()
+            if name not in self.V4L2_CONTROL_WHITELIST:
+                continue
+            entry = {'name': name, 'type': m.group('type').lower()}
+            for kv in m.group('rest').split():
+                if '=' not in kv:
+                    continue
+                k, v = kv.split('=', 1)
+                try:
+                    entry[k] = int(v)
+                except ValueError:
+                    entry[k] = v
+            controls.append(entry)
+        return controls
+
+    def apply_v4l2_control(self, name: str, value, source=None) -> Tuple[bool, Optional[str]]:
+        """Set a single v4l2 control to value via v4l2-ctl."""
+        if os.name == 'nt':
+            return False, 'v4l2 not available on Windows'
+        device = self._device_path_for(source if source is not None else self.active_camera_source)
+        if not device:
+            return False, 'no device path'
+        if name not in self.V4L2_CONTROL_WHITELIST:
+            return False, f'control "{name}" not whitelisted'
+        try:
+            r = subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'{name}={int(value)}'],
+                capture_output=True, text=True, timeout=3,
+            )
+            if r.returncode != 0:
+                return False, (r.stderr or r.stdout or '').strip()
+            return True, None
+        except FileNotFoundError:
+            return False, 'v4l2-ctl not installed'
+        except Exception as e:
+            return False, str(e)
+
+    def apply_v4l2_controls_dict(self, controls: Dict[str, int], source=None) -> Dict[str, Optional[str]]:
+        """Apply a dict of v4l2 control values. Returns name -> error (or
+        None on success) for each entry, so the caller can surface
+        partial failures."""
+        results: Dict[str, Optional[str]] = {}
+        for name, value in (controls or {}).items():
+            ok, err = self.apply_v4l2_control(name, value, source=source)
+            results[name] = None if ok else err
+        return results
+
     def _stabilize_camera_mode(self, source=None) -> bool:
         """Negotiate a stable mode and verify the camera can return frames."""
         mode_candidates = []
@@ -245,6 +356,18 @@ class CameraService:
                             logger.warning("v4l2 focus apply on open returned: %s", err)
                     except Exception as fe:
                         logger.warning("v4l2 focus apply on open failed: %s", fe)
+                    # Re-apply any persisted v4l2 controls (brightness etc.)
+                    # after every camera open. The kernel resets these to
+                    # defaults on close, so OpenCV reopen on USB hot-plug
+                    # would otherwise wipe operator tweaks.
+                    if self.v4l2_controls:
+                        try:
+                            res = self.apply_v4l2_controls_dict(self.v4l2_controls, source=source)
+                            for k, e in res.items():
+                                if e:
+                                    logger.warning("v4l2 control %s apply: %s", k, e)
+                        except Exception as ce:
+                            logger.warning("v4l2 controls apply on open failed: %s", ce)
                     return True
 
                 logger.warning("Camera mode %sx%s did not return frames during warm-up", mode_w, mode_h)

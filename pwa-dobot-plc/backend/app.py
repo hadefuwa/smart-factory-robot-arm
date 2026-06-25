@@ -2088,6 +2088,17 @@ def init_clients():
         camera_service.focus_value = int(focus_config.get('value', 550))
     except (TypeError, ValueError):
         camera_service.focus_value = 550
+    # Load arbitrary v4l2 controls (brightness, contrast, etc.). These
+    # get re-applied via v4l2-ctl after every camera open — see
+    # camera_service.apply_v4l2_controls_dict.
+    raw_v4l2 = camera_config.get('v4l2_controls') or {}
+    cleaned_v4l2 = {}
+    for k, v in raw_v4l2.items():
+        try:
+            cleaned_v4l2[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    camera_service.v4l2_controls = cleaned_v4l2
     # Load detection ROI settings if available
     detection_roi_config = camera_config.get('detection_roi', {})
     if detection_roi_config:
@@ -4443,6 +4454,86 @@ def set_camera_focus():
         })
     except Exception as e:
         logger.error(f"Error setting camera focus: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/camera/controls', methods=['GET'])
+def get_camera_controls():
+    """List available v4l2 controls for the USB camera.
+
+    Returns the parsed output of `v4l2-ctl --list-ctrls`, filtered to
+    the whitelist the backend cares about (brightness, contrast,
+    saturation, gain, white balance, exposure, etc.). Each entry has
+    min / max / step / default / value so the frontend can render a
+    slider with the correct range. Persisted operator values from
+    config.json override the live `value` so the slider reflects what
+    will actually be applied after a camera reopen.
+    """
+    if camera_service is None:
+        return jsonify({'controls': [], 'error': 'Camera service not initialized'}), 503
+    try:
+        controls = camera_service.list_v4l2_controls()
+        persisted = (load_config().get('camera') or {}).get('v4l2_controls') or {}
+        for c in controls:
+            if c['name'] in persisted:
+                try:
+                    c['value'] = int(persisted[c['name']])
+                    c['persisted'] = True
+                except (TypeError, ValueError):
+                    pass
+        return jsonify({'controls': controls})
+    except Exception as e:
+        logger.error(f"Error listing camera controls: {e}")
+        return jsonify({'controls': [], 'error': str(e)}), 500
+
+
+@app.route('/api/camera/controls', methods=['POST'])
+def set_camera_controls():
+    """Set one or more v4l2 controls + persist to config.json so they
+    re-apply on every camera reopen.
+
+    Body: {"controls": {"brightness": 128, "contrast": 100}}
+    Returns: per-control success / error map.
+    """
+    if camera_service is None:
+        return jsonify({'error': 'Camera service not initialized'}), 503
+    try:
+        data = request.json or {}
+        new_controls = data.get('controls') or {}
+        # Coerce values to int and ignore non-numeric junk.
+        cleaned = {}
+        for name, val in new_controls.items():
+            try:
+                cleaned[str(name)] = int(val)
+            except (TypeError, ValueError):
+                continue
+        if not cleaned:
+            return jsonify({'success': False, 'error': 'no valid controls supplied'}), 400
+
+        # Apply live, then merge into the cached dict so the next reopen
+        # picks them up.
+        per_control_err = camera_service.apply_v4l2_controls_dict(cleaned)
+        camera_service.v4l2_controls = {
+            **(camera_service.v4l2_controls or {}),
+            **cleaned,
+        }
+
+        # Persist to config — under camera.v4l2_controls so future
+        # backend starts know about them.
+        cfg = load_config()
+        cfg.setdefault('camera', {})
+        merged = {**(cfg['camera'].get('v4l2_controls') or {}), **cleaned}
+        cfg['camera']['v4l2_controls'] = merged
+        save_config(cfg)
+
+        all_ok = all(v is None for v in per_control_err.values())
+        return jsonify({
+            'success': all_ok,
+            'results': per_control_err,
+            'applied': cleaned,
+        })
+    except Exception as e:
+        logger.error(f"Error setting camera controls: {e}")
         return jsonify({'error': str(e)}), 500
 
 
