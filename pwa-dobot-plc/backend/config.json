@@ -228,6 +228,16 @@
       "left_pct": 0,
       "right_pct": 30,
       "note": "Disabled for the USB-camera dataset: training captures are unmasked (Capture Training Image cache went unmasked in commit 15103bf), so masking at inference creates a distribution shift YOLO has never seen. Re-enable only if you capture training data WITH the mask painted in."
+    },
+    "defect_detection": {
+      "enabled": true,
+      "method": "histogram",
+      "thresholds": {
+        "yellow_cube": null,
+        "purple_cube": null,
+        "metal_cube": null
+      },
+      "note": "Per-class Bhattacharyya distance threshold (0..1). null = auto-derive from compute_defect_references.py output (2x worst clean-training self-distance). Lower = more aggressive defect flagging. Tune higher if you see false-positive defects on clean cubes."
     }
   },
   "enable_digital_twin_stream": false,

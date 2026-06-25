@@ -33,6 +33,7 @@ from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_
 from dobot_client import DobotClient
 from camera_service import CameraService
 import poe_vision_service
+import defect_detector
 # DISABLED: Digital twin import commented out to reduce CPU usage
 # from digital_twin_stream_service import DigitalTwinStreamService, PLAYWRIGHT_AVAILABLE
 
@@ -5262,6 +5263,30 @@ def _poe_detection_loop():
             # Drop the inline annotated frame — the pump owns the cache.
             result.pop('annotated', None)
 
+            # Anomaly-detection stage: for each YOLO detection, crop the
+            # bbox out of the UNMASKED frame and compare its colour
+            # histogram against the per-class reference. Distance above
+            # threshold = defective. The class-conf-filtered detections
+            # already passed YOLO's confidence floor; here we add a second
+            # gate for purity / contamination (tape, marker, sticker, etc).
+            detector = defect_detector.get_singleton()
+            any_defective = False
+            for det in result.get('detections', []):
+                x = int(det.get('x', 0))
+                y = int(det.get('y', 0))
+                w = int(det.get('width', 0))
+                h = int(det.get('height', 0))
+                if w <= 0 or h <= 0:
+                    det['defect_distance'] = 0.0
+                    det['is_defective'] = False
+                    continue
+                crop = unmasked[max(0, y):y + h, max(0, x):x + w]
+                defective, dist = detector.check(crop, det.get('class', ''))
+                det['defect_distance'] = round(dist, 4)
+                det['is_defective'] = defective
+                if defective:
+                    any_defective = True
+
             # Publish the fresh detection list so the pump can overlay it.
             with _poe_frame_lock:
                 _poe_latest_detections = list(result.get('detections', []))
@@ -5307,13 +5332,18 @@ def _poe_detection_loop():
             else:
                 queue_cube_detection_bits(yellow=False, purple=False, metal=False)
 
-            # Defect is now driven by a separate _defect_watcher_loop at
-            # ~300 ms cadence instead of the 1 s YOLO cycle — this loop
-            # still computes the value so /api/poe-vision/latest-result
-            # reports a consistent snapshot, but it does NOT queue the
-            # write here. The watcher reads `dominant` out of the JSON
-            # cache below and handles the PLC write.
-            defect_detected = bool(sensor_present and dominant is None)
+            # Defect fires when EITHER:
+            #   (a) the sensor sees something but YOLO recognises no known
+            #       cube class (foreign object), OR
+            #   (b) YOLO did recognise a cube but the histogram-based
+            #       anomaly stage flagged it as contaminated (tape, sticker,
+            #       marker, etc).
+            # The actual PLC write happens in _defect_watcher_loop at
+            # ~300 ms cadence. This loop just sets defect_detected on the
+            # cached JSON so the watcher and the HMI both see the same
+            # answer. any_defective from the loop above survives in
+            # _poe_loop_result so the watcher can re-read it.
+            defect_detected = bool(sensor_present and (dominant is None or any_defective))
 
             # Surface the debounce state in the JSON so the HMI can show
             # "pending confirmation" hints instead of looking frozen.
@@ -5357,8 +5387,16 @@ def _defect_watcher_loop():
             io_snap = get_plc_io_snapshot() or {}
             sensor_present = bool(io_snap.get('inputs', {}).get('I0.5', False))
             with _poe_loop_lock:
-                dominant = (_poe_loop_result or {}).get('dominant')
-            queue_defect_detected(bool(sensor_present and dominant is None))
+                snap = _poe_loop_result or {}
+                dominant = snap.get('dominant')
+                # any_defective is set by the inference loop after the
+                # histogram-anomaly stage. None of these reads block.
+                any_defective = bool(
+                    any(d.get('is_defective') for d in snap.get('detections', []))
+                )
+            queue_defect_detected(bool(
+                sensor_present and (dominant is None or any_defective)
+            ))
         except Exception as e:
             logger.warning(f"defect watcher iteration failed: {e}")
         time.sleep(DEFECT_WATCHER_INTERVAL_S)
@@ -7031,6 +7069,22 @@ if __name__ == '__main__':
     # Pre-load the cube detector model in a background thread so the first
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
+
+    # Load histogram-based defect detector references. Cheap (<10 ms) and
+    # synchronous — anomaly detection is disabled gracefully if the npz
+    # file is missing (run compute_defect_references.py once to build it).
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _defect_cfg = (config.get('poe_camera', {}) or {}).get('defect_detection', {}) or {}
+    if _defect_cfg.get('enabled', True):
+        _thresholds = _defect_cfg.get('thresholds') or {}
+        # Strip null entries so DefectDetector falls back to auto-threshold.
+        _thresholds = {k: v for k, v in _thresholds.items() if v is not None}
+        defect_detector.get_singleton().load(
+            os.path.join(_here, 'defect_references.npz'),
+            _thresholds,
+        )
+    else:
+        logger.info("Defect detection disabled in config.")
 
     # YOLO detection loop now runs over USB-camera frames (see _poe_pump_loop
     # — pump grabs from camera_service.last_frame instead of the M5Stack).
