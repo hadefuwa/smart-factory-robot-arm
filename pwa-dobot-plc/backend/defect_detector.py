@@ -51,7 +51,11 @@ CENTRE_FRACTION = 0.65
 # it must register as "out of envelope" (defect signal) rather than be
 # ignored. The envelope itself enforces a minimum value to catch this.
 MAX_VALUE = 245
-DEFAULT_MIN_VALUE = 35
+# Absolute hard floor for v_min — pixels below this are basically black
+# and never represent the cube's intended colour, regardless of how dark
+# the class is. Set low enough that genuinely-dark classes (like the
+# purple-cube training set which has V medians of 24-33) still pass.
+DEFAULT_MIN_VALUE = 8
 DEFAULT_MIN_SAT = 25
 
 
@@ -91,23 +95,28 @@ def build_envelope(pixels_per_crop: list) -> dict:
     """Build a single class envelope from many crops' worth of HSV pixels.
 
     Strategy:
-      * For chromatic classes (yellow / purple), take 5th-95th percentile
-        of hue + saturation floor at 10th percentile. That's the "what
-        clean cubes of this colour look like" zone.
+      * For chromatic classes (yellow / purple), constrain by hue range
+        AND a brightness floor learned from training data. Dark stains /
+        ink / tape on a brightly-coloured cube fall in the right hue but
+        with low V, so the floor catches them.
       * For low-saturation classes (metal), hue is unstable so we use a
-        saturation cap instead — anything more saturated than the cap is
-        considered "foreign".
+        saturation cap + brightness floor instead — anything more
+        saturated than the cap is "foreign", anything darker than the
+        floor is dirt / tape.
     """
     all_h = np.concatenate([p[:, 0] for p in pixels_per_crop])
     all_s = np.concatenate([p[:, 1] for p in pixels_per_crop])
+    all_v = np.concatenate([p[:, 2] for p in pixels_per_crop])
 
     median_sat = float(np.median(all_s))
-    # Fixed v_min across all classes — pixels darker than this are
-    # "black" (tape / marker / hard shadow), not the cube. Auto-deriving
-    # from training percentiles was too noisy: classes with natural dark
-    # patches (e.g. purple shows shadowed faces) ended up with a v_min
-    # so high that clean cubes failed the check.
-    v_min = DEFAULT_MIN_VALUE
+
+    # Per-class V floor: 2nd percentile of training V minus 10. This
+    # adapts to the actual brightness distribution of the class. Bright
+    # yellow ends up with a floor around 100 (so a dark ink stain on
+    # yellow at V≈50 reads as out-of-envelope = defective). Darker
+    # purple ends up around 10 (purple has V medians of 24-33 in the
+    # training data — its floor catches near-black stains only).
+    v_min = max(DEFAULT_MIN_VALUE, float(np.percentile(all_v, 2)) - 10.0)
 
     if median_sat < 60:
         s_cap = float(np.percentile(all_s, 95)) + 5.0
@@ -118,8 +127,15 @@ def build_envelope(pixels_per_crop: list) -> dict:
             'median_sat_train': median_sat,
         }
 
-    h_low = float(np.percentile(all_h, 5))
-    h_high = float(np.percentile(all_h, 95))
+    # Hue range with generous margins. The raw p5-p95 envelope was too
+    # narrow on purple (~7 H values) — individual training crops with
+    # hue 8-10 units outside the per-pixel distribution fell entirely
+    # out of range and tanked clean purity. Adding ±10 margin makes the
+    # envelope cover the natural between-crop variance without being so
+    # wide it lets defective hues sneak in (yellow is ~20 wide after
+    # margin, still far from green or red).
+    h_low = max(0.0, float(np.percentile(all_h, 5)) - 10.0)
+    h_high = min(179.0, float(np.percentile(all_h, 95)) + 10.0)
     s_min = max(DEFAULT_MIN_SAT, float(np.percentile(all_s, 10)) - 10.0)
     return {
         'kind': 'hue_range',
@@ -143,18 +159,22 @@ def purity_index(crop_bgr: np.ndarray, envelope: dict) -> float:
     v_min = envelope.get('v_min', DEFAULT_MIN_VALUE)
 
     if envelope.get('kind') == 'low_sat':
-        # Metal: low saturation AND non-black. Black tape on a metal cube
-        # is the canonical case here — black is "low sat" too, so we need
-        # the v_min floor to call it defect.
+        # Metal: low saturation AND non-black. Black tape / ink on a
+        # metal cube is "low sat" too, so the v_min floor is what calls
+        # it defective.
         in_range = (v >= v_min) & (s <= envelope['s_max'])
     else:
-        # Chromatic (yellow / purple): hue range only. OpenCV gives H=0
-        # for true black, which falls outside any chromatic hue range,
-        # so black tape registers as defect automatically. Saturation
-        # floor would falsely flag clean cubes that happen to be
-        # darker — chromatic classes have too much natural saturation
-        # variance.
-        in_range = (h >= envelope['h_low']) & (h <= envelope['h_high'])
+        # Chromatic (yellow / purple): right hue AND bright enough.
+        # Without the v_min check, dark-yellow stains (e.g. ink that's
+        # technically still in the yellow hue range but dim) would
+        # register as clean yellow and miss the defect. The brightness
+        # floor is learned per class, so it adapts to purple being
+        # naturally darker than yellow.
+        in_range = (
+            (h >= envelope['h_low']) &
+            (h <= envelope['h_high']) &
+            (v >= v_min)
+        )
 
     return float(in_range.sum()) / float(len(pixels))
 

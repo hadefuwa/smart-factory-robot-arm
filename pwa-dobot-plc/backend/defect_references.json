@@ -2,38 +2,38 @@
   "yellow_cube": {
     "envelope": {
       "kind": "hue_range",
-      "h_low": 18.0,
-      "h_high": 24.0,
+      "h_low": 8.0,
+      "h_high": 34.0,
       "s_min": 196.0,
-      "v_min": 35,
+      "v_min": 115.0,
       "median_sat_train": 226.0
     },
-    "train_min_purity": 0.9748018695387116,
-    "train_mean_purity": 0.9959241387520777,
+    "train_min_purity": 1.0,
+    "train_mean_purity": 1.0,
     "crop_count": 11
   },
   "purple_cube": {
     "envelope": {
       "kind": "hue_range",
-      "h_low": 126.0,
-      "h_high": 133.0,
+      "h_low": 116.0,
+      "h_high": 143.0,
       "s_min": 175.0,
-      "v_min": 35,
+      "v_min": 10.0,
       "median_sat_train": 219.0
     },
-    "train_min_purity": 0.8379765395894428,
-    "train_mean_purity": 0.935865730778334,
+    "train_min_purity": 0.9945041524181729,
+    "train_mean_purity": 0.999545213454043,
     "crop_count": 13
   },
   "metal_cube": {
     "envelope": {
       "kind": "low_sat",
       "s_max": 111.0,
-      "v_min": 35,
+      "v_min": 17.0,
       "median_sat_train": 55.0
     },
-    "train_min_purity": 0.5844228964654363,
-    "train_mean_purity": 0.9376092182760852,
+    "train_min_purity": 0.8559706062461727,
+    "train_mean_purity": 0.966692751242498,
     "crop_count": 19
   }
 }
