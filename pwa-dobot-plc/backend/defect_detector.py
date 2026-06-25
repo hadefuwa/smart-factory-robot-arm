@@ -167,15 +167,17 @@ def detect(crop_bgr: np.ndarray, envelope: dict) -> Tuple[float, dict]:
     s_ch = hsv[..., 1]
     patch_pixels = int(v_ch.size)
 
-    # "Clean cube reference" = top quartile of brightness within the
-    # patch. The cube's clean (un-stained) surface dominates the bright
-    # end of the V distribution; even a heavily-contaminated cube has
-    # SOME clean pixels that show up here, and their mean V is a
-    # robust baseline for what "clean cube" looks like RIGHT NOW
-    # (handles lighting drift, doesn't need training data to match
-    # the current scene).
-    v_p75 = float(np.percentile(v_ch, 75))
-    clean_mask = (v_ch >= v_p75) & (v_ch <= 245)
+    # "Clean cube reference" = the upper-mid band of brightness within
+    # the patch, excluding specular highlights. The cube's clean
+    # surface dominates this band; even a heavily-contaminated cube has
+    # SOME clean pixels here, and their mean V is a robust baseline
+    # that adapts to lighting drift. Skipping pixels above MAX_VALUE
+    # avoids polluting the reference with mirror-bright reflections,
+    # which would otherwise drag the baseline up and miss real stains.
+    # Skipping V<p60 keeps the band restricted to the brighter half.
+    HIGHLIGHT_CAP = 240
+    v_p60 = float(np.percentile(v_ch, 60))
+    clean_mask = (v_ch >= v_p60) & (v_ch < HIGHLIGHT_CAP)
     clean_pixels = int(clean_mask.sum())
     if clean_pixels < MIN_CUBE_PIXELS:
         return 0.0, {
