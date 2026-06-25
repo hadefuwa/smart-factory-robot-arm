@@ -237,6 +237,14 @@ _poe_latest_unmasked    = None      # numpy BGR array, cropped, no mask applied
 _poe_latest_detections  = []        # last detection list from inference thread
 _poe_pump_thread        = None
 
+# Rolling defect-% buffer per class. Smooths frame-to-frame flutter
+# from the histogram + convex-hull defect detector. Used in
+# _poe_detection_loop. 5 frames at the 1 Hz YOLO cycle = a 5-second
+# moving average — long enough to absorb single-frame noise without
+# masking real contamination that lasts more than 2-3 frames.
+DEFECT_SMOOTH_WINDOW    = 5
+_defect_pct_history     = {}        # class_name -> list[float]
+
 
 def _cached_mjpeg_generator(get_jpeg, idle_sleep_s: float = 0.1, keepalive_max_s: float = 5.0):
     """Yield multipart/x-mixed-replace frames from a cached-jpeg getter.
@@ -5320,6 +5328,9 @@ def _poe_detection_loop():
                     k: float(v) for k, v in _live_thr.items() if v is not None
                 }
             any_defective = False
+            # Track if any class was seen this cycle so we can clear
+            # stale buffers when a cube leaves the frame.
+            _seen_classes = set()
             for det in result.get('detections', []):
                 x = int(det.get('x', 0))
                 y = int(det.get('y', 0))
@@ -5330,12 +5341,44 @@ def _poe_detection_loop():
                     det['is_defective'] = False
                     continue
                 crop = unmasked[max(0, y):y + h, max(0, x):x + w]
-                defective, pct, debug = detector.check(crop, det.get('class', ''))
-                det['defect_pct'] = round(pct, 2)
+                defective_raw, pct, debug = detector.check(crop, det.get('class', ''))
+
+                # Rolling-mean smoothing over the last N frames. Defect
+                # detection has natural frame-to-frame flutter (convex
+                # hull edges, lighting shimmer, sensor noise) — a clean
+                # purple cube can read 8 % one frame and 30 % the next.
+                # Smoothing turns that into a steady ~18 % display and
+                # prevents the DB124 defect pulse from latching on
+                # transient single-frame spikes. The threshold check
+                # below uses the smoothed value.
+                cls = det.get('class', '')
+                _seen_classes.add(cls)
+                hist = _defect_pct_history.setdefault(cls, [])
+                hist.append(float(pct))
+                if len(hist) > DEFECT_SMOOTH_WINDOW:
+                    del hist[0:len(hist) - DEFECT_SMOOTH_WINDOW]
+                smoothed = sum(hist) / len(hist)
+
+                # Apply the per-class threshold against the smoothed
+                # value, not the raw — that's where the pulse logic
+                # downstream reads from.
+                thr = detector.thresholds.get(cls)
+                if thr is None:
+                    thr = max(1.5, 2.0 * detector.training_max_defect.get(cls, 1.0))
+                defective = bool(smoothed > thr)
+
+                det['defect_pct'] = round(smoothed, 2)
+                det['defect_pct_raw'] = round(pct, 2)
                 det['is_defective'] = defective
                 det['defect_debug'] = debug
                 if defective:
                     any_defective = True
+
+            # Drop history for classes that left the frame so the next
+            # arrival doesn't start with stale samples mixed in.
+            for cls in list(_defect_pct_history.keys()):
+                if cls not in _seen_classes:
+                    _defect_pct_history.pop(cls, None)
 
             # Publish the fresh detection list so the pump can overlay it.
             with _poe_frame_lock:
