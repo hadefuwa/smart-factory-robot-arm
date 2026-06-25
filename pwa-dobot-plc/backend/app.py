@@ -5412,40 +5412,95 @@ def _poe_detection_loop():
         time.sleep(max(0.05, POE_LOOP_INTERVAL_S - elapsed))
 
 
-DEFECT_WATCHER_INTERVAL_S = 0.3
+# Tighter tick than before — 100 ms gives sharper rising edges for the
+# pulse below without burning meaningful CPU (the read is cached).
+DEFECT_WATCHER_INTERVAL_S = 0.1
+# Each defective cube fires one HIGH pulse this long. Must be at least
+# 2x the tick (so the PLC sees at least one full HIGH scan) and ideally
+# longer than the slowest PLC cycle so it can't be missed.
+DEFECT_PULSE_DURATION_S = 0.30
+# If the defective condition stays True continuously beyond this, assume
+# a new cube has flowed in behind the first one (fast conveyor where the
+# I0.5 sensor never drops between cubes) and re-pulse. Without this, two
+# back-to-back defectives would produce only one rising edge.
+DEFECT_HOLD_REPULSE_S = 1.50
 
 _defect_watcher_thread = None
 
 def _defect_watcher_loop():
-    """Fast poller for DB124.defect_detected.
+    """Edge-pulse driver for DB124.defect_detected.
 
-    Runs at ~300 ms (vs 1 s for the YOLO inference loop) so the bit
-    drops promptly when either the sensor goes low or YOLO recognises a
-    cube, without speeding up the costly YOLO pass. Reads:
+    Old behaviour was level-tracking: bit HIGH while a defective cube
+    was in view, LOW otherwise. That breaks for fast conveyors where
+    two defectives flow past back-to-back without a clean LOW between
+    them — the PLC sees one continuous HIGH and counts one reject
+    instead of two.
+
+    New behaviour is a state machine that emits a clean ~300 ms HIGH
+    pulse per defective-cube event:
+
+      IDLE     defective rising edge -> fire pulse, state=PULSING
+      PULSING  hold HIGH until pulse_until, then state=HELD
+      HELD     hold LOW until either:
+                 (a) defective condition clears -> state=IDLE
+                 (b) DEFECT_HOLD_REPULSE_S elapsed -> fire next pulse
+
+    Branch (b) handles the "sensor never drops" scenario — after 1.5 s
+    of continuous defect, we assume the next cube has arrived and
+    re-pulse so the PLC reject counter increments per physical cube.
+
+    Sources read each tick:
       * I0.5 from the PLC IO snapshot (cached, <1 ms read)
-      * latest `dominant` class from _poe_loop_result (cached JSON)
-
-    queue_defect_detected is idempotent so polling cheaply this often
-    doesn't flood the PLC write queue — only state changes are enqueued.
+      * latest `dominant` + per-detection is_defective from the YOLO
+        cache. None of these reads block.
     """
     logger.info(
-        "Defect watcher starting (interval=%.2fs)", DEFECT_WATCHER_INTERVAL_S
+        "Defect watcher starting (interval=%.2fs, pulse=%.2fs, repulse=%.2fs)",
+        DEFECT_WATCHER_INTERVAL_S, DEFECT_PULSE_DURATION_S, DEFECT_HOLD_REPULSE_S,
     )
+    state = 'IDLE'
+    pulse_until = 0.0
+    held_since = 0.0
     while True:
         try:
+            now = time.time()
             io_snap = get_plc_io_snapshot() or {}
             sensor_present = bool(io_snap.get('inputs', {}).get('I0.5', False))
             with _poe_loop_lock:
                 snap = _poe_loop_result or {}
                 dominant = snap.get('dominant')
-                # any_defective is set by the inference loop after the
-                # histogram-anomaly stage. None of these reads block.
                 any_defective = bool(
                     any(d.get('is_defective') for d in snap.get('detections', []))
                 )
-            queue_defect_detected(bool(
+            # Same logical "this cube should be rejected" rule as before.
+            defective_now = bool(
                 sensor_present and (dominant is None or any_defective)
-            ))
+            )
+
+            if state == 'IDLE':
+                if defective_now:
+                    pulse_until = now + DEFECT_PULSE_DURATION_S
+                    state = 'PULSING'
+                    queue_defect_detected(True)
+                else:
+                    queue_defect_detected(False)
+            elif state == 'PULSING':
+                if now >= pulse_until:
+                    held_since = now
+                    state = 'HELD'
+                    queue_defect_detected(False)
+                else:
+                    queue_defect_detected(True)
+            elif state == 'HELD':
+                if not defective_now:
+                    state = 'IDLE'
+                    queue_defect_detected(False)
+                elif now - held_since >= DEFECT_HOLD_REPULSE_S:
+                    pulse_until = now + DEFECT_PULSE_DURATION_S
+                    state = 'PULSING'
+                    queue_defect_detected(True)
+                else:
+                    queue_defect_detected(False)
         except Exception as e:
             logger.warning(f"defect watcher iteration failed: {e}")
         time.sleep(DEFECT_WATCHER_INTERVAL_S)
