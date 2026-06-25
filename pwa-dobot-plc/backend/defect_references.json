@@ -6,7 +6,7 @@
       "h_high": 34.0,
       "s_min": 182.0,
       "v_min": 113.0,
-      "dark_factor": 0.55,
+      "dark_factor": 0.70,
       "median_sat_train": 224.0
     },
     "train_max_defect_pct": 0.0,
@@ -33,7 +33,7 @@
       "s_max": 118.0,
       "v_min": 18.0,
       "defect_s_min": 158.0,
-      "dark_factor": 0.55,
+      "dark_factor": 0.40,
       "median_sat_train": 54.0
     },
     "train_max_defect_pct": 34.31093261103068,
