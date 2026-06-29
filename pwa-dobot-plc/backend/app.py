@@ -446,28 +446,53 @@ def _send_safety_torque_off(reason: str):
         logger.warning('Safety torque-off send failed (bridge may be down): %s', e)
 
 
+def _current_arm_xyz(cache: Dict[str, Any]):
+    """Return the arm's best-known (x, y, z) in mm, or None if neither source
+    is available. Prefers the bridge's last getStatus over the PLC cache —
+    we publish that PLC cache ourselves from the same bridge reading, and
+    routing decisions on our own input shouldn't round-trip through snap7
+    just to come back to us. If the writeback path ever drops a beat, the
+    auto-move loop keeps working as long as the bridge is reachable.
+    """
+    try:
+        xyz = (robot_arm_bridge_state.get('last_status') or {}).get('currentXYZ') or {}
+        bx, by, bz = xyz.get('x'), xyz.get('y'), xyz.get('z')
+        if bx is not None and by is not None and bz is not None:
+            return float(bx), float(by), float(bz)
+    except (TypeError, ValueError, AttributeError):
+        pass
+    try:
+        return (
+            float(cache.get('db125_x_position')),
+            float(cache.get('db125_y_position')),
+            float(cache.get('db125_z_position')),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
                              tolerance_mm: int = PLC_AUTO_TARGET_TOLERANCE_MM) -> bool:
-    """Return True when cached DB125 XYZ feedback is within tolerance_mm
+    """Return True when the arm's current XYZ is within tolerance_mm
     (Euclidean) of the requested target. Used in two places:
       1. To declare a successful arrival when a "moving" response completes.
       2. To accept a "stall close enough" as success on this weak-joint
          prototype — without that the PLC would retry indefinitely whenever
          J2 stalls a few mm short of the IK target.
     """
+    current = _current_arm_xyz(cache)
+    if current is None:
+        return False
     try:
-        current_x = float(cache.get('db125_x_position'))
-        current_y = float(cache.get('db125_y_position'))
-        current_z = float(cache.get('db125_z_position'))
         target_x = float(x)
         target_y = float(y)
         target_z = float(z)
     except (TypeError, ValueError):
         return False
 
-    dx = current_x - target_x
-    dy = current_y - target_y
-    dz = current_z - target_z
+    dx = current[0] - target_x
+    dy = current[1] - target_y
+    dz = current[2] - target_z
     return math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_mm
 
 
@@ -843,17 +868,20 @@ def plc_auto_backend_tick():
             # and applies exponential backoff so we don't busy-loop on it.
             set_at = float(plc_auto_backend_state.get('active_target_set_at') or 0.0)
             if set_at and (time.time() - set_at) > PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S:
+                _arm = _current_arm_xyz(cache)
+                _ax, _ay, _az = (_arm if _arm is not None else (None, None, None))
                 _cx = cache.get('db125_x_position')
                 _cy = cache.get('db125_y_position')
                 _cz = cache.get('db125_z_position')
                 try:
-                    _dist = math.sqrt((float(_cx)-float(x))**2 + (float(_cy)-float(y))**2 + (float(_cz)-float(z))**2)
+                    _dist = math.sqrt((float(_ax)-float(x))**2 + (float(_ay)-float(y))**2 + (float(_az)-float(z))**2)
                 except Exception:
                     _dist = -1.0
                 log_event('auto_move', 'target_timeout',
                           f'arm did not reach target x={x} y={y} z={z} within {PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S}s',
                           severity=SEVERITY_WARN,
                           x=x, y=y, z=z,
+                          arm_x=_ax, arm_y=_ay, arm_z=_az,
                           cache_x=_cx, cache_y=_cy, cache_z=_cz,
                           distance_mm=round(_dist, 2),
                           tolerance_mm=PLC_AUTO_TARGET_TOLERANCE_MM,
