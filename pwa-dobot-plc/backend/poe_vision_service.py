@@ -255,21 +255,24 @@ def draw_detections(frame, detections):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1)
 
         # Bottom-right defect-% badge: "DEFECT 8.5%" red or "OK 0.2%" green.
-        # The number is the fraction of cube surface covered by detected
-        # contamination. Always shown so the operator can read it off
-        # any cube for tuning the threshold + QA sanity checks.
-        if is_defective:
-            badge_text = f"DEFECT {defect_pct:.1f}%"
-            badge_bg = DEFECT_RED
-        else:
-            badge_text = f"OK {defect_pct:.1f}%"
-            badge_bg = (0, 180, 0)  # green
-        (bw, bh), _ = cv2.getTextSize(badge_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
-        bx2, by2 = x2, y2 + bh + 8
-        bx1 = bx2 - bw - 8
-        cv2.rectangle(out, (bx1, y2), (bx2, by2), badge_bg, -1)
-        cv2.putText(out, badge_text, (bx1 + 4, by2 - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+        # Skipped entirely when the master defect-detection toggle is
+        # OFF (marked by defect_debug.reason == 'defect_detection_disabled'
+        # on the detection dict) — without that, every cube would always
+        # show "OK 0.0%" which is just noise on the operator's stream.
+        debug_reason = (d.get('defect_debug') or {}).get('reason')
+        if debug_reason != 'defect_detection_disabled':
+            if is_defective:
+                badge_text = f"DEFECT {defect_pct:.1f}%"
+                badge_bg = DEFECT_RED
+            else:
+                badge_text = f"OK {defect_pct:.1f}%"
+                badge_bg = (0, 180, 0)  # green
+            (bw, bh), _ = cv2.getTextSize(badge_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+            bx2, by2 = x2, y2 + bh + 8
+            bx1 = bx2 - bw - 8
+            cv2.rectangle(out, (bx1, y2), (bx2, by2), badge_bg, -1)
+            cv2.putText(out, badge_text, (bx1 + 4, by2 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
     return out
 
 
