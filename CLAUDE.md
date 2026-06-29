@@ -98,7 +98,8 @@ Important blocks:
   `{"yellow_cube": 0.35, "purple_cube": 0.5, "metal_cube": 0.6}`. Live-tunable from the vision page sliders.
 - `poe_camera.max_detections` — cap on cubes per frame after YOLO. Default `1`. The conveyor glass produces a mirror reflection that YOLO scores as a second lower-confidence cube; sorting by confidence and keeping top-N drops it.
 - `poe_camera.min_class_match` — fraction of bbox-centre pixels that must match the class's HSV envelope (default `0.10`). Drops YOLO mis-classifications where the cube colour doesn't match the predicted class — e.g. a red cube being labelled `yellow_cube`.
-- `poe_camera.defect_detection.thresholds` — per-class max defect % (raw percent, e.g. `2.0`). Above this, `defect_detected` pulses on DB124. Live-tunable from the vision page sliders.
+- `poe_camera.defect_detection.enabled` — master toggle, default `false`. When OFF the per-cube histogram check is skipped entirely; rejection rests on the classification-only path (red/green/unrecognised → hue-mismatch filter drops detection → defect pulse via "sensor sees something but YOLO recognises nothing"). When ON the histogram check runs on top to catch tape/marker/dirt on a correctly-classified cube. Live-tunable from a toggle in the vision page controls row.
+- `poe_camera.defect_detection.thresholds` — per-class max defect % (raw percent, e.g. `2.0`). Only consulted when the master toggle above is ON. Above this, `defect_detected` pulses on DB124. Live-tunable from the vision page sliders.
 - `poe_camera.crop` / `poe_camera.mask` — pre-inference geometric edits. Both currently disabled because the USB camera training data is unmasked / uncropped; re-enabling either would create a distribution shift YOLO never saw.
 - `camera.focus` — `{"autofocus": bool, "value": int}`, applied via `v4l2-ctl` after every camera open. IMX179 manual focus range is 0–1023; default 550.
 - `camera.v4l2_controls` — arbitrary `{name: int}` map applied via `v4l2-ctl` after every camera open. Populated by the page sliders. Whitelist lives in `camera_service.CameraService.V4L2_CONTROL_WHITELIST` (brightness, contrast, saturation, hue, gain, sharpness, gamma, backlight_compensation, white_balance, exposure, power_line_frequency).
@@ -274,7 +275,7 @@ The file is called `poe_vision_service.py` for historic reasons; the actual fram
 2. **YOLO inference** (`poe_vision_service.detect_cubes`) with the per-class confidence floor.
 3. **Cap to top-N detections** (`config.poe_camera.max_detections`, default `1`). Sorts by confidence and trims; drops the conveyor-glass mirror reflection that YOLO scores as a phantom second cube.
 4. **Hue-mismatch filter** (`defect_detector.class_match_fraction`). For each remaining detection, compute the fraction of bbox-centre pixels that pass the class's HSV envelope. If `< config.poe_camera.min_class_match` (default `0.10`), drop it — handles untrained colours (red, green) that YOLO snaps to the nearest known class.
-5. **Defect detection** (per detection — see below).
+5. **Defect detection** (per detection — see below). Gated on the live `poe_camera.defect_detection.enabled` flag; when OFF, each detection is tagged `defect_pct=0`, `is_defective=False`, `defect_debug={'reason': 'defect_detection_disabled'}` and the histogram check is skipped.
 6. **N-cycle debounce** (`POE_DEBOUNCE_CYCLES = 2`) on the dominant class.
 7. **Write colour bits** via `queue_cube_detection_bits` — but only if `sensor_present AND not any_defective`. Defective cubes write all colour bits FALSE.
 8. **Publish JSON state** to `_poe_loop_result` for `/api/poe-vision/latest-result` and the defect watcher.
@@ -283,7 +284,9 @@ The file is called `poe_vision_service.py` for historic reasons; the actual fram
 
 Anomaly-detection downstream of YOLO. **No labelled defect training data needed** — flags any visual disruption (tape, marker, sticker, dirt, contamination) by analysing cube crops in HSV space.
 
-Per crop:
+**Currently OFF by default.** Production mode is classification-only rejection: yellow/purple/metal pass via the colour bits, anything else (red, green, foreign objects) gets dropped by the hue-mismatch filter and pulses the defect bit through the "no detection while sensor present" path. Flip the page toggle ON to additionally catch contaminated cubes that DO classify correctly.
+
+Per crop (when the master toggle is ON):
 
 1. **Centre-crop** the bbox at 75% (skips ~25% of background near bbox edges).
 2. **Clean reference** = mean V of the top-half of patch V values (the brightest 50% — almost always the clean cube surface, even on heavily contaminated cubes).
@@ -319,15 +322,23 @@ The "defective condition" the watcher reads is `sensor_present AND (dominant is 
 
 Passive monitor — polls `/api/poe-vision/latest-result` (~5 Hz) and `/api/plc/io/read`. Detection itself never depends on the browser. Page layout:
 
+- **Controls row** (always visible) — Detect Cubes / Live / Capture buttons + the **Defect detection master toggle** (red switch, POSTs `poe_camera.defect_detection.enabled`).
 - **Camera feed + Detection results panel** — always visible at top of the AI section.
 - **Collapsible settings** below:
   - Per-class YOLO confidence sliders (POST to `poe_camera.class_conf`)
-  - Max defect % sliders (POST to `poe_camera.defect_detection.thresholds`)
+  - Max defect % sliders (POST to `poe_camera.defect_detection.thresholds`) — pre-tune while defect is off, takes effect when toggle goes on
   - Camera focus (autofocus toggle + 0–1023 slider)
   - Camera settings — dynamically populated from `/api/camera/controls` (brightness, contrast, exposure, white balance, etc.)
 - Debug Console collapsed at the bottom.
 
 All collapsibles are native `<details>`/`<summary>` with a `sf-collapsible` CSS class for the explicit chevron + hover styling.
+
+### On-stream annotations (`draw_detections`)
+
+The pump's annotated JPEG includes:
+- **Class label + confidence** at the top-left of each bbox. Pretty-printed: `metal_cube` → `Metal Cube`. Internal class names elsewhere (PLC bits, config keys, training labels, JSON API) keep the underscore form.
+- **OK / DEFECT badge** at the bottom-right of each bbox — but **only when defect detection is enabled**. With the master toggle OFF the badge is hidden entirely (every cube would just read `OK 0.0%` otherwise, which is visual noise).
+- **REJECT overlay** centred on the frame when sensor is HIGH but detection list is empty (unrecognised object). Painted by the pump so it appears at pump cadence (~7 Hz) without waiting for the next YOLO inference cycle.
 
 ### Endpoints
 
