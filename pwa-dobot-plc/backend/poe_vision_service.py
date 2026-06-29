@@ -248,7 +248,11 @@ def draw_detections(frame, detections):
         cv2.rectangle(out, (x1, y1), (x2, y2), colour, thickness)
 
         # Top-left label: class + confidence (always shown).
-        text = f"{label} {conf_v:.0%}"
+        # Pretty-print: "metal_cube" -> "Metal Cube" so the on-stream
+        # text reads naturally. The internal class name still has the
+        # underscore — only the display string is touched.
+        pretty_label = label.replace('_', ' ').title()
+        text = f"{pretty_label} {conf_v:.0%}"
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
         cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw + 4, y1), colour, -1)
         cv2.putText(out, text, (x1 + 2, y1 - 4),
