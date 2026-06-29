@@ -5472,6 +5472,19 @@ def _poe_detection_loop():
             # Track if any class was seen this cycle so we can clear
             # stale buffers when a cube leaves the frame.
             _seen_classes = set()
+            # Live flag — operator can flip via the page toggle. When
+            # OFF we skip the (expensive-ish) histogram check entirely
+            # and tag every detection as not-defective. Reject decisions
+            # then rest purely on the YOLO classification + hue-mismatch
+            # filter: a cube that doesn't pass yellow/purple/metal at
+            # all becomes a "no detection" event, which the defect
+            # watcher already converts to a DB124.DBX0.4 pulse via the
+            # "sensor sees something but YOLO recognises nothing" path.
+            _defect_enabled = bool(
+                cfg.get('poe_camera', {})
+                   .get('defect_detection', {})
+                   .get('enabled', False)
+            )
             for det in result.get('detections', []):
                 x = int(det.get('x', 0))
                 y = int(det.get('y', 0))
@@ -5480,6 +5493,12 @@ def _poe_detection_loop():
                 if w <= 0 or h <= 0:
                     det['defect_pct'] = 0.0
                     det['is_defective'] = False
+                    continue
+                if not _defect_enabled:
+                    det['defect_pct'] = 0.0
+                    det['defect_pct_raw'] = 0.0
+                    det['is_defective'] = False
+                    det['defect_debug'] = {'reason': 'defect_detection_disabled'}
                     continue
                 crop = unmasked[max(0, y):y + h, max(0, x):x + w]
                 defective_raw, pct, debug = detector.check(crop, det.get('class', ''))
@@ -7373,22 +7392,26 @@ if __name__ == '__main__':
     # /api/poe-vision/detect call doesn't block the request.
     threading.Thread(target=poe_vision_service.load_model, daemon=True).start()
 
-    # Load purity-index defect detector references. Cheap (<10 ms) and
-    # synchronous — anomaly detection is disabled gracefully if the json
-    # file is missing (run compute_defect_references.py once to build it).
+    # Always load the purity-index defect detector references so the
+    # singleton is ready if the operator flips the page toggle on later.
+    # Whether the inference loop actually CALLS the detector each cycle
+    # is gated separately by the live `poe_camera.defect_detection.enabled`
+    # flag (see _poe_detection_loop). Keeping the references loaded
+    # avoids a several-hundred-millisecond stall on the first detection
+    # after the toggle flips.
     _here = os.path.dirname(os.path.abspath(__file__))
     _startup_cfg = load_config()
     _defect_cfg = (_startup_cfg.get('poe_camera', {}) or {}).get('defect_detection', {}) or {}
-    if _defect_cfg.get('enabled', True):
-        _thresholds = _defect_cfg.get('thresholds') or {}
-        # Strip null entries so DefectDetector falls back to auto-threshold.
-        _thresholds = {k: v for k, v in _thresholds.items() if v is not None}
-        defect_detector.get_singleton().load(
-            os.path.join(_here, 'defect_references.json'),
-            _thresholds,
-        )
-    else:
-        logger.info("Defect detection disabled in config.")
+    _thresholds = _defect_cfg.get('thresholds') or {}
+    _thresholds = {k: v for k, v in _thresholds.items() if v is not None}
+    defect_detector.get_singleton().load(
+        os.path.join(_here, 'defect_references.json'),
+        _thresholds,
+    )
+    logger.info(
+        "Defect detection: %s at startup (live-tunable from vision.html toggle)",
+        'ENABLED' if _defect_cfg.get('enabled', False) else 'DISABLED',
+    )
 
     # YOLO detection loop now runs over USB-camera frames (see _poe_pump_loop
     # — pump grabs from camera_service.last_frame instead of the M5Stack).

@@ -678,6 +678,17 @@
                 <i class="material-icons" style="font-size:1rem;line-height:1">photo_camera</i> Capture
               </button>
               <span id="captureStatus" class="text-xs text-base-content/60"></span>
+              <!-- Defect-detection master toggle. OFF by default; when ON the
+                   per-cube purity check runs and contaminated cubes get the
+                   DEFECT badge + DB124.DBX0.4 pulse. When OFF, only unrecognised
+                   colours (red, green, anything not yellow/purple/metal) trigger
+                   the defect bit via the existing "sensor sees something but
+                   YOLO recognises nothing" path. -->
+              <label class="flex items-center gap-2 cursor-pointer ml-2" title="When ON, runs the per-cube histogram defect check. When OFF, rejection is based purely on YOLO classification.">
+                <input type="checkbox" id="defectDetectionToggle" class="toggle toggle-sm toggle-error" onchange="saveDefectDetectionEnabled()">
+                <span class="text-xs font-semibold text-base-content/70">Defect detection</span>
+                <span id="defectDetectionSaveStatus" class="text-[0.65rem] text-base-content/50"></span>
+              </label>
               <span id="poeModelStatus" class="text-xs text-base-content/50 ml-auto"></span>
             </div>
 
@@ -923,14 +934,47 @@
           // 2% of the cube surface is contaminated". Slider value is
           // tenths of a percent (1..200 -> 0.1..20.0%), so divide by 10
           // for display, multiply by 10 to read back when saving.
-          const dt = (cfg && cfg.poe_camera && cfg.poe_camera.defect_detection
-                      && cfg.poe_camera.defect_detection.thresholds) || {};
+          const dd = (cfg && cfg.poe_camera && cfg.poe_camera.defect_detection) || {};
+          const dt = dd.thresholds || {};
           _setDefectSlider('poeDefectYellow', 'poeDefectYellowVal', dt.yellow_cube ?? 2.0);
           _setDefectSlider('poeDefectPurple', 'poeDefectPurpleVal', dt.purple_cube ?? 5.0);
           _setDefectSlider('poeDefectMetal',  'poeDefectMetalVal',  dt.metal_cube  ?? 2.0);
+
+          // Defect detection master toggle — default OFF if missing.
+          const toggle = document.getElementById('defectDetectionToggle');
+          if (toggle) toggle.checked = Boolean(dd.enabled);
         }
       } catch (e) {
         addDebugLog('class_conf load failed', e.message, 'warn');
+      }
+    }
+
+    // Defect detection master switch. Persisted to
+    // poe_camera.defect_detection.enabled; the inference loop reads
+    // the live value each cycle so the change takes effect within ~1 s.
+    async function saveDefectDetectionEnabled() {
+      const toggle = document.getElementById('defectDetectionToggle');
+      const status = document.getElementById('defectDetectionSaveStatus');
+      if (!toggle) return;
+      const enabled = Boolean(toggle.checked);
+      if (status) { status.textContent = 'Saving...'; status.style.color = ''; }
+      try {
+        const res = await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            poe_camera: { defect_detection: { enabled } },
+          }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (status) {
+          status.textContent = enabled ? '(ON)' : '(OFF)';
+          status.style.color = 'var(--sf-success-ui, #4caf50)';
+        }
+        addDebugLog('defect_detection toggled', { enabled });
+      } catch (e) {
+        if (status) { status.textContent = 'Save failed: ' + e.message; status.style.color = 'var(--sf-danger-ui, #f44336)'; }
+        addDebugLog('defect_detection toggle save failed', e.message, 'error');
       }
     }
 

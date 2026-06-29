@@ -232,7 +232,8 @@
       "note": "Disabled for the USB-camera dataset: training captures are unmasked (Capture Training Image cache went unmasked in commit 15103bf), so masking at inference creates a distribution shift YOLO has never seen. Re-enable only if you capture training data WITH the mask painted in."
     },
     "defect_detection": {
-      "enabled": true,
+      "enabled": false,
+      "enabled_note": "Off by default. When OFF, the vision pipeline rejects only objects YOLO can't classify as yellow/purple/metal (via the 'sensor sees something + dominant=None' path). When ON, also runs the per-cube histogram check to flag tape/marker/dirt contamination. Toggle from the vision page.",
       "method": "histogram",
       "thresholds": {
         "yellow_cube": null,
