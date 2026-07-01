@@ -213,6 +213,8 @@
     "class_conf_note": "Per-class minimum confidence. Yellow is permissive because the trained model under-detects it; metal is strict because it produces frequent false positives at low confidence. Tune from the Vision page sliders.",
     "max_detections": 1,
     "max_detections_note": "Cap on cubes per frame after YOLO. The glass conveyor surface produces mirror reflections that YOLO scores as a second lower-confidence cube. Keep at 1 so only the real cube survives. Raise to 2-3 only if multi-cube tracking in frame is genuinely needed.",
+    "reject_confirm_cycles": 10,
+    "reject_confirm_cycles_note": "Consecutive defect-watcher ticks (100 ms each) that the 'should reject' condition must hold before firing the DB124.DBX0.4 pulse. 10 = 1.0 s of confirmation. Raise to reduce false rejects on cubes that briefly drop below YOLO confidence; lower for faster-moving conveyors where the cube is only in view for a short time.",
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
     "crop": {
       "enabled": false,

@@ -5670,6 +5670,13 @@ DEFECT_PULSE_DURATION_S = 0.80
 # pulse + an off margin so the PLC has time to see the LOW between two
 # back-to-back pulses.
 DEFECT_HOLD_REPULSE_S = 1.80
+# How many CONSECUTIVE watcher ticks the "should reject" condition must
+# hold before we actually fire a pulse. At 100 ms/tick, 10 = 1.0 s of
+# confirmation. Kills the false-positive that happens when YOLO drops
+# below the confidence threshold for a single frame while a valid cube
+# is passing (dominant briefly becomes None -> would otherwise reject a
+# clean cube). Live-tunable via `poe_camera.reject_confirm_cycles`.
+REJECT_CONFIRM_CYCLES_DEFAULT = 10
 
 _defect_watcher_thread = None
 
@@ -5701,12 +5708,15 @@ def _defect_watcher_loop():
         cache. None of these reads block.
     """
     logger.info(
-        "Defect watcher starting (interval=%.2fs, pulse=%.2fs, repulse=%.2fs)",
+        "Defect watcher starting (interval=%.2fs, pulse=%.2fs, repulse=%.2fs, "
+        "reject_confirm=%d ticks default)",
         DEFECT_WATCHER_INTERVAL_S, DEFECT_PULSE_DURATION_S, DEFECT_HOLD_REPULSE_S,
+        REJECT_CONFIRM_CYCLES_DEFAULT,
     )
     state = 'IDLE'
     pulse_until = 0.0
     held_since = 0.0
+    reject_streak = 0
     while True:
         try:
             now = time.time()
@@ -5723,8 +5733,27 @@ def _defect_watcher_loop():
                 sensor_present and (dominant is None or any_defective)
             )
 
+            # Rising-edge debounce. Only escalate to PULSING once the
+            # condition has held for `reject_confirm_cycles` in a row —
+            # kills single-cycle YOLO drops that would otherwise reject
+            # perfectly-valid cubes. Reset the streak the moment the
+            # condition clears so the counter always reflects a
+            # contiguous run.
+            _live_cfg = load_config().get('poe_camera', {}) or {}
+            try:
+                reject_confirm_cycles = int(_live_cfg.get(
+                    'reject_confirm_cycles', REJECT_CONFIRM_CYCLES_DEFAULT,
+                ))
+            except (TypeError, ValueError):
+                reject_confirm_cycles = REJECT_CONFIRM_CYCLES_DEFAULT
+            reject_confirm_cycles = max(1, reject_confirm_cycles)
+            if defective_now:
+                reject_streak += 1
+            else:
+                reject_streak = 0
+
             if state == 'IDLE':
-                if defective_now:
+                if defective_now and reject_streak >= reject_confirm_cycles:
                     pulse_until = now + DEFECT_PULSE_DURATION_S
                     state = 'PULSING'
                     queue_defect_detected(True)
