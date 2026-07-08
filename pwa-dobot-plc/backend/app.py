@@ -383,6 +383,7 @@ plc_auto_backend_state = {
     'consecutive_errors': 0,        # Count of back-to-back failed sends (reset on success/target change)
     'error_backoff_until': 0.0,     # Skip sends until this timestamp (exponential, capped)
     'gated_reason': None,           # None when loop is active; 'no_command' / 'dead_bus' when skipping
+    'no_command_since': 0.0,        # time.time() when we first saw zero command bits (0 = currently commanded)
 }
 PLC_AUTO_TARGET_TOLERANCE_MM = 20
 PLC_AUTO_RESEND_INTERVAL_S = 2.0
@@ -392,6 +393,12 @@ PLC_AUTO_ERROR_BACKOFF_MAX_S = 30.0      # Cap so we still recover when the arm 
 # Must exceed the Node bridge's STALL_TIMEOUT_MS (default 8s) plus some slack, so a
 # normal stall response from the bridge reaches us before this timer fires.
 PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S = 15.0
+# Debounce for the 'no_command' gate: how long every command bit must stay
+# FALSE before we actually engage the gate. The PLC ladder often has a brief
+# window (a few scan cycles) between clearing one command bit and setting the
+# next as it advances through pickup → home → pallet → home → quarantine.
+# Without a grace period, that window clears active_target_key mid-motion.
+PLC_AUTO_NO_COMMAND_GRACE_S = 1.0
 
 # Via-home routing removed: the PLC now sequences home hops between named
 # targets itself, so the Pi sends every DB125 target straight through.
@@ -509,8 +516,20 @@ def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
         or bool(cache.get('db125_pallet_command', False))
         or bool(cache.get('db125_quarantine_command', False))
     )
-    if not cmd_active:
-        return 'no_command'
+    # Debounce: don't gate on a momentary all-zero window between PLC steps.
+    # Only engage no_command after the grace period has fully elapsed.
+    if cmd_active:
+        plc_auto_backend_state['no_command_since'] = 0.0
+    else:
+        first_seen = float(plc_auto_backend_state.get('no_command_since') or 0.0)
+        now = time.time()
+        if first_seen == 0.0:
+            plc_auto_backend_state['no_command_since'] = now
+            # Grace starts now — stay active this tick.
+        elif (now - first_seen) >= PLC_AUTO_NO_COMMAND_GRACE_S:
+            return 'no_command'
+        # Within grace window: pretend a command is still active so we don't
+        # clear in-flight state. Fall through to the dead_bus check.
 
     last_status = robot_arm_bridge_state.get('last_status') or {}
     joints = last_status.get('joints') if isinstance(last_status, dict) else None
