@@ -2182,7 +2182,20 @@ def health_check():
     })
 
 def _get_cpu_temperature_celsius() -> Optional[float]:
-    """Read Raspberry Pi CPU temperature using vcgencmd. Returns None if unavailable."""
+    """Read Raspberry Pi CPU temperature. Returns None if unavailable.
+
+    Primary source is the kernel thermal sysfs file, which is world-readable and
+    needs no elevated privileges. vcgencmd is only a fallback: it opens /dev/vcio,
+    which on this Pi is root-only (crw------- root root), so it fails for the
+    unprivileged 'pi' user the smart-factory service runs as.
+    """
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp', 'r', encoding='utf-8') as thermal_file:
+            milli_c = int(thermal_file.read().strip())
+            if milli_c > 0:
+                return round(milli_c / 1000.0, 1)
+    except Exception:
+        pass
     try:
         result = subprocess.run(
             ['vcgencmd', 'measure_temp'],
