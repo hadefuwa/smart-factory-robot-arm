@@ -1,3 +1,4 @@
+IO	Robot_UDT	0
 Status	Struct	0
 Connected	Bool	0
 Busy	Bool	0.1
@@ -22,11 +23,12 @@ X_Position	Int	16
 Y_Position	Int	18
 Z_Position	Int	20
 Commands	Struct	22
-Home_Position	Bool	22
-Pickup_Position	Bool	22.1
-Pallet_Position	Bool	22.2
-Quarantine_Position	Bool	22.3
-End_Effector	Bool	22.4
+Execute_Move	Bool	22
+Home_Position	Bool	22.1
+Pickup_Position	Bool	22.2
+Pallet_Position	Bool	22.3
+Quarantine_Position	Bool	22.4
+End_Effector	Bool	22.5
 Speed	Int	24
 Position	Struct	26
 X_Position	Int	26

@@ -1,0 +1,125 @@
+﻿TYPE "System_UDT"
+VERSION : 0.1
+   STRUCT
+      State : Int;
+      Enable : Bool;
+      Safety_OK : Bool;
+      No_Faults : Bool;
+      Active_Fault : Bool;
+      Startup_Completed : Bool;
+      Quarantine_Check : Bool;
+      Cube_In_Quarantine : Bool;
+      Pickup_Location : Struct
+         X_Position : Int;
+         Y_Position : Int;
+         Z_Position : Int;
+      END_STRUCT;
+      Quarantine_Location : Struct
+         X_Position : Int;
+         Y_Position : Int;
+         Z_Position : Int;
+      END_STRUCT;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "HMI_UDT"
+VERSION : 0.1
+   STRUCT
+      Buttons : Struct
+         Start : Bool;
+         Stop : Bool;
+         Reset : Bool;
+      END_STRUCT;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "Objects_UDT"
+VERSION : 0.1
+   STRUCT
+      Total_Cube_Count : Int;   // 0 Reject, 1 Inductive, 2 Capacitive, 3 Plastic
+      Quarantined_Count : Int;
+      Defect_Count : Int;
+      Alluminium_Count : Int;
+      Steel_Count : Int;
+      Yellow_Count : Int;
+      Purple_Count : Int;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "Gantry_UDT"
+VERSION : 0.1
+   STRUCT
+      Home : Bool;
+      Busy : Bool;
+      Move_Done : Bool;
+      Pick_Up : Bool;
+      Place_Down : Bool;
+      Home_Command : Bool;
+      Power_OK : Bool;
+      Current_Position : Real;
+      Target_Position : Real;
+      Velocity : Real;
+      Position1 : Real;
+      Position2 : Real;
+      Home_Error : Bool;
+      Home_Error_Fix : Bool;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "Pallet_UDT"
+VERSION : 0.1
+   STRUCT
+      Home : Struct
+         X_Position : Int := 200;
+         Y_Position : Int := 200;
+         Z_Position : Int := 50;
+      END_STRUCT;
+      Row1 : Array[1..3] of Bool;
+      Row2 : Array[1..3] of Bool;
+      Row3 : Array[1..3] of Bool;
+      Row4 : Array[1..3] of Bool;
+      Pallet_Full : Bool;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "IO"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+   STRUCT 
+      HMI : "HMI_UDT";
+      Cubes : "Objects_UDT";
+      Gantry : "Gantry_UDT";
+      System { S7_SetPoint := 'False'} : "System_UDT";
+      Pallet : "Pallet_UDT";
+      HMI_Buttons : Struct
+         Conveyor1_Override : Bool;
+         Conveyor2_Override : Bool;
+         Linear_Override : Bool;
+         Confirm_Reset : Bool;
+      END_STRUCT;
+      Robot_Enable : Bool;   // Disable this bit if theres no robot arm installed on the Smart Factory
+   END_STRUCT;
+
+
+BEGIN
+   Gantry.Velocity := 100.0;
+   Gantry.Position1 := 0.0;
+   Gantry.Position2 := 190.0;
+   System.Pickup_Location.X_Position := -242;
+   System.Pickup_Location.Y_Position := 221;
+   System.Pickup_Location.Z_Position := 284;
+   System.Quarantine_Location.X_Position := 99;
+   System.Quarantine_Location.Y_Position := 364;
+   System.Quarantine_Location.Z_Position := 242;
+   Pallet.Home.X_Position := -302;
+   Pallet.Home.Y_Position := 58;
+   Pallet.Home.Z_Position := 424;
+   Robot_Enable := true;
+
+END_DATA_BLOCK
+

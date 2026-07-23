@@ -1,0 +1,26 @@
+﻿TYPE "IOLink_UDT"
+VERSION : 0.1
+   STRUCT
+      Online : Bool;
+      Current : Real;
+      Voltage : Real;
+      Temperature : Real;
+      Alarm : Bool;
+      Active_Port_Count : Int;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "IO_Link"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      IO { S7_SetPoint := 'False'} : "IOLink_UDT";
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+

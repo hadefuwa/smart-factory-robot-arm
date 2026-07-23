@@ -99,30 +99,33 @@ MAIN_DB_DEFAULTS = {
     'gantry_position2': {'byte': 34, 'kind': 'real'},
     'gantry_home_error': {'byte': 38, 'bit': 0, 'kind': 'bool'},
     'gantry_home_error_fix': {'byte': 38, 'bit': 1, 'kind': 'bool'},
-    'system_safety_ok': {'byte': 40, 'bit': 0, 'kind': 'bool'},
-    'system_no_faults': {'byte': 40, 'bit': 1, 'kind': 'bool'},
-    'system_active_fault': {'byte': 40, 'bit': 2, 'kind': 'bool'},
-    'system_state': {'byte': 42, 'kind': 'int'},
-    'system_startup_completed': {'byte': 44, 'bit': 0, 'kind': 'bool'},
-    'cube_in_quarantine': {'byte': 44, 'bit': 1, 'kind': 'bool'},
-    'pickup_location_x': {'byte': 46, 'kind': 'int'},
-    'pickup_location_y': {'byte': 48, 'kind': 'int'},
-    'pickup_location_z': {'byte': 50, 'kind': 'int'},
-    'quarantine_location_x': {'byte': 52, 'kind': 'int'},
-    'quarantine_location_y': {'byte': 54, 'kind': 'int'},
-    'quarantine_location_z': {'byte': 56, 'kind': 'int'},
-    'pallet_home_x': {'byte': 58, 'kind': 'int'},
-    'pallet_home_y': {'byte': 60, 'kind': 'int'},
-    'pallet_home_z': {'byte': 62, 'kind': 'int'},
-    'pallet_row1': {'byte': 64, 'kind': 'row', 'width': 3},
-    'pallet_row2': {'byte': 66, 'kind': 'row', 'width': 3},
-    'pallet_row3': {'byte': 68, 'kind': 'row', 'width': 3},
-    'pallet_row4': {'byte': 70, 'kind': 'row', 'width': 3},
-    'pallet_full': {'byte': 72, 'bit': 0, 'kind': 'bool'},
-    'conveyor1_override': {'byte': 74, 'bit': 0, 'kind': 'bool'},
-    'conveyor2_override': {'byte': 74, 'bit': 1, 'kind': 'bool'},
-    'linear_override': {'byte': 74, 'bit': 2, 'kind': 'bool'},
-    'confirm_reset': {'byte': 74, 'bit': 3, 'kind': 'bool'},
+    'system_state': {'byte': 40, 'kind': 'int'},
+    'system_enable': {'byte': 42, 'bit': 0, 'kind': 'bool'},
+    'system_safety_ok': {'byte': 42, 'bit': 1, 'kind': 'bool'},
+    'system_no_faults': {'byte': 42, 'bit': 2, 'kind': 'bool'},
+    'system_active_fault': {'byte': 42, 'bit': 3, 'kind': 'bool'},
+    'system_startup_completed': {'byte': 42, 'bit': 4, 'kind': 'bool'},
+    'quarantine_check': {'byte': 42, 'bit': 5, 'kind': 'bool'},
+    'cube_in_quarantine': {'byte': 42, 'bit': 6, 'kind': 'bool'},
+    'pickup_location_x': {'byte': 44, 'kind': 'int'},
+    'pickup_location_y': {'byte': 46, 'kind': 'int'},
+    'pickup_location_z': {'byte': 48, 'kind': 'int'},
+    'quarantine_location_x': {'byte': 50, 'kind': 'int'},
+    'quarantine_location_y': {'byte': 52, 'kind': 'int'},
+    'quarantine_location_z': {'byte': 54, 'kind': 'int'},
+    'pallet_home_x': {'byte': 56, 'kind': 'int'},
+    'pallet_home_y': {'byte': 58, 'kind': 'int'},
+    'pallet_home_z': {'byte': 60, 'kind': 'int'},
+    'pallet_row1': {'byte': 62, 'kind': 'row', 'width': 3},
+    'pallet_row2': {'byte': 64, 'kind': 'row', 'width': 3},
+    'pallet_row3': {'byte': 66, 'kind': 'row', 'width': 3},
+    'pallet_row4': {'byte': 68, 'kind': 'row', 'width': 3},
+    'pallet_full': {'byte': 70, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_override': {'byte': 72, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_override': {'byte': 72, 'bit': 1, 'kind': 'bool'},
+    'linear_override': {'byte': 72, 'bit': 2, 'kind': 'bool'},
+    'confirm_reset': {'byte': 72, 'bit': 3, 'kind': 'bool'},
+    'robot_enable': {'byte': 74, 'bit': 0, 'kind': 'bool'},
 }
 
 CAMERA_DB_DEFAULTS = {
@@ -130,7 +133,7 @@ CAMERA_DB_DEFAULTS = {
     'connected': {'byte': 0, 'bit': 1, 'kind': 'bool'},
     'busy': {'byte': 0, 'bit': 2, 'kind': 'bool'},
     'completed': {'byte': 0, 'bit': 3, 'kind': 'bool'},
-    'defect_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
+    'defect_detected': {'byte': 0, 'bit': 4, 'kind': 'bool'},
     'reject_command_from_plc': {'byte': 0, 'bit': 5, 'kind': 'bool'},
     'yellow_cube_detected': {'byte': 0, 'bit': 6, 'kind': 'bool'},
     'purple_cube_detected': {'byte': 0, 'bit': 7, 'kind': 'bool'},
@@ -330,7 +333,7 @@ class PLCWorker:
         camera_db_config = camera_db_config or {}
         robot_db_config = robot_db_config or {}
         self.main_db_number = int(main_db_config.get('db_number', 123))
-        self.main_db_total_size = max(1, int(main_db_config.get('total_size', 75)))
+        self.main_db_total_size = max(1, int(main_db_config.get('total_size', 76)))
         self.main_db_tags = self._build_tag_config(main_db_config.get('tags', {}), MAIN_DB_DEFAULTS)
         self.camera_db_number = int(camera_db_config.get('db_number', 124))
         self.camera_db_total_size = max(1, int(camera_db_config.get('total_size', 2)))
@@ -541,11 +544,13 @@ class PLCWorker:
             'gantry_home_error_fix': False,  # READ-ONLY (PLC → Pi)
 
             # System (byte 72-75)
+            'system_state': 0,
+            'system_enable': False,
             'system_safety_ok': False,
             'system_no_faults': False,
             'system_active_fault': False,
             'system_startup_completed': False,
-            'system_state': 0,
+            'quarantine_check': False,
             'cube_in_quarantine': False,
             'pickup_location_x': 0,
             'pickup_location_y': 0,
@@ -569,6 +574,7 @@ class PLCWorker:
             'conveyor2_override': False,  # READ-ONLY (PLC → Pi)
             'linear_override': False,     # READ-ONLY (PLC → Pi)
             'confirm_reset': False,
+            'robot_enable': False,        # READ-ONLY (PLC → Pi)
         }
 
     def start(self):
@@ -948,11 +954,13 @@ class PLCWorker:
             self.cache['gantry_home_error'] = self._main_bit(data, 'gantry_home_error')
             self.cache['gantry_home_error_fix'] = self._main_bit(data, 'gantry_home_error_fix')
 
+            self.cache['system_state'] = self._main_int(data, 'system_state')
+            self.cache['system_enable'] = self._main_bit(data, 'system_enable')
             self.cache['system_safety_ok'] = self._main_bit(data, 'system_safety_ok')
             self.cache['system_no_faults'] = self._main_bit(data, 'system_no_faults')
             self.cache['system_active_fault'] = self._main_bit(data, 'system_active_fault')
             self.cache['system_startup_completed'] = self._main_bit(data, 'system_startup_completed')
-            self.cache['system_state'] = self._main_int(data, 'system_state')
+            self.cache['quarantine_check'] = self._main_bit(data, 'quarantine_check')
             self.cache['cube_in_quarantine'] = self._main_bit(data, 'cube_in_quarantine')
             self.cache['pickup_location_x'] = self._main_int(data, 'pickup_location_x')
             self.cache['pickup_location_y'] = self._main_int(data, 'pickup_location_y')
@@ -974,6 +982,7 @@ class PLCWorker:
             self.cache['conveyor2_override'] = self._main_bit(data, 'conveyor2_override')
             self.cache['linear_override'] = self._main_bit(data, 'linear_override')
             self.cache['confirm_reset'] = self._main_bit(data, 'confirm_reset')
+            self.cache['robot_enable'] = self._main_bit(data, 'robot_enable')
 
     def _decode_camera_db(self, data: bytearray):
         """Decode the camera PLC DB into cache (called by worker thread only)."""

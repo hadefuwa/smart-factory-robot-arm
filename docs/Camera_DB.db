@@ -1,0 +1,29 @@
+﻿TYPE "Camera_UDT"
+VERSION : 0.1
+   STRUCT
+      Start : Bool;
+      Connected : Bool;
+      Busy : Bool;
+      Completed : Bool;
+      Defect_Detected : Bool;
+      Reject_Command_From_PLC : Bool;
+      Yellow_Cube_Detected : Bool;
+      Purple_Cube_Detected : Bool;
+      Metal_Cube_Detected : Bool;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Camera_DB"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      IO : "Camera_UDT";
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+

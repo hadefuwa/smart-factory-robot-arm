@@ -5875,11 +5875,13 @@ def read_main_db_tags():
         'gantry_position2': 0.0,
         'gantry_home_error': False,
         'gantry_home_error_fix': False,
+        'system_state': 0,
+        'system_enable': False,
         'system_safety_ok': False,
         'system_no_faults': False,
         'system_active_fault': False,
-        'system_state': 0,
         'system_startup_completed': False,
+        'quarantine_check': False,
         'cube_in_quarantine': False,
         'pickup_location_x': 0,
         'pickup_location_y': 0,
@@ -5899,6 +5901,7 @@ def read_main_db_tags():
         'conveyor2_override': False,
         'linear_override': False,
         'confirm_reset': False,
+        'robot_enable': False,
     }
 
     try:
@@ -5932,11 +5935,13 @@ def read_main_db_tags():
             'gantry_position2': float(cache.get('gantry_position2', 0.0)),
             'gantry_home_error': bool(cache.get('gantry_home_error', False)),
             'gantry_home_error_fix': bool(cache.get('gantry_home_error_fix', False)),
+            'system_state': int(cache.get('system_state', 0)),
+            'system_enable': bool(cache.get('system_enable', False)),
             'system_safety_ok': bool(cache.get('system_safety_ok', False)),
             'system_no_faults': bool(cache.get('system_no_faults', False)),
             'system_active_fault': bool(cache.get('system_active_fault', False)),
-            'system_state': int(cache.get('system_state', 0)),
             'system_startup_completed': bool(cache.get('system_startup_completed', False)),
+            'quarantine_check': bool(cache.get('quarantine_check', False)),
             'cube_in_quarantine': bool(cache.get('cube_in_quarantine', False)),
             'pickup_location_x': int(cache.get('pickup_location_x', 0)),
             'pickup_location_y': int(cache.get('pickup_location_y', 0)),
@@ -5956,6 +5961,7 @@ def read_main_db_tags():
             'conveyor2_override': bool(cache.get('conveyor2_override', False)),
             'linear_override': bool(cache.get('linear_override', False)),
             'confirm_reset': bool(cache.get('confirm_reset', False)),
+            'robot_enable': bool(cache.get('robot_enable', False)),
         }
 
         return jsonify({

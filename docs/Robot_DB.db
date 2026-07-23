@@ -1,0 +1,64 @@
+﻿TYPE "Robot_UDT"
+VERSION : 0.1
+   STRUCT
+      Status : Struct
+         Connected : Bool;
+         Busy : Bool;
+         Move_Complete : Bool;
+         At_Home : Bool;
+         At_Pickup_Position : Bool;
+         At_Pallet_Position : Bool;
+         At_Quarantine_Position : Bool;
+         Plunger_Active : Bool;
+         Cycle_Complete : Bool;
+         Invalid_Target : Bool;
+         Servos : Struct
+            Any_Moving : Bool;
+            Any_Overload : Bool;
+            Any_Undervoltage : Bool;
+            Any_Overtemp : Bool;
+            Max_Temperature : Real;
+            Min_Voltage : Real;
+            Max_Load_Pct : Real;
+         END_STRUCT;
+         Position : Struct
+            X_Position : Int;
+            Y_Position : Int;
+            Z_Position : Int;
+         END_STRUCT;
+      END_STRUCT;
+      Commands : Struct
+         Execute_Move : Bool;
+         Home_Position : Bool;
+         Pickup_Position : Bool;
+         Pallet_Position : Bool;
+         Quarantine_Position : Bool;
+         End_Effector : Bool;
+         Speed : Int;
+         Position : Struct
+            X_Position : Int;
+            Y_Position : Int;
+            Z_Position : Int;
+         END_STRUCT;
+      END_STRUCT;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Robot_DB"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      IO : "Robot_UDT";
+   END_STRUCT;
+
+
+BEGIN
+   IO.Commands.Speed := 1000;
+   IO.Commands.Position.X_Position := 40;
+   IO.Commands.Position.Y_Position := 260;
+   IO.Commands.Position.Z_Position := 350;
+
+END_DATA_BLOCK
+

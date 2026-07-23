@@ -5,5 +5,5 @@ Completed	Bool	0.3
 Defect_Detected	Bool	0.4
 Reject_Command_From_PLC	Bool	0.5
 Yellow_Cube_Detected	Bool	0.6
-White_Cube_Detected	Bool	0.7
+Purple_Cube_Detected	Bool	0.7
 Metal_Cube_Detected	Bool	1
