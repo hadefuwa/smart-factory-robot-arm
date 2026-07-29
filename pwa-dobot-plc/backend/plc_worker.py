@@ -63,7 +63,7 @@ RAW_OUTPUT_NAMES = {
     'Q0.2': 'Plunger Down',
     'Q0.3': 'Plunger Up',
     'Q0.4': 'Pneumatic Vacuum',
-    'Q0.5': 'Gate',
+    'Q0.5': 'Stepper Enable',
     'Q0.6': 'Reject',
     'Q0.7': 'Reset Linear Actuator',
     'Q1.0': 'Conveyor 1',
@@ -107,25 +107,27 @@ MAIN_DB_DEFAULTS = {
     'system_startup_completed': {'byte': 42, 'bit': 4, 'kind': 'bool'},
     'quarantine_check': {'byte': 42, 'bit': 5, 'kind': 'bool'},
     'cube_in_quarantine': {'byte': 42, 'bit': 6, 'kind': 'bool'},
-    'pickup_location_x': {'byte': 44, 'kind': 'int'},
-    'pickup_location_y': {'byte': 46, 'kind': 'int'},
-    'pickup_location_z': {'byte': 48, 'kind': 'int'},
-    'quarantine_location_x': {'byte': 50, 'kind': 'int'},
-    'quarantine_location_y': {'byte': 52, 'kind': 'int'},
-    'quarantine_location_z': {'byte': 54, 'kind': 'int'},
-    'pallet_home_x': {'byte': 56, 'kind': 'int'},
-    'pallet_home_y': {'byte': 58, 'kind': 'int'},
-    'pallet_home_z': {'byte': 60, 'kind': 'int'},
-    'pallet_row1': {'byte': 62, 'kind': 'row', 'width': 3},
-    'pallet_row2': {'byte': 64, 'kind': 'row', 'width': 3},
-    'pallet_row3': {'byte': 66, 'kind': 'row', 'width': 3},
-    'pallet_row4': {'byte': 68, 'kind': 'row', 'width': 3},
-    'pallet_full': {'byte': 70, 'bit': 0, 'kind': 'bool'},
-    'conveyor1_override': {'byte': 72, 'bit': 0, 'kind': 'bool'},
-    'conveyor2_override': {'byte': 72, 'bit': 1, 'kind': 'bool'},
-    'linear_override': {'byte': 72, 'bit': 2, 'kind': 'bool'},
-    'confirm_reset': {'byte': 72, 'bit': 3, 'kind': 'bool'},
-    'robot_enable': {'byte': 74, 'bit': 0, 'kind': 'bool'},
+    'inspection_result': {'byte': 44, 'kind': 'int'},
+    'inspection_done': {'byte': 46, 'bit': 0, 'kind': 'bool'},
+    'pickup_location_x': {'byte': 48, 'kind': 'int'},
+    'pickup_location_y': {'byte': 50, 'kind': 'int'},
+    'pickup_location_z': {'byte': 52, 'kind': 'int'},
+    'quarantine_location_x': {'byte': 54, 'kind': 'int'},
+    'quarantine_location_y': {'byte': 56, 'kind': 'int'},
+    'quarantine_location_z': {'byte': 58, 'kind': 'int'},
+    'pallet_home_x': {'byte': 60, 'kind': 'int'},
+    'pallet_home_y': {'byte': 62, 'kind': 'int'},
+    'pallet_home_z': {'byte': 64, 'kind': 'int'},
+    'pallet_row1': {'byte': 66, 'kind': 'row', 'width': 3},
+    'pallet_row2': {'byte': 68, 'kind': 'row', 'width': 3},
+    'pallet_row3': {'byte': 70, 'kind': 'row', 'width': 3},
+    'pallet_row4': {'byte': 72, 'kind': 'row', 'width': 3},
+    'pallet_full': {'byte': 74, 'bit': 0, 'kind': 'bool'},
+    'conveyor1_override': {'byte': 76, 'bit': 0, 'kind': 'bool'},
+    'conveyor2_override': {'byte': 76, 'bit': 1, 'kind': 'bool'},
+    'linear_override': {'byte': 76, 'bit': 2, 'kind': 'bool'},
+    'confirm_reset': {'byte': 76, 'bit': 3, 'kind': 'bool'},
+    'robot_enable': {'byte': 78, 'bit': 0, 'kind': 'bool'},
 }
 
 CAMERA_DB_DEFAULTS = {
@@ -333,7 +335,7 @@ class PLCWorker:
         camera_db_config = camera_db_config or {}
         robot_db_config = robot_db_config or {}
         self.main_db_number = int(main_db_config.get('db_number', 123))
-        self.main_db_total_size = max(1, int(main_db_config.get('total_size', 76)))
+        self.main_db_total_size = max(1, int(main_db_config.get('total_size', 80)))
         self.main_db_tags = self._build_tag_config(main_db_config.get('tags', {}), MAIN_DB_DEFAULTS)
         self.camera_db_number = int(camera_db_config.get('db_number', 124))
         self.camera_db_total_size = max(1, int(camera_db_config.get('total_size', 2)))
@@ -552,6 +554,8 @@ class PLCWorker:
             'system_startup_completed': False,
             'quarantine_check': False,
             'cube_in_quarantine': False,
+            'inspection_result': 0,
+            'inspection_done': False,
             'pickup_location_x': 0,
             'pickup_location_y': 0,
             'pickup_location_z': 0,
@@ -962,6 +966,8 @@ class PLCWorker:
             self.cache['system_startup_completed'] = self._main_bit(data, 'system_startup_completed')
             self.cache['quarantine_check'] = self._main_bit(data, 'quarantine_check')
             self.cache['cube_in_quarantine'] = self._main_bit(data, 'cube_in_quarantine')
+            self.cache['inspection_result'] = self._main_int(data, 'inspection_result')
+            self.cache['inspection_done'] = self._main_bit(data, 'inspection_done')
             self.cache['pickup_location_x'] = self._main_int(data, 'pickup_location_x')
             self.cache['pickup_location_y'] = self._main_int(data, 'pickup_location_y')
             self.cache['pickup_location_z'] = self._main_int(data, 'pickup_location_z')

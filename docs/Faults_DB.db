@@ -1,0 +1,44 @@
+﻿TYPE "Faults_UDT"
+VERSION : 0.1
+   STRUCT
+      Fault1 : Bool;
+      Fault2 : Bool;
+      Fault3 : Bool;
+      Fault4 : Bool;
+      Fault5 : Bool;
+      Fault6 : Bool;
+      Fault7 : Bool;
+      Fault8 : Bool;
+      Fault9 : Bool;
+      Fault10 : Bool;
+      Fault11 : Bool;
+      Fault12 : Bool;
+      Fault13 : Bool;
+      Fault14 : Bool;
+      Fault15 : Bool;
+      Fault16 : Bool;
+      Fault17 : Bool;
+      Fault18 : Bool;
+      Fault19 : Bool;
+      Fault20 : Bool;
+      Fault21 : Bool;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Faults_DB"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT 
+      Faults { S7_SetPoint := 'False'} : "Faults_UDT";
+      Faults_Count { S7_SetPoint := 'True'} : Int;
+      Warnings { S7_SetPoint := 'False'} : "Faults_UDT";
+      Warnings_Count { S7_SetPoint := 'True'} : Int;
+   END_STRUCT;
+
+
+BEGIN
+
+END_DATA_BLOCK
+

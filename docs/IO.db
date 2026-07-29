@@ -9,6 +9,8 @@ VERSION : 0.1
       Startup_Completed : Bool;
       Quarantine_Check : Bool;
       Cube_In_Quarantine : Bool;
+      Inspection_Result : Int;   // 1=pass, 2=fail
+      Inspection_Done : Bool;
       Pickup_Location : Struct
          X_Position : Int;
          Y_Position : Int;
