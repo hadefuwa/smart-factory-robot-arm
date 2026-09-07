@@ -1,0 +1,36 @@
+The definitions inside the XML for your specific E2E-X16MB1T12 variant, confirms the 2-byte structure we discussed.
+
+PLC Data Type (UDT) for this sensor.
+
+Here is exactly how to map it so the hardware directly aligns with the IODD data:
+
+1. Create a new PLC Data Type (UDT)
+Name it something like Omron_E2E_IOLink.
+
+2. Add these variables to the UDT (in this exact order):
+Siemens and IO-Link both natively use Big-Endian byte ordering. By defining the UDT exactly like this, it aligns perfectly with the sensor's bit structure:
+
+Monitor_Output (Data Type: USInt) - This consumes Byte 0 (The raw distance value from 0-255)
+
+Switching_State (Data Type: Bool) - This is Bit 0 of Byte 1 (The main NO/NC detection signal)
+
+Spare_1 (Data Type: Bool)
+
+Spare_2 (Data Type: Bool)
+
+Spare_3 (Data Type: Bool)
+
+Instability_Warning (Data Type: Bool) - This is Bit 4 of Byte 1
+
+Excessive_Proximity (Data Type: Bool) - This is Bit 5 of Byte 1
+
+Spare_4 (Data Type: Bool)
+
+Spare_5 (Data Type: Bool)
+
+3. Apply it to your Tag Table
+Go to your PLC Tags table, find the starting address for Port 2 (which we saw earlier was %IB3), and assign this new UDT to %I3.0.
+
+This automatically breaks out all the bits for you in the background. Instead of guessing what %I4.0 does, your SCL or Ladder logic will neatly read Prox_Sensor_Port2.Switching_State or Prox_Sensor_Port2.Excessive_Proximity.
+
+Structuring the IO-Link data this way is especially helpful when mapping these smart factory products out for BTEC or Higher National engineering units, as it makes the diagnostic capabilities much easier to demonstrate and read!

@@ -3,6 +3,13 @@
 
 # Local-only working files
 git.txt
+git-scp.txt
+docs/*.BACKUP.docx
+
+# Pi Python environment snapshots + downloaded wheels (local scratch)
+pi-wheels/
+pi-wheels-freeze.txt
+pi-wheels-relaxed.txt
 
 # Historic Dobot / USB-camera reference code — kept on disk for browsing
 # but not relevant to active development.
@@ -19,6 +26,10 @@ cube-training/dataset/
 cube-training/runs/
 cube-training/sidelined/
 cube-training/train.log
+cube-training/train.err
+cube-training/train.txt
+cube-training/labels/
+cube-training/data.yaml
 cube-training/yolo11n.pt
 
 # Dependencies
