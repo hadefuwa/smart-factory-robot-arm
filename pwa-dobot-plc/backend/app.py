@@ -237,6 +237,13 @@ _poe_latest_unmasked    = None      # numpy BGR array, cropped, no mask applied
 _poe_latest_detections  = []        # last detection list from inference thread
 _poe_pump_thread        = None
 
+# Mirrors the exact value _defect_watcher_loop is currently writing to
+# DB124.DBX0.4. The pump's on-stream REJECT banner reads this instead of
+# re-deriving "sensor present + no detections" itself, so the operator
+# never sees a REJECT banner for a frame the debounce already filtered
+# out — the banner and the actual PLC bit always agree.
+_defect_bit_active      = False
+
 # Rolling defect-% buffer per class. Smooths frame-to-frame flutter
 # from the histogram + convex-hull defect detector. Used in
 # _poe_detection_loop. 5 frames at the 1 Hz YOLO cycle = a 5-second
@@ -5282,18 +5289,16 @@ def _poe_pump_loop():
             # Annotated cache (unmasked + most-recent detection boxes) for HMI stream.
             annotated = poe_vision_service.draw_detections(frame_unmasked, cached_detections)
 
-            # "REJECT" overlay: photoelectric sensor I0.5 sees an object
-            # but YOLO returned zero detections this cycle — foreign /
-            # unrecognised object on the conveyor. Paint a big red badge
-            # so the HMI stream + Capture button preview both surface it.
-            # Sensor read uses the PLC IO cache so it's < 1 ms; falsy
-            # snapshot just skips the overlay rather than guessing.
-            try:
-                _io = get_plc_io_snapshot() or {}
-                _sensor = bool(_io.get('inputs', {}).get('I0.5', False))
-            except Exception:
-                _sensor = False
-            if _sensor and not cached_detections:
+            # "REJECT" overlay: mirrors _defect_bit_active, i.e. the exact
+            # value _defect_watcher_loop is currently writing to
+            # DB124.DBX0.4. Used to be a raw instantaneous check (sensor
+            # present + zero cached detections), which fired on every
+            # single noisy YOLO frame even when reject_confirm_cycles
+            # correctly filtered it out and never wrote the bit — the
+            # operator saw a scary banner for a reject that never
+            # happened. Reading the watcher's own state instead means the
+            # banner only shows when a reject is genuinely in progress.
+            if _defect_bit_active:
                 ah, aw = annotated.shape[:2]
                 text = 'REJECT'
                 # Pick the largest font scale that fits inside 80% of width.
@@ -5702,6 +5707,7 @@ def _defect_watcher_loop():
         DEFECT_WATCHER_INTERVAL_S, DEFECT_PULSE_DURATION_S, DEFECT_HOLD_REPULSE_S,
         REJECT_CONFIRM_CYCLES_DEFAULT,
     )
+    global _defect_bit_active
     state = 'IDLE'
     pulse_until = 0.0
     held_since = 0.0
@@ -5745,25 +5751,32 @@ def _defect_watcher_loop():
                 if defective_now and reject_streak >= reject_confirm_cycles:
                     pulse_until = now + DEFECT_PULSE_DURATION_S
                     state = 'PULSING'
+                    _defect_bit_active = True
                     queue_defect_detected(True)
                 else:
+                    _defect_bit_active = False
                     queue_defect_detected(False)
             elif state == 'PULSING':
                 if now >= pulse_until:
                     held_since = now
                     state = 'HELD'
+                    _defect_bit_active = False
                     queue_defect_detected(False)
                 else:
+                    _defect_bit_active = True
                     queue_defect_detected(True)
             elif state == 'HELD':
                 if not defective_now:
                     state = 'IDLE'
+                    _defect_bit_active = False
                     queue_defect_detected(False)
                 elif now - held_since >= DEFECT_HOLD_REPULSE_S:
                     pulse_until = now + DEFECT_PULSE_DURATION_S
                     state = 'PULSING'
+                    _defect_bit_active = True
                     queue_defect_detected(True)
                 else:
+                    _defect_bit_active = False
                     queue_defect_detected(False)
         except Exception as e:
             logger.warning(f"defect watcher iteration failed: {e}")
