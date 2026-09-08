@@ -237,22 +237,46 @@ def draw_detections(frame, detections):
         # / foreign saturation. Higher = more contamination.
         defect_pct = float(d.get('defect_pct', 0.0))
 
+        # plc_confirmed / confirm_streak / confirm_needed are set by the
+        # inference loop's debounce + sensor gate (app.py) — the same
+        # check that decides whether this class actually gets written to
+        # DB124. Mirroring it here means the operator only ever sees
+        # "SENDING TO PLC" when it's true, instead of raw per-frame YOLO
+        # output that can look confident a cycle or two before the write
+        # gate would trust it.
+        plc_confirmed = bool(d.get('plc_confirmed', False))
+        confirm_streak = int(d.get('confirm_streak', 0))
+        confirm_needed = int(d.get('confirm_needed', 0))
+
         # Defective cubes are drawn red and thicker so the operator can't
-        # miss it. Clean cubes use the per-class colour.
+        # miss it. Confirmed-and-sending cubes use the full per-class
+        # colour; still-confirming cubes use a muted/desaturated version
+        # of it so "not yet trustworthy" reads visually distinct at a
+        # glance, without needing the operator to read the label text.
         if is_defective:
             colour = DEFECT_RED
             thickness = 3
         else:
-            colour = CUBE_COLOURS.get(label, (0, 255, 0))
-            thickness = 2
+            base_colour = CUBE_COLOURS.get(label, (0, 255, 0))
+            if plc_confirmed:
+                colour = base_colour
+                thickness = 2
+            else:
+                colour = tuple(int(c * 0.45 + 128 * 0.55) for c in base_colour)
+                thickness = 1
         cv2.rectangle(out, (x1, y1), (x2, y2), colour, thickness)
 
-        # Top-left label: class + confidence (always shown).
+        # Top-left label: class + confidence, plus the PLC-write state.
         # Pretty-print: "metal_cube" -> "Metal Cube" so the on-stream
         # text reads naturally. The internal class name still has the
         # underscore — only the display string is touched.
         pretty_label = label.replace('_', ' ').title()
-        text = f"{pretty_label} {conf_v:.0%}"
+        if is_defective:
+            text = f"{pretty_label} {conf_v:.0%}"
+        elif plc_confirmed:
+            text = f"{pretty_label} {conf_v:.0%} - SENDING TO PLC"
+        else:
+            text = f"{pretty_label} {conf_v:.0%} - confirming ({confirm_streak}/{confirm_needed})"
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
         cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw + 4, y1), colour, -1)
         cv2.putText(out, text, (x1 + 2, y1 - 4),

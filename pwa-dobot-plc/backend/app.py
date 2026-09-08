@@ -5529,10 +5529,6 @@ def _poe_detection_loop():
                 if cls not in _seen_classes:
                     _defect_pct_history.pop(cls, None)
 
-            # Publish the fresh detection list so the pump can overlay it.
-            with _poe_frame_lock:
-                _poe_latest_detections = list(result.get('detections', []))
-
             result['timestamp'] = time.time()
 
             # N-consecutive-cycles debounce — see _poe_dominant_streak.
@@ -5584,7 +5580,10 @@ def _poe_detection_loop():
             # (different-coloured) cube. Any cycle where the live read
             # disagrees with the latched value sends all-off instead of
             # trusting a possibly-stale answer.
-            if sensor_present and not any_defective and dominant == _poe_confirmed_dominant:
+            plc_asserting = bool(
+                sensor_present and not any_defective and dominant == _poe_confirmed_dominant
+            )
+            if plc_asserting:
                 queue_cube_detection_bits(
                     yellow=(_poe_confirmed_dominant == 'yellow_cube'),
                     purple=(_poe_confirmed_dominant == 'purple_cube'),
@@ -5592,6 +5591,24 @@ def _poe_detection_loop():
                 )
             else:
                 queue_cube_detection_bits(yellow=False, purple=False, metal=False)
+
+            # Tag each detection with whether IT is the class actually being
+            # asserted to the PLC right now, plus its debounce progress —
+            # the on-stream overlay reads these so the operator sees the
+            # same "confirming..." vs "SENDING TO PLC" state that the write
+            # gate above is acting on, instead of raw per-frame YOLO output
+            # that can look confident a cycle or two before it's trustworthy.
+            for det in result.get('detections', []):
+                det_class = det.get('class')
+                det['plc_confirmed'] = bool(plc_asserting and det_class == _poe_confirmed_dominant)
+                det['confirm_streak'] = min(
+                    _poe_dominant_streak.get(det_class, 0), POE_DEBOUNCE_CYCLES,
+                )
+                det['confirm_needed'] = POE_DEBOUNCE_CYCLES
+
+            # Publish the annotated detection list so the pump can overlay it.
+            with _poe_frame_lock:
+                _poe_latest_detections = list(result.get('detections', []))
 
             # Defect fires when EITHER:
             #   (a) the sensor sees something but YOLO recognises no known
