@@ -5,6 +5,15 @@
    the :root block below. Nothing else needs to touch.
    ================================================================ */
 
+/* Safety net: nothing on any page should be able to force horizontal
+   page-level scroll on a phone. Inner elements that need their own
+   horizontal scroller (e.g. a status strip) still scroll fine — this
+   only stops runaway overflow from reaching <html>/<body>. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 /* ── Self-hosted fonts (Pi has no internet) ── */
 @font-face {
   font-family: 'Plus Jakarta Sans';
@@ -1799,6 +1808,15 @@ body.dashboard-v2 .sf-content {
   display: grid;
   gap: 12px;
   align-content: start;
+}
+
+/* Grid/flex items default to min-width:auto, which refuses to shrink
+   below their content's intrinsic width. Without this, a single wide
+   child (e.g. a horizontally-scrolling status strip) forces .sf-content
+   and every ancestor up to <body> to grow past the viewport instead of
+   letting the child's own overflow-x:auto contain it. */
+body.dashboard-v2 .sf-content > * {
+  min-width: 0;
 }
 
 body.dashboard-v2 .sf-warning {
@@ -4351,6 +4369,27 @@ html[data-theme='dark'] body.dashboard-v2 .sf-template-pagehead {
   html[data-theme='dark'] body.dashboard-v2 .sf-template-footer {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  /* The logo mark alone is enough brand identity at this width — showing
+     "Smart Factory" next to the page title left neither enough room to
+     sit on one line, so both wrapped to two lines and collided. */
+  body.dashboard-v2 .sf-template-header-left .sf-brand-text {
+    display: none;
+  }
+
+  html[data-theme='light'] body.dashboard-v2 .sf-template-header-center,
+  html[data-theme='dark'] body.dashboard-v2 .sf-template-header-center {
+    min-width: 0;
+  }
+
+  html[data-theme='light'] body.dashboard-v2 .sf-template-shell-title,
+  html[data-theme='dark'] body.dashboard-v2 .sf-template-shell-title {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

@@ -338,6 +338,8 @@
   function buildCanonicalTopbar() {
     const initialTheme = localStorage.getItem('sf-template-theme') || document.documentElement.getAttribute('data-theme') || 'light';
     const initialLogo = initialTheme === 'dark' ? '/assets/img/matrix.png' : '/assets/img/matrix2.png';
+    const currentNavItem = NAV_ITEMS.find((item) => item.href === normalizedPath);
+    const pageLabel = currentNavItem ? currentNavItem.label : 'Dashboard';
     return `
       <div class="sf-template-header-left flex-none flex items-center gap-2">
         <button class="sf-icon-btn btn btn-ghost btn-sm btn-square" id="sfMenuToggle" type="button" aria-label="Open navigation">
@@ -349,7 +351,7 @@
         </a>
       </div>
       <div class="sf-template-header-center flex-1 flex justify-center">
-        <span class="sf-template-shell-title">Smart Factory 2</span>
+        <span class="sf-template-shell-title">${escapeHtml(pageLabel)}</span>
       </div>
       <div class="sf-template-header-right flex-none flex items-center gap-4">
         <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">
@@ -485,7 +487,7 @@
             </a>
           </div>
           <div class="sf-template-header-center flex-1 flex justify-center">
-            <span class="sf-template-shell-title">Smart Factory 2</span>
+            <span class="sf-template-shell-title">${escapeHtml(pageTitle)}</span>
           </div>
           <div class="sf-template-header-right flex-none flex items-center gap-4">
             <button class="sf-theme-toggle" type="button" data-sf-theme-toggle aria-label="Toggle theme" title="Toggle theme">

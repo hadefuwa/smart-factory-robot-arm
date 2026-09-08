@@ -6,7 +6,12 @@ git add .
 git commit -m "bridge issues"
 git push origin main
 ssh pi@rpi "cd ~/sf2 && git pull"
-ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service"
+ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service robotarmv3-pi.service"
 
 git tag -a v5.0.2 -m "Release v5.0.2"; git push origin v5.0.2
+
+live status:
+ssh pi@rpi "sudo systemctl is-active smart-factory.service robotarmv3-pi.service"
+ssh pi@rpi "curl -sk https://localhost:8080/api/robot-arm/status | python3 -m json.tool"
+ssh pi@rpi "sudo journalctl -u smart-factory.service -u robotarmv3-pi.service -f"
 

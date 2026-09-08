@@ -221,6 +221,10 @@
     "reject_confirm_cycles": 10,
     "reject_confirm_cycles_note": "Consecutive defect-watcher ticks (100 ms each) that the 'should reject' condition must hold before firing the DB124.DBX0.4 pulse. 10 = 1.0 s of confirmation. Raise to reduce false rejects on cubes that briefly drop below YOLO confidence; lower for faster-moving conveyors where the cube is only in view for a short time.",
     "note": "M5Stack PoE CAM-W (OV3660) - MAC 18:7F:88:06:A6:26 - stream at http://192.168.7.6/stream",
+    "rotation_deg": 270,
+    "hflip": false,
+    "vflip": false,
+    "rotation_note": "Applied to the raw USB frame before crop/mask/YOLO. rotation_deg is one of 0/90/180/270 (clockwise). Default 270 matches the original camera's mounting (equivalent to the old hardcoded ROTATE_90_COUNTERCLOCKWISE) so cube_detector.pt still sees the portrait orientation it was trained on. Re-tune after swapping camera hardware or its mounting orientation - watch the vision.html feed and adjust until upright, then hflip/vflip only if the image is mirrored after rotation is correct.",
     "crop": {
       "enabled": false,
       "top_pct": 0,
