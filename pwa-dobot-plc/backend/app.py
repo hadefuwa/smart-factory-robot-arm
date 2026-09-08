@@ -214,7 +214,7 @@ _poe_loop_anno_jpeg    = None      # bytes — last annotated frame (for /annota
 _poe_loop_thread       = None
 _poe_loop_pause_until  = 0.0       # epoch seconds; loop sleeps while now() < this
 POE_LOOP_INTERVAL_S    = 1.0       # one detection every 1 second
-POE_DEBOUNCE_CYCLES    = 2         # consecutive cycles required before PLC bits change
+POE_DEBOUNCE_CYCLES    = 3         # consecutive cycles required before PLC bits change
 
 # Debounce state — counts consecutive cycles where each class (or None) was
 # the loop's dominant. The "confirmed" dominant only updates once a class
@@ -5242,12 +5242,25 @@ def _poe_pump_loop():
                 time.sleep(0.5)
                 continue
 
-            # Rotate 90° CCW at the source. The cube_detector.pt currently
-            # deployed was trained on 480x640 portrait captures (see
-            # cube-training/cube_images/), so YOLO must see the same
-            # orientation. Training-image cache and the annotated view
-            # downstream both inherit this rotated frame.
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            # Rotate at the source so YOLO sees the same orientation the
+            # deployed cube_detector.pt was trained on (480x640 portrait —
+            # see cube-training/cube_images/). Live-tunable via
+            # poe_camera.rotation_deg/hflip/vflip so a camera swap only
+            # needs a config change, not a redeploy. Training-image cache
+            # and the annotated view downstream both inherit this frame.
+            _poe_cam_cfg = cfg.get('poe_camera', {})
+            _rotation_deg = _poe_cam_cfg.get('rotation_deg', 270)
+            _rotate_flag = {
+                90: cv2.ROTATE_90_CLOCKWISE,
+                180: cv2.ROTATE_180,
+                270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+            }.get(_rotation_deg)
+            if _rotate_flag is not None:
+                frame = cv2.rotate(frame, _rotate_flag)
+            if _poe_cam_cfg.get('hflip'):
+                frame = cv2.flip(frame, 1)
+            if _poe_cam_cfg.get('vflip'):
+                frame = cv2.flip(frame, 0)
 
             frame = poe_vision_service.apply_crop(frame, cfg.get('poe_camera', {}).get('crop'))
             frame_unmasked = frame.copy()
