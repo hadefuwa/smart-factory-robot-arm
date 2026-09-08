@@ -5573,7 +5573,18 @@ def _poe_detection_loop():
             # yellow_cube_detected (0.6) AND defect_detected (0.4), and a
             # downstream PLC routine that latches the colour first would
             # bin it as a clean yellow.
-            if sensor_present and not any_defective:
+            #
+            # Also require this cycle's raw `dominant` to match the
+            # latched `_poe_confirmed_dominant`. On a conveyor where
+            # cubes are touching with no empty-frame gap between them,
+            # `_poe_confirmed_dominant` can still hold the PREVIOUS
+            # cube's class while a new cube is mid-way through its own
+            # debounce streak — without this check, that stale value
+            # would get asserted the instant the sensor sees the new
+            # (different-coloured) cube. Any cycle where the live read
+            # disagrees with the latched value sends all-off instead of
+            # trusting a possibly-stale answer.
+            if sensor_present and not any_defective and dominant == _poe_confirmed_dominant:
                 queue_cube_detection_bits(
                     yellow=(_poe_confirmed_dominant == 'yellow_cube'),
                     purple=(_poe_confirmed_dominant == 'purple_cube'),
