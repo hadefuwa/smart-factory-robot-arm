@@ -2075,11 +2075,12 @@ body.dashboard-v2 .sf-action-btn {
   border-radius: 12px;
   background: linear-gradient(150deg, rgba(21, 43, 81, 0.8), rgba(16, 32, 61, 0.88));
   color: var(--sf-text-soft);
-  padding: 10px;
-  min-height: 64px;
+  padding: 10px 14px;
+  min-height: 48px;
   text-align: left;
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
   transition: all var(--sf-duration-fast) var(--sf-ease-in-out);
 }
@@ -2384,6 +2385,22 @@ body.dashboard-v2.sf-sidebar-collapsed .sf-nav-item {
 
   body.dashboard-v2 .sf-action-group {
     grid-template-columns: 1fr;
+  }
+
+  /* 4 uppercase tab labels at a fixed 34px height don't fit one row on a
+     phone — "HMI Control" wrapped to 2 lines and got clipped. Let the bar
+     wrap to a 2x2 grid instead, with height free to fit wrapped text. */
+  body.dashboard-v2 .sf-segmented {
+    flex-wrap: wrap;
+  }
+
+  body.dashboard-v2 .sf-segmented button {
+    flex: 1 1 calc(50% - 4px);
+    height: auto;
+    min-height: 34px;
+    padding: 6px 4px;
+    white-space: normal;
+    line-height: 1.25;
   }
 
   body.dashboard-v2 .sf-footer-meta {
