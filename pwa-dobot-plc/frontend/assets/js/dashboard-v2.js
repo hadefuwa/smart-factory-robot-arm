@@ -8,7 +8,7 @@
     snapshot: null,
     timer: null,
     bindMap: {},
-    activeSegmentId: 'segment-robot',
+    activeSegmentId: 'segment-hmi',
   };
 
   const domRefs = {
@@ -109,7 +109,32 @@
         body: JSON.stringify({ address: 'DB1.DBW0', value: 100 }),
       });
     },
+    async writeMainDbBit(tag, value) {
+      return fetchJSON(`${API_BASE}/api/plc/db123/write-bit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag, value }),
+      });
+    },
+    async readMainDbTags() {
+      return fetchJSON(`${API_BASE}/api/plc/db123/read`);
+    },
   };
+
+  // HMI Start/Stop/Reset/Fault Reset are momentary pushbuttons on the real
+  // panel — pulse the DB123 bit true then back to false rather than leaving
+  // it latched, so the PLC's edge detection sees a clean press-and-release.
+  const HMI_PULSE_MS = 400;
+
+  async function pulseMainDbBit(tag, label) {
+    await apiClient.writeMainDbBit(tag, true);
+    notify(`${label} pressed`, 'info');
+    window.setTimeout(() => {
+      apiClient.writeMainDbBit(tag, false).catch((err) => {
+        console.error(`Failed to release ${tag}`, err);
+      });
+    }, HMI_PULSE_MS);
+  }
 
   const actions = {
     async homeRobot() {
@@ -148,6 +173,18 @@
     async writePLC() {
       await withLoading(() => apiClient.writePLC());
       notify('Data written to PLC', 'success');
+    },
+    async hmiStart() {
+      await pulseMainDbBit('hmi_start', 'Start');
+    },
+    async hmiStop() {
+      await pulseMainDbBit('hmi_stop', 'Stop');
+    },
+    async hmiReset() {
+      await pulseMainDbBit('hmi_reset', 'Reset');
+    },
+    async faultReset() {
+      await pulseMainDbBit('confirm_reset', 'Fault reset');
     },
     openRobot() {
       window.location.href = '/robot-arm.html';
@@ -682,11 +719,59 @@
     setTimeout(() => node.classList.remove('sf-live-update'), 520);
   }
 
+  const HMI_OVERRIDE_POLL_MS = 3000;
+
+  function initHmiOverrides() {
+    const toggles = Array.from(document.querySelectorAll('[data-override-tag]'));
+    if (!toggles.length) return;
+
+    toggles.forEach((toggle) => {
+      toggle.addEventListener('change', async () => {
+        const tag = toggle.getAttribute('data-override-tag');
+        const value = toggle.checked;
+        toggle.disabled = true;
+        try {
+          await apiClient.writeMainDbBit(tag, value);
+          notify(`${toggle.closest('.sf-override-row')?.querySelector('span')?.textContent || tag} ${value ? 'enabled' : 'disabled'}`, value ? 'warning' : 'info');
+        } catch (err) {
+          console.error(`Failed to write ${tag}`, err);
+          toggle.checked = !value; // revert on failure
+          notify('Override write failed — check PLC connection', 'danger');
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    });
+
+    // Reflect the PLC's actual current state so the switches never drift
+    // from reality (e.g. someone else changed it, or it was set from the
+    // physical panel). Skip a toggle mid-interaction (disabled while its
+    // own write is in flight) so we don't fight the user's own click.
+    async function syncFromPlc() {
+      try {
+        const data = await apiClient.readMainDbTags();
+        const tags = data && data.tags ? data.tags : {};
+        toggles.forEach((toggle) => {
+          if (toggle.disabled) return;
+          const tag = toggle.getAttribute('data-override-tag');
+          if (tag in tags) toggle.checked = !!tags[tag];
+        });
+      } catch (err) {
+        // Silent — this is a background sync, the periodic dashboard
+        // refresh already surfaces PLC connectivity problems elsewhere.
+      }
+    }
+
+    syncFromPlc();
+    window.setInterval(syncFromPlc, HMI_OVERRIDE_POLL_MS);
+  }
+
   async function init() {
     buildBindMap();
     initNavigation();
     initSegmentedControls();
     initActions();
+    initHmiOverrides();
     initTileStagger();
     startEntranceSequence();
 

@@ -28,7 +28,7 @@ from datetime import datetime
 import struct
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot, write_main_db_bit
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -6041,6 +6041,29 @@ def read_main_db_tags():
             'last_update': 0.0,
             'mapping': {}
         }), 500
+
+
+@app.route('/api/plc/db123/write-bit', methods=['POST'])
+def write_main_db_bit_endpoint():
+    """
+    Write a single DB123 command bit — HMI start/stop/reset, fault reset
+    (confirm_reset), or a conveyor/linear override. Body: {"tag": str, "value": bool}.
+    Restricted server-side to plc_integration.MAIN_DB_WRITABLE_BITS; every
+    other DB123 field is PLC-owned or Pi-owned telemetry and not writable here.
+    """
+    try:
+        data = request.json or {}
+        tag = data.get('tag')
+        value = bool(data.get('value', False))
+        if not tag:
+            return jsonify({'success': False, 'error': 'Missing tag'}), 400
+        ok = write_main_db_bit(tag, value)
+        if not ok:
+            return jsonify({'success': False, 'error': f'Tag not writable: {tag}'}), 400
+        return jsonify({'success': True, 'tag': tag, 'value': value})
+    except Exception as e:
+        logger.error(f"DB123 bit write error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/plc/db125/read', methods=['GET'])

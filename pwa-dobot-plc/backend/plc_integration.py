@@ -261,6 +261,38 @@ def queue_invalid_target(is_invalid: bool):
             _invalid_target_timer.start()
 
 
+# DB123 bits the web UI is allowed to command directly. Everything else on
+# DB123 is either PLC-owned (e.g. system_state) or Pi-owned telemetry
+# written through its own dedicated helper elsewhere in this module.
+MAIN_DB_WRITABLE_BITS = {
+    'hmi_start', 'hmi_stop', 'hmi_reset', 'confirm_reset',
+    'conveyor1_override', 'conveyor2_override', 'linear_override',
+}
+
+
+def write_main_db_bit(tag_name: str, value: bool) -> bool:
+    """
+    Write a single whitelisted DB123 command bit (HMI start/stop/reset,
+    fault reset, conveyor/linear overrides). Returns False (and writes
+    nothing) if the worker isn't up or the tag isn't whitelisted/known.
+    """
+    if plc_worker is None:
+        logger.warning("PLC worker not initialized")
+        return False
+    if tag_name not in MAIN_DB_WRITABLE_BITS:
+        logger.warning(f"Refused to write non-whitelisted DB123 bit: {tag_name}")
+        return False
+    tag = plc_worker.main_db_tags.get(tag_name)
+    if not tag or 'bit' not in tag:
+        logger.warning(f"Unknown DB123 bit tag: {tag_name}")
+        return False
+    plc_worker.queue_bit_write(
+        plc_worker.main_db_number, tag['byte'], tag['bit'],
+        bool(value), f"{tag_name}={value}",
+    )
+    return True
+
+
 def on_hmi_reset(reset_active: bool):
     """
     Call this whenever the hmi_reset bit (DB123 byte 0 bit 2) changes.

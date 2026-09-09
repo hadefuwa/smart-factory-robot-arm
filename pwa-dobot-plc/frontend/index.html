@@ -228,12 +228,33 @@
             </header>
 
             <div class="sf-segmented tabs tabs-boxed bg-base-100 border border-base-300" role="tablist" aria-label="Action groups">
-              <button class="active tab tab-active" type="button" role="tab" aria-selected="true" data-segment-target="segment-robot">Robot</button>
+              <button class="active tab tab-active" type="button" role="tab" aria-selected="true" data-segment-target="segment-hmi">HMI Control</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-segment-target="segment-robot">Robot</button>
               <button class="tab" type="button" role="tab" aria-selected="false" data-segment-target="segment-vision">Vision</button>
               <button class="tab" type="button" role="tab" aria-selected="false" data-segment-target="segment-plc">PLC</button>
             </div>
 
-            <div class="sf-action-group active grid gap-3 sm:grid-cols-2" id="segment-robot" role="tabpanel">
+            <div class="sf-action-group active grid gap-3 sm:grid-cols-2" id="segment-hmi" role="tabpanel">
+              <button class="sf-action-btn btn btn-success justify-start" type="button" data-action="hmiStart"><i class="material-icons">play_arrow</i><span>Start</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="hmiStop"><i class="material-icons">stop_circle</i><span>Stop</span></button>
+              <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="hmiReset"><i class="material-icons">restart_alt</i><span>Reset</span></button>
+              <button class="sf-action-btn btn btn-warning justify-start" type="button" data-action="faultReset"><i class="material-icons">report_off</i><span>Fault Reset</span></button>
+
+              <div class="sf-override-row col-span-full flex items-center justify-between gap-3 rounded-lg border border-base-300 bg-base-100 px-3 py-2">
+                <span class="text-sm font-medium">Conveyor 1 Override</span>
+                <input type="checkbox" class="toggle toggle-sm toggle-warning" id="hmiOverrideConveyor1" data-override-tag="conveyor1_override">
+              </div>
+              <div class="sf-override-row col-span-full flex items-center justify-between gap-3 rounded-lg border border-base-300 bg-base-100 px-3 py-2">
+                <span class="text-sm font-medium">Conveyor 2 Override</span>
+                <input type="checkbox" class="toggle toggle-sm toggle-warning" id="hmiOverrideConveyor2" data-override-tag="conveyor2_override">
+              </div>
+              <div class="sf-override-row col-span-full flex items-center justify-between gap-3 rounded-lg border border-base-300 bg-base-100 px-3 py-2">
+                <span class="text-sm font-medium">Linear Override</span>
+                <input type="checkbox" class="toggle toggle-sm toggle-warning" id="hmiOverrideLinear" data-override-tag="linear_override">
+              </div>
+            </div>
+
+            <div class="sf-action-group grid gap-3 sm:grid-cols-2" id="segment-robot" role="tabpanel">
               <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="homeRobot"><i class="material-icons">home</i><span>Home</span></button>
               <button class="sf-action-btn btn btn-outline justify-start" type="button" data-action="pickPlace"><i class="material-icons">vertical_align_center</i><span>Pick & Place</span></button>
               <button class="sf-action-btn danger btn btn-error justify-start" type="button" data-action="emergencyStop"><i class="material-icons">stop</i><span>E-Stop</span></button>
