@@ -407,8 +407,18 @@ PLC_AUTO_ACTIVE_TARGET_TIMEOUT_S = 15.0
 # Without a grace period, that window clears active_target_key mid-motion.
 PLC_AUTO_NO_COMMAND_GRACE_S = 1.0
 
-# Via-home routing removed: the PLC now sequences home hops between named
-# targets itself, so the Pi sends every DB125 target straight through.
+# Obstacle-avoidance home waypoint: route every PLC move through here first,
+# unless the arm is already at home or already at the final target. This was
+# removed for the old arm once its PLC ladder started sequencing home hops
+# itself (commit 513f1ba), but the new RobotArmv3 arm/ladder has no such
+# sequencing yet, and a direct point-to-point joint move faulted every servo
+# simultaneously going straight from home toward quarantine (2026-09-09) —
+# this arm has no collision-free-path guarantee between arbitrary poses, so
+# routing via a known-clear waypoint is a real safety requirement, not
+# optional tuning. Coordinates are this arm's actual measured home pose
+# (hand-positioned, read back via forward kinematics), not the old arm's.
+PLC_AUTO_HOME_WAYPOINT = {'x': 161, 'y': 0, 'z': 222}
+PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM = 60
 plc_manual_override_state = {
     'until': 0.0,
     'source': None,
@@ -498,9 +508,96 @@ def _target_position_reached(cache: Dict[str, Any], x: Any, y: Any, z: Any,
     return math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_mm
 
 
+def _route_target_via_home(cache: Dict[str, Any], x: Any, y: Any, z: Any):
+    """Decide whether to go directly to the requested target or via the home
+    waypoint first. Returns (x, y, z) for the next physical move.
+
+    Logic: if the arm is already at home OR already at the final target OR
+    the final target IS home, just go direct. Otherwise return the home
+    waypoint — the auto-move loop will reach it, the next tick will see the
+    arm is at home, and the final target will then be sent.
+    """
+    h = PLC_AUTO_HOME_WAYPOINT
+    home_tol = PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM
+    # Already at home? → go straight to the final target.
+    if _target_position_reached(cache, h['x'], h['y'], h['z'], tolerance_mm=home_tol):
+        return x, y, z
+    # Already (close enough to) the final target? → leave it, the rest of the
+    # loop will detect "reached" and stop.
+    if _target_position_reached(cache, x, y, z):
+        return x, y, z
+    # Final target IS the home waypoint (rounded match)? → no detour needed.
+    try:
+        if abs(float(x) - h['x']) <= 5 and abs(float(y) - h['y']) <= 5 and abs(float(z) - h['z']) <= 5:
+            return x, y, z
+    except (TypeError, ValueError):
+        pass
+    # Otherwise route via home.
+    return h['x'], h['y'], h['z']
+
+
+def _seed_joint_angles_from_last_status() -> Optional[List[float]]:
+    """Return the arm's last-known joint angles (ordered joint 1..N) to seed
+    IK with, or None if we don't have a fresh-enough bridge status yet."""
+    last_status = robot_arm_bridge_state.get('last_status') or {}
+    joints = last_status.get('joints') if isinstance(last_status, dict) else None
+    if not isinstance(joints, list) or not joints:
+        return None
+    try:
+        ordered = sorted(joints, key=lambda j: j.get('joint', 0))
+        return [float(j.get('angleDegrees', 0.0)) for j in ordered]
+    except (TypeError, ValueError):
+        return None
+
+
+def _ik_and_move_to_xyz(x: float, y: float, z: float, speed: int) -> Dict[str, Any]:
+    """Solve IK for an XYZ target (seeded from the arm's last-known joint
+    angles) and drive every joint there with moveJoint.
+
+    Replaces the old bridge's single moveToXYZ command — the new RobotArmv3
+    bridge has no XYZ-move command, so the IK now runs on our side
+    (kinematicsInverseKinematics) and the result is applied joint-by-joint.
+    Position-only target (no orientation): with this 6-joint arm, an implicit
+    down-orientation constraint swings J4 far off the seed chasing the
+    orientation cost, same reasoning the old moveToXYZ payload used.
+
+    Must be called while holding robot_arm_bridge_lock with an open
+    connection, same contract as send_robot_arm_command.
+    """
+    current_angles = _seed_joint_angles_from_last_status()
+    if current_angles is None:
+        return {'type': 'error', 'message': 'No joint-angle seed available yet (bridge status not fresh)'}
+
+    ik = send_robot_arm_command({
+        'command': 'kinematicsInverseKinematics',
+        'targetPose': {'x': x, 'y': y, 'z': z},
+        'initialAngles': current_angles,
+    })
+    target_angles = ik.get('result')
+    if not target_angles:
+        return {'type': 'ikFailed', 'message': 'Target unreachable'}
+
+    failed = []
+    for i, angle in enumerate(target_angles):
+        joint_num = i + 1
+        resp = send_robot_arm_command({
+            'command': 'moveJoint',
+            'joint': joint_num,
+            'angle': angle,
+            'speed': speed,
+        })
+        if resp.get('type') != 'success':
+            failed.append((joint_num, resp.get('message', resp.get('type'))))
+
+    if failed:
+        return {'type': 'error', 'message': f'moveJoint failed for joints: {failed}'}
+    return {'type': 'moving'}
+
+
 def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
     """Return None when the PLC auto-move loop is allowed to run, or a short
-    string reason ('no_command' / 'dead_bus') when it must be gated.
+    string reason ('disabled' / 'no_command' / 'dead_bus') when it must be
+    gated.
 
     The original loop blindly drove DB125.target_x/y/z whether or not the
     operator asked for anything. A stale waypoint left in the PLC (or a
@@ -508,6 +605,11 @@ def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
     attempts and pulse `invalid_target` every backoff cycle. This gate stops
     that:
 
+      - disabled:   config.robot_arm.plc_auto_move_enabled is false. Set
+        after the RobotArmv3 hardware swap — the old arm's DB125 waypoints
+        (e.g. the (40,260,350) home position) were calibrated for the old
+        arm's geometry and are not reachable poses on the new one. Flip
+        back to true once the PLC is re-taught XYZs for this arm.
       - no_command: none of the DB125.byte22 command bits (home/pickup/
         pallet/quarantine) is asserted. The PLC HMI must hold one of these
         while it wants the arm to drive to the matching XYZ.
@@ -517,6 +619,9 @@ def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
         `invalid_target`. When the bridge has never reported (None
         last_status) we give it the benefit of the doubt and stay active.
     """
+    if not bool((load_config().get('robot_arm') or {}).get('plc_auto_move_enabled', True)):
+        return 'disabled'
+
     cmd_active = (
         bool(cache.get('db125_home_command', False))
         or bool(cache.get('db125_pickup_command', False))
@@ -591,138 +696,6 @@ def _manual_override_active() -> bool:
     return _manual_override_remaining_seconds() > 0
 
 
-def _legacy_plc_auto_backend_tick_unused():
-    """
-    Reads PLC DB125 target coordinates from the cache and sends a moveToXYZ
-    command if the target has changed since the last send.
-    Called every 300 ms by the background loop below.
-    """
-    # If the browser page is open (polled status within the last 3 seconds),
-    # let the JavaScript handle the PLC auto-move — nothing to do here.
-    # Skip if we are already waiting for a previous move to finish.
-    if plc_auto_backend_state['move_in_flight']:
-        return
-
-    # Get the latest PLC data from the shared cache.
-    cache = get_plc_cache()
-    if not cache:
-        return
-
-    # Only act when the PLC is reachable.
-    # The raw cache uses the key 'connected', not 'plc_connected' (that name
-    # only appears in the HTTP response built by /api/plc/db125/read).
-    if not cache.get('connected', False):
-        return
-
-    if _manual_override_active():
-        return
-
-    # ── Safety interlock ─────────────────────────────────────────────────────
-    # DB123.DBX40.0 = system_safety_ok (E-stop / safety circuit OK)
-    # DB125.DBX0.0  = robot arm bridge connected (written by this backend)
-    # If either is false, kill torque and block all auto-moves.
-    safety_ok = bool(cache.get('system_safety_ok', False))
-    arm_connected = bool(robot_arm_bridge_state.get('connected', False))
-    interlock_active = not safety_ok or not arm_connected
-
-    if interlock_active:
-        if not safety_ok:
-            _send_safety_torque_off('DB123.DBX40.0 (system_safety_ok) is FALSE')
-        elif not arm_connected:
-            _send_safety_torque_off('DB125.DBX0.0 (robot arm bridge connected) is FALSE')
-        # Still try to reconnect the bridge so torque-off reaches it when it comes back
-        if not arm_connected:
-            try:
-                ensure_robot_arm_bridge_connected()
-                # Bridge just reconnected while safety is still bad — kill torque immediately
-                if not safety_ok and robot_arm_bridge_state.get('connected'):
-                    _safety_interlock['torque_killed'] = False  # force re-send
-                    _send_safety_torque_off('DB123.DBX40.0 still FALSE after bridge reconnect')
-            except Exception:
-                pass
-        return
-
-    # Safety cleared — reset interlock so we log again if it trips again later
-    if _safety_interlock['torque_killed']:
-        log_event('safety', 'interlock_cleared',
-                  f'safety interlock cleared (safety_ok={safety_ok}, arm_connected={arm_connected})',
-                  severity=SEVERITY_INFO, safety_ok=safety_ok, arm_connected=arm_connected)
-        _safety_interlock['torque_killed'] = False
-        _safety_interlock['last_reason'] = None
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # Only act when the robot arm bridge is connected.
-    if not robot_arm_bridge_state.get('connected'):
-        # Try to reconnect once, quietly.
-        try:
-            ensure_robot_arm_bridge_connected()
-        except Exception:
-            pass
-        return
-
-    # Read the target coordinates written by the PLC into DB125.
-    x = cache.get('db125_target_x')
-    y = cache.get('db125_target_y')
-    z = cache.get('db125_target_z')
-    speed = cache.get('db125_speed') or 1500
-
-    if x is None or y is None or z is None:
-        return
-
-    # Build a string key so we can tell when the target has changed.
-    target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
-    if plc_auto_backend_state['last_sent_target_key'] == target_key:
-        return  # Target unchanged — nothing to do.
-
-    # Send the move command.
-    plc_auto_backend_state['move_in_flight'] = True
-    try:
-        # Position-only payload — orientation is omitted so the IK on the Pi
-        # solves XYZ alone, seeded with the arm's current joint angles. The
-        # default down-orientation used to be sent here, but with the 6-joint
-        # arm the IK swung J4 ~70° off the seed to chase the orientation cost
-        # and dragged the TCP sideways.
-        payload = {
-            'command': 'moveToXYZ',
-            'x': float(x),
-            'y': float(y),
-            'z': float(z),
-            'speed': int(speed),
-        }
-        with robot_arm_bridge_lock:
-            ws = robot_arm_bridge_state.get('ws')
-            if ws and robot_arm_bridge_state.get('connected'):
-                old_timeout = 3
-                ws.settimeout(15)
-                try:
-                    response = send_robot_arm_command(payload)
-                    plc_auto_backend_state['last_sent_target_key'] = target_key
-                    ik_failed = (
-                        response.get('type') == 'ikFailed'
-                        or 'unreachable' in str(response).lower()
-                        or str(response.get('failureReason', '') or '') == 'orientation_constrained_unreachable'
-                    )
-                    try:
-                        queue_invalid_target(ik_failed)
-                    except Exception:
-                        pass
-                    logger.info(
-                        'PLC auto-move backend: moved to x=%s y=%s z=%s → %s',
-                        x, y, z, response.get('type', '?')
-                    )
-                except Exception as e:
-                    logger.warning('PLC auto-move backend: move failed: %s', e)
-                finally:
-                    try:
-                        ws.settimeout(old_timeout)
-                    except Exception:
-                        pass
-    except Exception as e:
-        logger.warning('PLC auto-move backend: unexpected error: %s', e)
-    finally:
-        plc_auto_backend_state['move_in_flight'] = False
-
-
 def plc_auto_backend_tick():
     """
     Backend-owned PLC auto-move loop.
@@ -783,13 +756,20 @@ def plc_auto_backend_tick():
     if gate_reason is not None:
         return
 
-    x = cache.get('db125_target_x')
-    y = cache.get('db125_target_y')
-    z = cache.get('db125_target_z')
+    x_final = cache.get('db125_target_x')
+    y_final = cache.get('db125_target_y')
+    z_final = cache.get('db125_target_z')
     speed = cache.get('db125_speed') or 1500
 
-    if x is None or y is None or z is None:
+    if x_final is None or y_final is None or z_final is None:
         return
+
+    # Obstacle avoidance: route through home before reaching the actual target,
+    # unless we're already at home or already at the final target. The next
+    # tick re-evaluates and proceeds to the final target once the arm has
+    # reached home. See PLC_AUTO_HOME_WAYPOINT for why this exists.
+    x, y, z = _route_target_via_home(cache, x_final, y_final, z_final)
+    via_home = (x, y, z) != (x_final, y_final, z_final)
 
     target_key = '{}|{}|{}|{}'.format(x, y, z, speed)
     active_target_key = plc_auto_backend_state.get('active_target_key')
@@ -863,25 +843,13 @@ def plc_auto_backend_tick():
     plc_auto_backend_state['move_in_flight'] = True
     plc_auto_backend_state['last_sent_at'] = time.time()
     try:
-        # Position-only payload — orientation is omitted so the IK on the Pi
-        # solves XYZ alone, seeded with the arm's current joint angles. The
-        # default down-orientation used to be sent here, but with the 6-joint
-        # arm the IK swung J4 ~70° off the seed to chase the orientation cost
-        # and dragged the TCP sideways.
-        payload = {
-            'command': 'moveToXYZ',
-            'x': float(x),
-            'y': float(y),
-            'z': float(z),
-            'speed': int(speed),
-        }
         with robot_arm_bridge_lock:
             ws = robot_arm_bridge_state.get('ws')
             if ws and robot_arm_bridge_state.get('connected'):
                 old_timeout = 3
                 ws.settimeout(15)
                 try:
-                    response = send_robot_arm_command(payload)
+                    response = _ik_and_move_to_xyz(float(x), float(y), float(z), int(speed))
                     resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
                     succeeded = resp_type in ('success', 'moving', 'ikResult')
@@ -907,19 +875,22 @@ def plc_auto_backend_tick():
                         plc_auto_backend_state['active_target_key'] = None
                         plc_auto_backend_state['active_target_set_at'] = 0.0
                         _trigger_auto_move_backoff(f'response type={resp_type}')
-                    ik_failed = (
-                        response.get('type') == 'ikFailed'
-                        or 'unreachable' in str(response).lower()
-                        or str(response.get('failureReason', '') or '') == 'orientation_constrained_unreachable'
-                    )
+                    ik_failed = response.get('type') == 'ikFailed'
                     try:
                         queue_invalid_target(ik_failed)
                     except Exception:
                         pass
-                    log_event('auto_move', 'move_sent',
-                              f'sent target x={x} y={y} z={z}',
-                              severity=SEVERITY_INFO,
-                              x=x, y=y, z=z, speed=speed, response_type=resp_type)
+                    if via_home:
+                        log_event('auto_move', 'move_sent',
+                                  f'routing via HOME ({x},{y},{z}) en route to final ({x_final},{y_final},{z_final})',
+                                  severity=SEVERITY_INFO,
+                                  x=x, y=y, z=z, x_final=x_final, y_final=y_final, z_final=z_final,
+                                  speed=speed, response_type=resp_type, via_home=True)
+                    else:
+                        log_event('auto_move', 'move_sent',
+                                  f'sent target x={x} y={y} z={z}',
+                                  severity=SEVERITY_INFO,
+                                  x=x, y=y, z=z, speed=speed, response_type=resp_type)
                 except Exception as e:
                     plc_auto_backend_state['active_target_key'] = None
                     plc_auto_backend_state['active_target_set_at'] = 0.0
@@ -1268,7 +1239,7 @@ def _position_logger_loop():
                         if ws and robot_arm_bridge_state.get('connected'):
                             ws.settimeout(2)
                             try:
-                                resp = send_robot_arm_command({'command': 'getStatus'})
+                                resp = _get_bridge_status_with_xyz()
                                 xyz = resp.get('currentXYZ') or {}
                                 ax, ay, az = xyz.get('x'), xyz.get('y'), xyz.get('z')
                                 # Headless source of truth for PLC writeback —
@@ -2508,6 +2479,31 @@ def close_robot_arm_bridge():
                   port=robot_arm_bridge_state.get('port'))
 
 
+def _get_bridge_status_with_xyz() -> Dict[str, Any]:
+    """Fetch getStatus and attach a `currentXYZ` computed via forward
+    kinematics. The old bridge's getStatus included currentXYZ directly
+    (computed server-side); the new RobotArmv3 bridge only reports per-joint
+    angleDegrees, so we derive the TCP position ourselves — this keeps every
+    downstream reader of `currentXYZ` (auto-move tolerance checks, the
+    position logger, PLC writeback) working unchanged.
+
+    Must be called while holding robot_arm_bridge_lock with an open
+    connection, same as a bare send_robot_arm_command call.
+    """
+    response = send_robot_arm_command({'command': 'getStatus'})
+    try:
+        joints = response.get('joints') or []
+        angles = [j.get('angleDegrees', 0.0) for j in joints]
+        if angles:
+            fk = send_robot_arm_command({'command': 'kinematicsForwardKinematics', 'jointAngles': angles})
+            position = (fk or {}).get('result', {}).get('position')
+            if position:
+                response['currentXYZ'] = position
+    except Exception as e:
+        logger.debug(f'currentXYZ derivation skipped: {e}')
+    return response
+
+
 def open_robot_arm_bridge(host: str, port: int):
     """Open a fresh RobotArmv3 Pi WebSocket connection and store it in bridge state."""
     ws_url = f"ws://{host}:{port}"
@@ -2545,18 +2541,71 @@ def ensure_robot_arm_bridge_connected():
     open_robot_arm_bridge(host, port)
 
 
+# The RobotArmv3 bridge pushes several message types to every connected
+# client unsolicited — a `status` broadcast every ~20ms, and `jointConfigs`/
+# `controlStatus` pushes on other clients' activity (rescans, control
+# changes) — on the SAME socket we use for request/response. Worse, some of
+# these share their type with the direct reply to a command (getStatus's
+# reply is itself type `status`), so a broadcast can't be filtered out by
+# type alone: we have to know which type we're actually waiting for.
+_ROBOT_ARM_EXPECTED_RESPONSE_TYPES = {
+    'getStatus': {'status'},
+    'getJointConfigs': {'jointConfigs'},
+    'moveJoint': {'success'},
+    'stopJoint': {'success'},
+    'stopAll': {'success'},
+    'stopAllJoints': {'success'},
+    'setServoAngle': {'success'},
+    'setTorqueAll': {'success'},
+    'setSpeed': {'success'},
+    'setSpeedAll': {'success'},
+    'setAcceleration': {'success'},
+    'setJointCenter': {'success'},
+    'rescanServos': {'success'},
+    'kinematicsLoadURDF': {'kinematicsLoaded'},
+    'kinematicsForwardKinematics': {'kinematicsForwardResult'},
+    'kinematicsForwardKinematicsSteps': {'kinematicsForwardStepsResult'},
+    'kinematicsForwardKinematicsBatch': {'kinematicsForwardBatchResult'},
+    'kinematicsInverseKinematics': {'kinematicsInverseResult'},
+    'kinematicsRefineOrientationWithAccuracy': {'kinematicsRefineOrientationResult'},
+    'kinematicsGetInfo': {'kinematicsInfo'},
+    'getEndTool': {'endTool'},
+    'refreshEndTool': {'success'},
+    'takeControl': {'controlStatus'},
+    'releaseControl': {'controlStatus'},
+    'lockControl': {'controlStatus'},
+    'unlockControl': {'controlStatus'},
+    'getControlStatus': {'controlStatus'},
+}
+
+
 def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Send one command to Pi service and return one JSON response."""
+    """Send one command to Pi service and return its reply.
+
+    Waits specifically for the reply type this command produces (see
+    _ROBOT_ARM_EXPECTED_RESPONSE_TYPES), or an `error`, skipping any
+    unsolicited broadcast in between — see that map's comment for why type
+    alone (without knowing what we asked for) isn't enough to tell a
+    broadcast from our actual reply. Commands not in the map (rare/one-off)
+    fall back to accepting the very next message, as before.
+    """
     ws = robot_arm_bridge_state.get('ws')
     if not ws or not robot_arm_bridge_state.get('connected'):
         raise RuntimeError('Robot arm bridge is not connected')
 
+    command = command_payload.get('command')
+    expected_types = _ROBOT_ARM_EXPECTED_RESPONSE_TYPES.get(command)
+
     try:
         ws.send(json.dumps(command_payload))
-        raw_response = ws.recv()
-        response_data = json.loads(raw_response)
-        robot_arm_bridge_state['last_error'] = None
-        return response_data
+        for _ in range(50):  # generous cap; broadcasts are ~20ms apart
+            raw_response = ws.recv()
+            response_data = json.loads(raw_response)
+            resp_type = response_data.get('type')
+            if resp_type == 'error' or expected_types is None or resp_type in expected_types:
+                robot_arm_bridge_state['last_error'] = None
+                return response_data
+        raise RuntimeError('No command response received (only broadcast messages)')
     except Exception as e:
         # If the Pi-side Node service restarted, websocket-client can keep a dead socket
         # object around and only fail on the next send/recv. Clear bridge state so the
@@ -2716,7 +2765,7 @@ def robot_arm_status():
             if ws:
                 ws.settimeout(10)
             try:
-                response = send_robot_arm_command({'command': 'getStatus'})
+                response = _get_bridge_status_with_xyz()
             finally:
                 if ws:
                     ws.settimeout(3)

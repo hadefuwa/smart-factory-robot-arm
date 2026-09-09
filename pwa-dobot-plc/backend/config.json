@@ -193,6 +193,9 @@
     "voltage_min_v": 7.0,
     "load_max_pct": 80
   },
+  "robot_arm": {
+    "plc_auto_move_enabled": false
+  },
   "vision": {
     "fault_bit_enabled": false,
     "fault_bit_byte": 1,
