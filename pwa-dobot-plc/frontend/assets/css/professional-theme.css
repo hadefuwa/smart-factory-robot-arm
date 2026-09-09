@@ -2519,6 +2519,14 @@ body.dashboard-v2 .sf-action-btn:active {
   transform: translateY(0) scale(0.98);
 }
 
+/* Press-and-hold actuator button (Reject/Q0.6) — held state, driven by JS
+   rather than :active so it stays visually pressed for the whole hold on
+   touch (mobile Safari clears :active almost immediately on touch). */
+body.dashboard-v2 .sf-action-btn.sf-action-btn-pressed {
+  transform: translateY(0) scale(0.98);
+  filter: brightness(0.9);
+}
+
 @keyframes sfTileIn {
   0% {
     opacity: 0;

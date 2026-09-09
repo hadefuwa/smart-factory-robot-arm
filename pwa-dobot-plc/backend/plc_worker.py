@@ -216,6 +216,7 @@ class PLCWrite:
     description: str = ""
     bit: Optional[int] = None
     bit_value: Optional[bool] = None
+    area: str = 'db'  # 'db' (default) or 'pa' — physical output (%Q) bit write
 
 
 # ============================================================================
@@ -640,6 +641,22 @@ class PLCWorker:
         write = PLCWrite(
             db=db, offset=byte, data=bytearray(1),
             description=description, bit=bit, bit_value=bool(value),
+        )
+        with self.write_queue_lock:
+            self.write_queue.append(write)
+
+    def queue_pa_bit_write(self, byte: int, bit: int, value: bool, description: str = ""):
+        """Queue an atomic single-bit write to a physical output (%Q byte.bit).
+
+        Same RMW approach as queue_bit_write, but against the PA (process
+        image outputs) area instead of a DB — so sibling Q bits in the same
+        byte (e.g. Q0.7 Reset Linear Actuator sharing byte 0 with Q0.6
+        Reject) aren't clobbered by a stale/zeroed byte.
+        """
+        write = PLCWrite(
+            db=0, offset=byte, data=bytearray(1),
+            description=description, bit=bit, bit_value=bool(value),
+            area='pa',
         )
         with self.write_queue_lock:
             self.write_queue.append(write)
@@ -1192,7 +1209,17 @@ class PLCWorker:
         # Execute each write
         for write in writes:
             try:
-                if write.bit is not None:
+                if write.area == 'pa':
+                    # Atomic bit write into the physical output area (%Q).
+                    # Same fresh-read-flip-write approach as the DB bit path
+                    # so sibling Q bits in this byte survive the write.
+                    current = self.client.read_area(snap7.types.Areas.PA, 0, write.offset, 1)
+                    buf = bytearray(current)
+                    set_bool(buf, 0, write.bit, bool(write.bit_value))
+                    self.client.write_area(snap7.types.Areas.PA, 0, write.offset, buf)
+                    if write.description:
+                        logger.debug(f"✍️ PLC raw output write: Q{write.offset}.{write.bit}={write.bit_value} - {write.description}")
+                elif write.bit is not None:
                     # Atomic bit write: read the byte fresh, flip just our bit,
                     # write it back. Preserves any PLC-owned bits in the byte.
                     current = self.client.db_read(write.db, write.offset, 1)

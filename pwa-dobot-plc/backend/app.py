@@ -28,7 +28,7 @@ from datetime import datetime
 import struct
 import snap7.util
 import plc_integration
-from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot, write_main_db_bit
+from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot, write_main_db_bit, write_raw_output_bit
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
 from dobot_client import DobotClient
 from camera_service import CameraService
@@ -6112,6 +6112,29 @@ def write_main_db_bit_endpoint():
         return jsonify({'success': True, 'tag': tag, 'value': value})
     except Exception as e:
         logger.error(f"DB123 bit write error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/plc/io/write-bit', methods=['POST'])
+def write_raw_output_bit_endpoint():
+    """
+    Write a single whitelisted physical output (%Q) bit — currently just
+    'reject' (Q0.6), mirroring the Reject button on the physical HMI's
+    Manual Controls screen. Body: {"output": str, "value": bool}.
+    Restricted server-side to plc_integration.RAW_OUTPUT_WRITABLE.
+    """
+    try:
+        data = request.json or {}
+        name = data.get('output')
+        value = bool(data.get('value', False))
+        if not name:
+            return jsonify({'success': False, 'error': 'Missing output'}), 400
+        ok = write_raw_output_bit(name, value)
+        if not ok:
+            return jsonify({'success': False, 'error': f'Output not writable: {name}'}), 400
+        return jsonify({'success': True, 'output': name, 'value': value})
+    except Exception as e:
+        logger.error(f"Raw output write error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

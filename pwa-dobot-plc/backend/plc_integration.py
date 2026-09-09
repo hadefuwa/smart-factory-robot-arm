@@ -293,6 +293,34 @@ def write_main_db_bit(tag_name: str, value: bool) -> bool:
     return True
 
 
+# Physical outputs (%Q) the web UI is allowed to drive directly. These
+# mirror buttons that already exist on the physical HMI's Manual Controls
+# screen — both writers hitting the same output is an accepted, intentional
+# overlap on this rig (low-pressure pneumatics, no safety interlock riding
+# on sole ownership of the bit), not something to design an arbiter for.
+RAW_OUTPUT_WRITABLE = {
+    'reject': (0, 6),  # Q0.6 — see RAW_OUTPUT_NAMES in plc_worker.py
+}
+
+
+def write_raw_output_bit(name: str, value: bool) -> bool:
+    """
+    Write a single whitelisted physical output (%Q) bit, e.g. the Reject
+    solenoid on Q0.6. Returns False (and writes nothing) if the worker
+    isn't up or the name isn't whitelisted.
+    """
+    if plc_worker is None:
+        logger.warning("PLC worker not initialized")
+        return False
+    coords = RAW_OUTPUT_WRITABLE.get(name)
+    if not coords:
+        logger.warning(f"Refused to write non-whitelisted raw output: {name}")
+        return False
+    byte, bit = coords
+    plc_worker.queue_pa_bit_write(byte, bit, bool(value), f"{name} (Q{byte}.{bit})={value}")
+    return True
+
+
 def on_hmi_reset(reset_active: bool):
     """
     Call this whenever the hmi_reset bit (DB123 byte 0 bit 2) changes.
