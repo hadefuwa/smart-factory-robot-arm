@@ -417,7 +417,7 @@ PLC_AUTO_NO_COMMAND_GRACE_S = 1.0
 # routing via a known-clear waypoint is a real safety requirement, not
 # optional tuning. Coordinates are this arm's actual measured home pose
 # (hand-positioned, read back via forward kinematics), not the old arm's.
-PLC_AUTO_HOME_WAYPOINT = {'x': 161, 'y': 0, 'z': 222}
+PLC_AUTO_HOME_WAYPOINT = {'x': 174, 'y': 17, 'z': 140}  # re-measured 2026-09-09 after J3 servo swap + re-zero
 PLC_AUTO_HOME_WAYPOINT_TOLERANCE_MM = 60
 plc_manual_override_state = {
     'until': 0.0,
