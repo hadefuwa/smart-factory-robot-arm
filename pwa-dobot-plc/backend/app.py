@@ -599,7 +599,22 @@ def _ik_and_move_to_xyz(x: float, y: float, z: float, speed_mm_per_sec: float,
     }
     if orientation:
         payload['desiredOrientation'] = orientation
-    return send_robot_arm_command(payload)
+
+    response = send_robot_arm_command(payload)
+    # executeLinearMove (unlike moveJoint/stopAll) does not auto-grant
+    # control — it requires an explicit prior takeControl. We take it once
+    # when the bridge connects, but the bridge can later release it on its
+    # own (5-minute idle-control timeout, or another client force-taking
+    # it) without the underlying WebSocket ever dropping, so that one-time
+    # grant doesn't self-heal. Confirmed live on 2026-09-09: PLC auto-move
+    # failed repeatedly with exactly this error and no other symptom,
+    # surfacing to the operator as "invalid position" even though the
+    # target was perfectly valid. Re-take control and retry once rather
+    # than erroring out on a target that was never actually the problem.
+    if response.get('type') == 'error' and 'takeControl' in str(response.get('message', '')):
+        send_robot_arm_command({'command': 'takeControl', 'clientName': 'sf2-backend', 'force': True})
+        response = send_robot_arm_command(payload)
+    return response
 
 
 def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
