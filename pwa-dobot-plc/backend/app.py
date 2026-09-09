@@ -2579,6 +2579,14 @@ def ensure_robot_arm_bridge_connected():
 # these share their type with the direct reply to a command (getStatus's
 # reply is itself type `status`), so a broadcast can't be filtered out by
 # type alone: we have to know which type we're actually waiting for.
+# Reply types the bridge ALSO sends continuously/unsolicited, regardless of
+# whether anyone asked — only `status` (~20ms). A command whose expected
+# reply is one of these needs backlog draining (see send_robot_arm_command);
+# every other command's reply type is only ever sent as a direct answer, so
+# draining there would risk grabbing an unrelated reply of the same generic
+# type (e.g. moveJoint and setTorqueAll both reply `success`).
+_ROBOT_ARM_CONTINUOUS_BROADCAST_TYPES = {'status'}
+
 _ROBOT_ARM_EXPECTED_RESPONSE_TYPES = {
     'getStatus': {'status'},
     'getJointConfigs': {'jointConfigs'},
@@ -2622,14 +2630,18 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
     broadcast from our actual reply. Commands not in the map (rare/one-off)
     fall back to accepting the very next message, as before.
 
-    After finding a match, drains any further messages already sitting in
-    the socket buffer (short timeout) and keeps the LAST match, not the
-    first. The bridge broadcasts `status` continuously (~20ms) whether we
-    read it or not, so if we only ever consume one message per call, a
-    backlog of stale broadcasts queues up between calls and the first-match
-    approach returns the oldest queued one — confirmed live on 2026-09-09
-    as a `getStatus` reply frozen at the same cacheAgeMs/currentXYZ call
-    after call, making the UI's "Current Position" readout look dead.
+    For commands whose expected type overlaps a message the bridge also
+    broadcasts continuously (currently just `status`, every ~20ms whether
+    we read it or not), drains any further messages already sitting in the
+    socket buffer (short timeout) and keeps the LAST match, not the first —
+    otherwise a backlog of stale broadcasts queues up between calls and we
+    keep returning the oldest queued one, confirmed live on 2026-09-09 as a
+    `getStatus` reply frozen at the same cacheAgeMs/currentXYZ call after
+    call. For every other command, returns the FIRST match: draining there
+    would risk grabbing an unrelated reply that happens to share the same
+    generic type (e.g. moveJoint and setTorqueAll both reply `success`) —
+    also confirmed live, as a torque-off call returning a stray moveJoint
+    "success" instead of its own.
     """
     ws = robot_arm_bridge_state.get('ws')
     if not ws or not robot_arm_bridge_state.get('connected'):
@@ -2637,6 +2649,7 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     command = command_payload.get('command')
     expected_types = _ROBOT_ARM_EXPECTED_RESPONSE_TYPES.get(command)
+    should_drain = bool(expected_types) and not expected_types.isdisjoint(_ROBOT_ARM_CONTINUOUS_BROADCAST_TYPES)
 
     try:
         ws.send(json.dumps(command_payload))
@@ -2657,6 +2670,9 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
                 if resp_type == 'error':
                     return response_data  # errors are always fresh — no backlog concern
                 if expected_types is None or resp_type in expected_types:
+                    if not should_drain:
+                        robot_arm_bridge_state['last_error'] = None
+                        return response_data
                     result = response_data  # keep looking for a fresher one
         finally:
             ws.settimeout(original_timeout)
@@ -2766,6 +2782,35 @@ def robot_arm_stop():
             success = response.get('type') == 'success'
             status_code = 200 if success else 400
             return jsonify({'success': success, 'bridge_response': response}), status_code
+        except Exception as e:
+            robot_arm_bridge_state['last_error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/robot-arm/home', methods=['POST'])
+def robot_arm_home():
+    """Move the arm to PLC_AUTO_HOME_WAYPOINT — the single source of truth
+    for "home" (there is no bridge-side homeAll command on the new
+    RobotArmv3 arm; the old bridge's homeAll doesn't exist here). Body
+    (optional): { "speed": mm/s }.
+    """
+    data = request.get_json(silent=True) or {}
+    speed = float(data.get('speed', 20))
+    h = PLC_AUTO_HOME_WAYPOINT
+    with robot_arm_bridge_lock:
+        if not robot_arm_bridge_state.get('connected'):
+            return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
+        try:
+            ws = robot_arm_bridge_state['ws']
+            ws.settimeout(15)
+            try:
+                response = _ik_and_move_to_xyz(h['x'], h['y'], h['z'], speed)
+            finally:
+                ws.settimeout(3)
+            resp_type = response.get('type', '')
+            success = resp_type in ('success', 'moving', 'linearPathStarted')
+            status_code = 200 if success else 400
+            return jsonify({'success': success, 'target': h, 'bridge_response': response}), status_code
         except Exception as e:
             robot_arm_bridge_state['last_error'] = str(e)
             return jsonify({'success': False, 'error': str(e)}), 500

@@ -1414,8 +1414,10 @@
 
   async function homeAll() {
     try {
-      await cmd({ command: 'homeAll' });
-      showMsg('Homing all joints…');
+      // No bridge-side homeAll command on this arm — the backend drives a
+      // straight-line move to its known PLC_AUTO_HOME_WAYPOINT instead.
+      await apiRequest('/api/robot-arm/home', { method: 'POST' });
+      showMsg('Homing…');
     } catch (e) {
       showMsg('Home error: ' + e.message, true);
     }
@@ -1424,19 +1426,9 @@
   async function setTorqueAll(enabled) {
     logEvent('info', 'setTorqueAll(' + (enabled ? 'ON' : 'OFF') + ') — user action');
     try {
-      if (enabled) {
-        // Hold at current physical position — reads present position and writes it
-        // back as goal before enabling torque, so joints don't snap to a stale angle.
-        await cmd({ command: 'holdAllJoints' });
-        logEvent('info', 'Torque ON — all joints held at current position');
-        showMsg('Holding all joints at current position');
-      } else {
-        for (var i = 1; i <= 6; i++) {
-          try { await cmd({ command: 'stopJoint', joint: i }); } catch (_) {}
-        }
-        logEvent('warn', 'Torque OFF — all joints free');
-        showMsg('Torque disabled — joints free to move');
-      }
+      await cmd({ command: 'setTorqueAll', enabled: enabled });
+      logEvent(enabled ? 'info' : 'warn', 'Torque ' + (enabled ? 'ON — all joints holding' : 'OFF — all joints free'));
+      showMsg(enabled ? 'Torque enabled — joints holding position' : 'Torque disabled — joints free to move');
     } catch (e) {
       logEvent('error', 'setTorqueAll error: ' + e.message);
       showMsg('Torque error: ' + e.message, true);
