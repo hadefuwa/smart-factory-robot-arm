@@ -2621,6 +2621,15 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
     alone (without knowing what we asked for) isn't enough to tell a
     broadcast from our actual reply. Commands not in the map (rare/one-off)
     fall back to accepting the very next message, as before.
+
+    After finding a match, drains any further messages already sitting in
+    the socket buffer (short timeout) and keeps the LAST match, not the
+    first. The bridge broadcasts `status` continuously (~20ms) whether we
+    read it or not, so if we only ever consume one message per call, a
+    backlog of stale broadcasts queues up between calls and the first-match
+    approach returns the oldest queued one — confirmed live on 2026-09-09
+    as a `getStatus` reply frozen at the same cacheAgeMs/currentXYZ call
+    after call, making the UI's "Current Position" readout look dead.
     """
     ws = robot_arm_bridge_state.get('ws')
     if not ws or not robot_arm_bridge_state.get('connected'):
@@ -2631,13 +2640,29 @@ def send_robot_arm_command(command_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         ws.send(json.dumps(command_payload))
-        for _ in range(50):  # generous cap; broadcasts are ~20ms apart
-            raw_response = ws.recv()
-            response_data = json.loads(raw_response)
-            resp_type = response_data.get('type')
-            if resp_type == 'error' or expected_types is None or resp_type in expected_types:
-                robot_arm_bridge_state['last_error'] = None
-                return response_data
+        result = None
+        original_timeout = ws.gettimeout()
+        try:
+            for _ in range(50):  # generous cap; broadcasts are ~20ms apart
+                if result is not None:
+                    ws.settimeout(0.05)  # draining backlog — don't wait for a new one
+                try:
+                    raw_response = ws.recv()
+                except Exception:
+                    if result is not None:
+                        break  # backlog drained — no more messages waiting right now
+                    raise
+                response_data = json.loads(raw_response)
+                resp_type = response_data.get('type')
+                if resp_type == 'error':
+                    return response_data  # errors are always fresh — no backlog concern
+                if expected_types is None or resp_type in expected_types:
+                    result = response_data  # keep looking for a fresher one
+        finally:
+            ws.settimeout(original_timeout)
+        if result is not None:
+            robot_arm_bridge_state['last_error'] = None
+            return result
         raise RuntimeError('No command response received (only broadcast messages)')
     except Exception as e:
         # If the Pi-side Node service restarted, websocket-client can keep a dead socket
