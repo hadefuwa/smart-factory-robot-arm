@@ -550,20 +550,23 @@ def _seed_joint_angles_from_last_status() -> Optional[List[float]]:
         return None
 
 
-# Cartesian speed for auto-moves, in mm/s. Deliberately NOT derived from the
-# PLC's db125_speed register — that value (e.g. 1000) was tuned for the old
-# bridge's per-joint steps/s convention and is roughly 20x too fast fed into
-# executeLinearMove's mm/s parameter. Kept low and fixed until this arm's
-# real safe operating speed is characterized: independent per-joint moveJoint
-# moves (this constant's predecessor) let all 6 servos swing to target at
-# once with no path guarantee, and on 2026-09-09 that visibly clipped an
-# obstacle near the quarantine zone — a straight Cartesian line at a modest
-# speed is both safer to look at and easier to physically intervene on.
-PLC_AUTO_MOVE_SPEED_MM_PER_SEC = 12
+# Cartesian speed bounds for auto-moves, in mm/s. The PLC's db125_speed
+# register (DB125.DBW24) now feeds this directly as mm/s — it used to be
+# steps/s for the old bridge's per-joint moveJoint convention (e.g. 1000),
+# a completely different unit and roughly 20x too fast fed straight into
+# executeLinearMove. Clamped to this range so a stale/unconverted PLC value
+# (or a typo) can't reintroduce a fast, uncontrolled move: independent
+# per-joint moves (this approach's predecessor) let all 6 servos swing to
+# target at once with no path guarantee, and on 2026-09-09 that visibly
+# clipped an obstacle near the quarantine zone even before speed was a
+# factor. 12 mm/s (the default before this became PLC-adjustable) sits
+# comfortably inside this range.
+PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC = 2
+PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC = 30
 PLC_AUTO_MOVE_STEP_MM = 2.0
 
 
-def _ik_and_move_to_xyz(x: float, y: float, z: float) -> Dict[str, Any]:
+def _ik_and_move_to_xyz(x: float, y: float, z: float, speed_mm_per_sec: float) -> Dict[str, Any]:
     """Drive the TCP in a straight Cartesian line to an XYZ target, seeded
     from the arm's last-known joint angles.
 
@@ -574,7 +577,7 @@ def _ik_and_move_to_xyz(x: float, y: float, z: float) -> Dict[str, Any]:
     commands independently: independent per-joint moves have no guaranteed
     Cartesian path between two poses and can swing through obstacles that a
     straight line wouldn't — confirmed on this arm on 2026-09-09 (see
-    PLC_AUTO_MOVE_SPEED_MM_PER_SEC comment).
+    PLC_AUTO_MOVE_SPEED_MIN/MAX_MM_PER_SEC comment).
 
     Must be called while holding robot_arm_bridge_lock with an open
     connection, same contract as send_robot_arm_command.
@@ -583,12 +586,15 @@ def _ik_and_move_to_xyz(x: float, y: float, z: float) -> Dict[str, Any]:
     if current_angles is None:
         return {'type': 'error', 'message': 'No joint-angle seed available yet (bridge status not fresh)'}
 
+    clamped_speed = max(PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC,
+                         min(PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC, speed_mm_per_sec))
+
     return send_robot_arm_command({
         'command': 'executeLinearMove',
         'startAngles': current_angles,
         'targetPose': {'x': x, 'y': y, 'z': z},
         'stepMm': PLC_AUTO_MOVE_STEP_MM,
-        'speedMmPerSec': PLC_AUTO_MOVE_SPEED_MM_PER_SEC,
+        'speedMmPerSec': clamped_speed,
     })
 
 
@@ -847,7 +853,7 @@ def plc_auto_backend_tick():
                 old_timeout = 3
                 ws.settimeout(15)
                 try:
-                    response = _ik_and_move_to_xyz(float(x), float(y), float(z))
+                    response = _ik_and_move_to_xyz(float(x), float(y), float(z), float(speed))
                     resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
                     succeeded = resp_type in ('success', 'moving', 'ikResult', 'linearPathStarted')
