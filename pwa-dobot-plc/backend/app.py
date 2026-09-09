@@ -562,11 +562,12 @@ def _seed_joint_angles_from_last_status() -> Optional[List[float]]:
 # factor. 12 mm/s (the default before this became PLC-adjustable) sits
 # comfortably inside this range.
 PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC = 2
-PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC = 30
+PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC = 40
 PLC_AUTO_MOVE_STEP_MM = 2.0
 
 
-def _ik_and_move_to_xyz(x: float, y: float, z: float, speed_mm_per_sec: float) -> Dict[str, Any]:
+def _ik_and_move_to_xyz(x: float, y: float, z: float, speed_mm_per_sec: float,
+                         orientation: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """Drive the TCP in a straight Cartesian line to an XYZ target, seeded
     from the arm's last-known joint angles.
 
@@ -589,13 +590,16 @@ def _ik_and_move_to_xyz(x: float, y: float, z: float, speed_mm_per_sec: float) -
     clamped_speed = max(PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC,
                          min(PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC, speed_mm_per_sec))
 
-    return send_robot_arm_command({
+    payload = {
         'command': 'executeLinearMove',
         'startAngles': current_angles,
         'targetPose': {'x': x, 'y': y, 'z': z},
         'stepMm': PLC_AUTO_MOVE_STEP_MM,
         'speedMmPerSec': clamped_speed,
-    })
+    }
+    if orientation:
+        payload['desiredOrientation'] = orientation
+    return send_robot_arm_command(payload)
 
 
 def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
@@ -2858,8 +2862,14 @@ def robot_arm_command():
 def robot_arm_move_xyz():
     """
     Move the robot arm to a Cartesian XYZ position using inverse kinematics.
-    Body: { "x": mm, "y": mm, "z": mm, "speed": steps/s (optional), "orientation": {x,y,z} (optional) }
-    The Node.js service computes IK then sends moveJoint for each joint.
+    Body: { "x": mm, "y": mm, "z": mm, "speed": mm/s (optional, clamped to
+    PLC_AUTO_MOVE_SPEED_MIN/MAX_MM_PER_SEC), "orientation": {x,y,z} (optional) }
+
+    Drives a straight-line Cartesian path via executeLinearMove — same
+    primitive and speed clamp as the PLC auto-move loop (_ik_and_move_to_xyz).
+    This is a manual jog tool, so unlike the auto-move loop it does NOT route
+    via the home waypoint first: the operator is choosing the target directly
+    and is expected to jog to known-clear points themselves.
     """
     data = request.get_json(silent=True) or {}
     x = data.get('x')
@@ -2869,49 +2879,34 @@ def robot_arm_move_xyz():
     if x is None or y is None or z is None:
         return jsonify({'success': False, 'error': 'Missing required fields: x, y, z'}), 400
 
-    payload = {
-        'command': 'moveToXYZ',
-        'x': float(x),
-        'y': float(y),
-        'z': float(z),
-    }
-    if 'speed' in data:
-        payload['speed'] = int(data['speed'])
-    if 'orientation' in data:
-        # Caller can still opt into a constrained orientation explicitly.
-        payload['orientation'] = data['orientation']
+    speed = float(data.get('speed', PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC))
+    orientation = data.get('orientation')
 
     with robot_arm_bridge_lock:
         if not robot_arm_bridge_state.get('connected'):
             return jsonify({'success': False, 'error': 'Robot arm bridge not connected'}), 503
         try:
             ws = robot_arm_bridge_state['ws']
-            # moveToXYZ blocks for up to STALL_TIMEOUT_MS + polling overhead on the Pi.
-            # Use a generous timeout so the stall monitor has time to finish before we recv.
+            # executeLinearMove blocks for the whole path duration on the Pi.
+            # Use a generous timeout so a long move has time to finish before we recv.
             ws.settimeout(15)
             try:
-                response = send_robot_arm_command(payload)
+                response = _ik_and_move_to_xyz(float(x), float(y), float(z), speed, orientation)
             finally:
                 ws.settimeout(3)
             resp_type = response.get('type', '')
-            success = resp_type in ('success', 'ikResult', 'moving')
+            success = resp_type in ('success', 'ikResult', 'moving', 'linearPathStarted')
             # 'stall' is a handled safety event — not an IK failure
             is_stall = resp_type == 'stall'
-            failure_reason = str(response.get('failureReason', '') or '')
-            ik_failed = not success and not is_stall and (
-                resp_type == 'ikFailed'
-                or 'unreachable' in str(response).lower()
-                or failure_reason == 'orientation_constrained_unreachable'
-            )
+            ik_failed = not success and not is_stall and resp_type in ('ikFailed', 'error')
             try:
                 queue_invalid_target(ik_failed)
             except Exception:
                 pass
             # Tell the background thread what target was just sent so it does
             # not immediately re-send the same move when the page is closing.
-            speed_used = payload.get('speed', 1500)
             plc_auto_backend_state['last_sent_target_key'] = '{}|{}|{}|{}'.format(
-                int(float(x)), int(float(y)), int(float(z)), int(speed_used)
+                int(float(x)), int(float(y)), int(float(z)), int(speed)
             )
             status_code = 200 if (success or is_stall) else 400
             return jsonify({'success': success, 'stalled': is_stall, 'bridge_response': response}), status_code

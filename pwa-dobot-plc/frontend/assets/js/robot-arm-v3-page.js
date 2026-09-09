@@ -1277,7 +1277,7 @@
     setTargetVal('plcTargetX',     tags ? tags.target_x : null, 'mm');
     setTargetVal('plcTargetY',     tags ? tags.target_y : null, 'mm');
     setTargetVal('plcTargetZ',     tags ? tags.target_z : null, 'mm');
-    setTargetVal('plcTargetSpeed', tags ? tags.speed    : null, 'steps/s');
+    setTargetVal('plcTargetSpeed', tags ? tags.speed    : null, 'mm/s');
   }
 
   function updatePlcAutoBadge() {
