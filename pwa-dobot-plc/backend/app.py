@@ -550,16 +550,31 @@ def _seed_joint_angles_from_last_status() -> Optional[List[float]]:
         return None
 
 
-def _ik_and_move_to_xyz(x: float, y: float, z: float, speed: int) -> Dict[str, Any]:
-    """Solve IK for an XYZ target (seeded from the arm's last-known joint
-    angles) and drive every joint there with moveJoint.
+# Cartesian speed for auto-moves, in mm/s. Deliberately NOT derived from the
+# PLC's db125_speed register — that value (e.g. 1000) was tuned for the old
+# bridge's per-joint steps/s convention and is roughly 20x too fast fed into
+# executeLinearMove's mm/s parameter. Kept low and fixed until this arm's
+# real safe operating speed is characterized: independent per-joint moveJoint
+# moves (this constant's predecessor) let all 6 servos swing to target at
+# once with no path guarantee, and on 2026-09-09 that visibly clipped an
+# obstacle near the quarantine zone — a straight Cartesian line at a modest
+# speed is both safer to look at and easier to physically intervene on.
+PLC_AUTO_MOVE_SPEED_MM_PER_SEC = 12
+PLC_AUTO_MOVE_STEP_MM = 2.0
+
+
+def _ik_and_move_to_xyz(x: float, y: float, z: float) -> Dict[str, Any]:
+    """Drive the TCP in a straight Cartesian line to an XYZ target, seeded
+    from the arm's last-known joint angles.
 
     Replaces the old bridge's single moveToXYZ command — the new RobotArmv3
-    bridge has no XYZ-move command, so the IK now runs on our side
-    (kinematicsInverseKinematics) and the result is applied joint-by-joint.
-    Position-only target (no orientation): with this 6-joint arm, an implicit
-    down-orientation constraint swings J4 far off the seed chasing the
-    orientation cost, same reasoning the old moveToXYZ payload used.
+    bridge has no XYZ-move command. Uses executeLinearMove (computes a
+    straight-line path via the bridge's own IK, then executes it as timed
+    waypoints) rather than solving IK once and firing all 6 moveJoint
+    commands independently: independent per-joint moves have no guaranteed
+    Cartesian path between two poses and can swing through obstacles that a
+    straight line wouldn't — confirmed on this arm on 2026-09-09 (see
+    PLC_AUTO_MOVE_SPEED_MM_PER_SEC comment).
 
     Must be called while holding robot_arm_bridge_lock with an open
     connection, same contract as send_robot_arm_command.
@@ -568,30 +583,13 @@ def _ik_and_move_to_xyz(x: float, y: float, z: float, speed: int) -> Dict[str, A
     if current_angles is None:
         return {'type': 'error', 'message': 'No joint-angle seed available yet (bridge status not fresh)'}
 
-    ik = send_robot_arm_command({
-        'command': 'kinematicsInverseKinematics',
+    return send_robot_arm_command({
+        'command': 'executeLinearMove',
+        'startAngles': current_angles,
         'targetPose': {'x': x, 'y': y, 'z': z},
-        'initialAngles': current_angles,
+        'stepMm': PLC_AUTO_MOVE_STEP_MM,
+        'speedMmPerSec': PLC_AUTO_MOVE_SPEED_MM_PER_SEC,
     })
-    target_angles = ik.get('result')
-    if not target_angles:
-        return {'type': 'ikFailed', 'message': 'Target unreachable'}
-
-    failed = []
-    for i, angle in enumerate(target_angles):
-        joint_num = i + 1
-        resp = send_robot_arm_command({
-            'command': 'moveJoint',
-            'joint': joint_num,
-            'angle': angle,
-            'speed': speed,
-        })
-        if resp.get('type') != 'success':
-            failed.append((joint_num, resp.get('message', resp.get('type'))))
-
-    if failed:
-        return {'type': 'error', 'message': f'moveJoint failed for joints: {failed}'}
-    return {'type': 'moving'}
 
 
 def _auto_move_gate_reason(cache: Dict[str, Any]) -> Any:
@@ -849,10 +847,10 @@ def plc_auto_backend_tick():
                 old_timeout = 3
                 ws.settimeout(15)
                 try:
-                    response = _ik_and_move_to_xyz(float(x), float(y), float(z), int(speed))
+                    response = _ik_and_move_to_xyz(float(x), float(y), float(z))
                     resp_type = response.get('type', '?')
                     plc_auto_backend_state['last_sent_target_key'] = target_key
-                    succeeded = resp_type in ('success', 'moving', 'ikResult')
+                    succeeded = resp_type in ('success', 'moving', 'ikResult', 'linearPathStarted')
                     # Weak-joint prototype: a `stall` response near the target
                     # should be treated as successful arrival, not a failure.
                     # Otherwise the PLC backs off and retries the same target
@@ -875,7 +873,7 @@ def plc_auto_backend_tick():
                         plc_auto_backend_state['active_target_key'] = None
                         plc_auto_backend_state['active_target_set_at'] = 0.0
                         _trigger_auto_move_backoff(f'response type={resp_type}')
-                    ik_failed = response.get('type') == 'ikFailed'
+                    ik_failed = response.get('type') in ('ikFailed', 'error')
                     try:
                         queue_invalid_target(ik_failed)
                     except Exception:
@@ -2525,6 +2523,14 @@ def open_robot_arm_bridge(host: str, port: int):
         queue_robot_status(connected=True)
     except Exception:
         pass
+    try:
+        # executeLinearMove refuses to run without an explicit control
+        # session (unlike moveJoint/stopAll, which auto-grant on first use) —
+        # claim it once up front so the auto-move loop's first linear move
+        # doesn't fail on a fresh connection.
+        send_robot_arm_command({'command': 'takeControl', 'clientName': 'sf2-backend'})
+    except Exception as e:
+        logger.warning(f'Could not take robot arm control session on connect: {e}')
     log_event('robot', 'bridge_connected',
               f'robot arm bridge connected to {host}:{port}',
               severity=SEVERITY_INFO, host=host, port=port)
@@ -2576,6 +2582,8 @@ _ROBOT_ARM_EXPECTED_RESPONSE_TYPES = {
     'lockControl': {'controlStatus'},
     'unlockControl': {'controlStatus'},
     'getControlStatus': {'controlStatus'},
+    'executeLinearMove': {'linearPathStarted'},
+    'abortLinearPath': {'success'},
 }
 
 
