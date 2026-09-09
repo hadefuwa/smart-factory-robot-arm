@@ -2875,6 +2875,15 @@ def robot_arm_command():
     Generic passthrough — send any command payload to the Pi WebSocket service.
     Body: { "command": "...", ...params, "_recvTimeout": 30 }
     Optional _recvTimeout overrides the default 5s recv wait.
+
+    Routes through send_robot_arm_command (not a raw send/recv) so it gets
+    the same expected-response-type matching and backlog draining as every
+    other caller — this endpoint used to do its own raw ws.recv(), which
+    could grab an unrelated broadcast, time out waiting for the real reply,
+    and (via the except block below) close the whole bridge connection.
+    Confirmed live on 2026-09-09: a torque-off sent through here failed,
+    then broke the connection for every subsequent call including the
+    status poll, making the UI's live readout look dead.
     """
     payload = request.get_json(silent=True) or {}
     recv_timeout = int(payload.pop('_recvTimeout', 5))
@@ -2886,14 +2895,11 @@ def robot_arm_command():
             ws = robot_arm_bridge_state['ws']
             ws.settimeout(recv_timeout)
             try:
-                ws.send(json.dumps(payload))
-                raw = ws.recv()
-                response = json.loads(raw)
+                response = send_robot_arm_command(payload)
             finally:
                 ws.settimeout(3)
             return jsonify({'success': True, 'bridge_response': response})
         except Exception as e:
-            close_robot_arm_bridge()
             robot_arm_bridge_state['last_error'] = str(e)
             return jsonify({'success': False, 'error': str(e)}), 500
 
