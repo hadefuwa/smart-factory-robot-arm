@@ -32,6 +32,10 @@ const PKT_PARAMETER0 = 5;
 const INST_PING = 1;
 const INST_READ = 2;
 const INST_WRITE = 3;
+const INST_SYNC_READ = 0x82;
+
+// Broadcast address (no servo responds; each ID in SYNC_READ list replies in turn)
+const BROADCAST_ID = 0xFE;
 
 // Communication Results
 const COMM_SUCCESS = 0;
@@ -45,8 +49,6 @@ const STS_GOAL_POSITION_L = 42;
 const STS_GOAL_POSITION_H = 43;
 const STS_GOAL_SPEED_L = 46;
 const STS_GOAL_SPEED_H = 47;
-const STS_TORQUE_LIMIT_L = 48; // RAM torque limit low byte  (0-1000, 1000 = 100%)
-const STS_TORQUE_LIMIT_H = 49; // RAM torque limit high byte
 const STS_PRESENT_POSITION_L = 56;
 const STS_PRESENT_POSITION_H = 57;
 const STS_PRESENT_SPEED_L = 58;
@@ -56,6 +58,14 @@ const STS_PRESENT_VOLTAGE = 62;
 const STS_PRESENT_TEMPERATURE = 63;
 const STS_MOVING = 66;
 
+// EEPROM register addresses (STS3215, addr 0x00–0x27).
+// Writing requires unlocking at STS_EEPROM_LOCK first.
+const STS_EEPROM_LOCK       = 0x37;  // 0 = unlocked, 1 = locked (default locked)
+const STS_P_COEF            = 0x15;  // Position proportional gain  (byte, default 32)
+const STS_D_COEF            = 0x16;  // Position derivative gain    (byte, default 32)
+const STS_I_COEF            = 0x17;  // Position integral gain      (byte, default  0)
+const STS_MIN_STARTUP_FORCE = 0x18;  // Minimum startup force       (byte, default 16)
+
 // Position limits
 const MIN_POSITION = 0;
 const MAX_POSITION = 4095;
@@ -63,33 +73,6 @@ const MAX_SPEED = 3400;
 
 // Default baud rate for ST3215
 const DEFAULT_BAUDRATE = 1000000;
-const READ_RESPONSE_TIMEOUT_MS = 120;
-
-// ST3215 status / error byte bits. Returned in every reply; non-zero means
-// the servo is reachable but reporting a fault. The data in the same packet
-// is still valid — these are diagnostic bits, not a protocol error.
-const FAULT_BIT_VOLTAGE     = 0x01; // under/over voltage
-const FAULT_BIT_SENSOR      = 0x02; // sensor error
-const FAULT_BIT_TEMPERATURE = 0x04; // over-temperature
-const FAULT_BIT_OVERLOAD    = 0x08; // overcurrent / overload (the J2 bit)
-const FAULT_BIT_ANGLE       = 0x10; // angle limit exceeded
-const FAULT_BIT_MOTOR       = 0x20; // motor / driver error
-const FAULT_BIT_WHEEL       = 0x40; // wheel-mode error
-const FAULT_BIT_EEPROM      = 0x80; // internal / EEPROM error
-
-function describeServoFaultByte(byte) {
-    if (!byte) return 'OK';
-    const flags = [];
-    if (byte & FAULT_BIT_VOLTAGE)     flags.push('VOLTAGE');
-    if (byte & FAULT_BIT_SENSOR)      flags.push('SENSOR');
-    if (byte & FAULT_BIT_TEMPERATURE) flags.push('OVERTEMP');
-    if (byte & FAULT_BIT_OVERLOAD)    flags.push('OVERLOAD');
-    if (byte & FAULT_BIT_ANGLE)       flags.push('ANGLE_LIMIT');
-    if (byte & FAULT_BIT_MOTOR)       flags.push('MOTOR');
-    if (byte & FAULT_BIT_WHEEL)       flags.push('WHEEL');
-    if (byte & FAULT_BIT_EEPROM)      flags.push('EEPROM');
-    return flags.length ? flags.join('|') : ('UNKNOWN:0x' + byte.toString(16));
-}
 
 // Angle to steps conversion constants
 // Mapping: 0° = 2048 steps (center), -90° = 1024 steps, +90° = 3072 steps
@@ -97,6 +80,218 @@ const CENTER_POSITION = 2048;  // Center position in steps (0 degrees)
 const STEPS_PER_DEGREE = 2048 / 180;  // Steps per degree (11.377...)
 const MIN_ANGLE = -180;  // Minimum angle in degrees
 const MAX_ANGLE = 180;   // Maximum angle in degrees
+
+// ESP32 end-tool constants (ST3215-compatible node on same bus)
+const END_TOOL_ID = 64;
+// End tool writes need more retries with longer delays because Joint 1 bus noise
+// can corrupt the ACK response. The servo does NOT need to be re-enabled between
+// retries; the ESP32 sends its ACK before applying the servo, so retrying is safe.
+const BUS_WRITE_MAX_ATTEMPTS_END_TOOL = 5;
+const BUS_WRITE_RETRY_DELAY_END_TOOL_MS = 150;
+
+// At 1 Mbps the full UART round-trip for a 27-byte read is ~400 µs.
+// Response wire time is <1 ms; 50 ms gives ample jitter margin while keeping
+// a failing poll under 105 ms (50 + 5 gap + 50 retry), so 6 bad reads can't
+// block the watchdog heartbeat past the ~1 s servo self-disable threshold.
+const BUS_READ_TIMEOUT_MS = 50;
+const BUS_READ_TIMEOUT_END_TOOL_MS = 150;
+const BUS_WRITE_RETRY_DELAY_MS = 30;
+const BUS_WRITE_MAX_ATTEMPTS = 2;
+
+// serialport's write() callback normally fires in well under 1 ms at 1 Mbps
+// for our packet sizes. If the underlying driver ever stalls and that
+// callback never fires, sendPacket() has no other timeout guarding it — the
+// read/write response timeouts below only start counting once sendPacket()
+// has already resolved. This bounds that specific failure mode so a stuck
+// serial write can't hang the caller (and, transitively, the whole bus tick
+// loop) forever.
+const SERIAL_WRITE_CALLBACK_TIMEOUT_MS = 300;
+// Write acks arrive in 1–15 ms normally; when lost they never arrive.
+// 80 ms is ample margin for Pi scheduling jitter while keeping two failed
+// write attempts under 200 ms so a slow joint (4 or 5) cannot hold the bus
+// long enough to trigger the ~1 s watchdog on all other joints during homing.
+const BUS_WRITE_TIMEOUT_MS = 80;
+const BUS_GAP_BETWEEN_WRITES_MS = 15;
+
+// ST3215 status bits in the response packet error byte (register 0x41 style flags)
+const SERVO_ERR_VOLTAGE = 1;
+const SERVO_ERR_SENSOR = 2;
+const SERVO_ERR_TEMPERATURE = 4;
+const SERVO_ERR_CURRENT = 8;
+const SERVO_ERR_OVERLOAD = 32;
+
+/**
+ * Bus / servo fault with extra fields for the server and UI.
+ */
+class BusCommunicationError extends Error {
+    constructor(message, details) {
+        super(message);
+        this.name = 'BusCommunicationError';
+        this.commResult = details.commResult !== undefined ? details.commResult : null;
+        this.servoErrorByte = details.servoErrorByte !== undefined ? details.servoErrorByte : null;
+        this.isOverload = !!details.isOverload;
+        this.isRetryable = !!details.isRetryable;
+    }
+}
+
+/**
+ * Describe ST3215 error byte from a response packet.
+ * @param {number} errorByte
+ * @returns {string}
+ */
+function describeServoErrorByte(errorByte) {
+    const parts = [];
+
+    if (errorByte & SERVO_ERR_VOLTAGE) {
+        parts.push('voltage');
+    }
+    if (errorByte & SERVO_ERR_SENSOR) {
+        parts.push('sensor');
+    }
+    if (errorByte & SERVO_ERR_TEMPERATURE) {
+        parts.push('temperature');
+    }
+    if (errorByte & SERVO_ERR_CURRENT) {
+        parts.push('current');
+    }
+    if (errorByte & SERVO_ERR_OVERLOAD) {
+        parts.push('overload');
+    }
+
+    if (parts.length === 0) {
+        return 'servo status 0x' + errorByte.toString(16);
+    }
+
+    return parts.join(', ');
+}
+
+/**
+ * Build a clear Error from a parsed bus response or a plain message.
+ * @param {Object|string} source
+ * @returns {BusCommunicationError|Error}
+ */
+function busErrorFromResponse(source) {
+    if (typeof source === 'string') {
+        return new BusCommunicationError(source, {
+            commResult: null,
+            servoErrorByte: null,
+            isOverload: false,
+            isRetryable: source.indexOf('timeout') >= 0
+        });
+    }
+
+    const commResult = source.commResult;
+    const servoErrorByte = source.error;
+
+    if (commResult === COMM_RX_TIMEOUT) {
+        return new BusCommunicationError('No reply from device (timeout)', {
+            commResult: commResult,
+            servoErrorByte: null,
+            isOverload: false,
+            isRetryable: true
+        });
+    }
+
+    if (servoErrorByte && servoErrorByte !== 0) {
+        const detail = describeServoErrorByte(servoErrorByte);
+        const isOverload = (servoErrorByte & SERVO_ERR_OVERLOAD) !== 0;
+        const isCurrent = (servoErrorByte & SERVO_ERR_CURRENT) !== 0;
+
+        return new BusCommunicationError('Servo fault: ' + detail, {
+            commResult: commResult,
+            servoErrorByte: servoErrorByte,
+            isOverload: isOverload,
+            isRetryable: isOverload || isCurrent
+        });
+    }
+
+    if (commResult === COMM_RX_CORRUPT) {
+        return new BusCommunicationError('Invalid or corrupted reply from device', {
+            commResult: commResult,
+            servoErrorByte: servoErrorByte,
+            isOverload: false,
+            isRetryable: true
+        });
+    }
+
+    return new BusCommunicationError('Communication error: ' + commResult, {
+        commResult: commResult,
+        servoErrorByte: servoErrorByte,
+        isOverload: false,
+        isRetryable: true
+    });
+}
+
+/**
+ * @param {Error} error
+ * @returns {boolean}
+ */
+function isRetryableBusError(error) {
+    if (!error) {
+        return false;
+    }
+
+    if (error.isRetryable) {
+        return true;
+    }
+
+    const message = error.message || '';
+
+    return message.indexOf('timeout') >= 0
+        || message.indexOf('corrupt') >= 0
+        || message.indexOf('Communication error') >= 0;
+}
+
+/**
+ * Reject on the next event-loop turn so await is already waiting (avoids unhandledRejection).
+ * @param {Function} reject
+ * @param {Error} error
+ */
+function deferPromiseReject(reject, error) {
+    queueMicrotask(function () {
+        reject(error);
+    });
+}
+
+// Identity and status registers
+const TOOL_PROTOCOL_VERSION = 0x00;
+const TOOL_FIRMWARE_MAJOR = 0x01;
+const TOOL_FIRMWARE_MINOR = 0x02;
+const TOOL_TYPE_ID = 0x03;
+const TOOL_STATUS_FLAGS = 0x04;
+const TOOL_CONFIG_FLAGS = 0x05;
+const WATCHDOG_TIMEOUT_L = 0x06;
+
+// PWM and current registers (byte addresses — see End Tool API ESP32/REGISTER_MAP.md)
+const PWM1_DUTY = 5;
+const PWM2_DUTY = 6;
+const PWM_CONTROL = 7;
+const PWM1_CURRENT_MA_L = 11;
+const PWM2_CURRENT_MA_L = 13;
+const SERVO_CURRENT_MA_L = 15;
+
+// ADC telemetry registers
+const ADC0_RAW_L = 17;
+const ADC1_RAW_L = 19;
+const ADC0_MV_L = 21;
+const ADC1_MV_L = 23;
+
+// Hobby servo registers
+const SERVO_ENABLE = 0x30;
+const SERVO_POSITION_8BIT = 0x31;
+const SERVO_ANGLE_DEG = 0x32;
+const SERVO_CURRENT_POSITION_8BIT = 0x37;
+const SERVO_CURRENT_ANGLE = 0x38;
+
+// Control and diagnostics registers
+const DEVICE_RESET_CMD = 0x40;
+const FAULT_CLEAR_CMD = 0x41;
+const UPTIME_SEC_L = 0x42;
+const LAST_ERROR_CODE = 0x44;
+
+// Tool write command magic values
+const RESET_MAGIC_VALUE = 0xA5;
+const CLEAR_FAULTS_MAGIC_VALUE = 0x5A;
 
 /**
  * ServoController class - controls one ST3215 servo motor
@@ -138,15 +333,40 @@ class ServoController {
         this.responseReject = null;
         this.responseTimeout = null;
         this.currentSpeed = 1500; // Default speed, will be updated when setSpeed is called
-        // Latched servo "Status Byte" from the most recent read/ping. Non-zero
-        // means the servo is reachable but reporting a fault (overload, over-
-        // temp, voltage, etc). We expose this upstream so callers can show the
-        // fault instead of nulling the slot. Old behaviour rejected reads on
-        // any non-zero error byte, which caused the slot to be nulled and
-        // re-init looped forever once a sticky fault bit (e.g. overload) was
-        // latched.
-        this.lastReadFaultByte = 0;
-        this.lastPingFaultByte = 0;
+        this.rxDrainUntilMs = 0;   // discard all RX bytes until this timestamp (post-timeout drain)
+        // Raw step position that this instance treats as 0°. Defaults to the
+        // servo's factory center (2048); recenter() moves it so a physically
+        // reinstalled/replaced servo can be re-zeroed without touching EEPROM.
+        this.centerPosition = CENTER_POSITION;
+    }
+
+    /**
+     * Redefines this servo's logical 0° to be wherever it currently physically
+     * is, without moving it or touching servo EEPROM. Used after a servo swap
+     * or mechanical reseat to re-zero a joint. Purely a software offset applied
+     * in angleToSteps()/stepsToAngle() — the servo's own raw position readback
+     * is unaffected.
+     * @param {number} currentRawPosition - The servo's current raw step position (0-4095)
+     */
+    setCenterPosition(currentRawPosition) {
+        this.centerPosition = currentRawPosition;
+    }
+
+    /**
+     * Cancel any in-flight read/write wait (timeouts, buffers, callbacks).
+     * @private
+     */
+    clearPendingBusTransaction(drainMs = 0) {
+        if (this.responseTimeout) {
+            clearTimeout(this.responseTimeout);
+            this.responseTimeout = null;
+        }
+        this.responseResolve = null;
+        this.responseReject = null;
+        this.pendingResponse = null;
+        if (drainMs > 0) {
+            this.rxDrainUntilMs = Date.now() + drainMs;
+        }
     }
 
     /**
@@ -233,14 +453,16 @@ class ServoController {
      * @private
      */
     handleIncomingData(data) {
-        // Always process data, but only resolve if we're waiting
-        const hasPendingResponse = !!this.responseResolve;
-        
-        if (!hasPendingResponse) {
-            // Not waiting for response, ignore this data
+        // Fix 3: discard all bytes for a short window after a timeout to flush stale bus data
+        if (Date.now() < this.rxDrainUntilMs) {
             return;
         }
-        console.log('[HID s'+this.servoIdNumber+'] incoming len=' + data.length + ' hex=' + data.toString('hex'));
+
+        const hasPendingResponse = !!this.responseResolve;
+
+        if (!hasPendingResponse) {
+            return;
+        }
         
         // Accumulate data if we have pending response
         // Limit buffer size to prevent memory buildup (max 256 bytes should be enough for any packet)
@@ -251,22 +473,10 @@ class ServoController {
                 // Buffer too large - likely corrupted or wrong packet, clear it
                 console.warn(`Servo ${this.servoId}: Buffer too large (${newSize} bytes), clearing`);
                 this.pendingResponse = null;
-                if (this.responseResolve) {
-                    // Clear timeout
-                    if (this.responseTimeout) {
-                        clearTimeout(this.responseTimeout);
-                        this.responseTimeout = null;
-                    }
-                    // Reject the promise if we have a reject callback
-                    if (this.responseReject) {
-                        const reject = this.responseReject;
-                        this.responseResolve = null;
-                        this.responseReject = null;
-                        reject(new Error('Response buffer overflow'));
-                    } else {
-                        // Just clear if no reject callback (shouldn't happen, but be safe)
-                        this.responseResolve = null;
-                    }
+                if (this.responseReject) {
+                    this.responseReject(new Error('Response buffer overflow'));
+                } else {
+                    this.clearPendingBusTransaction();
                 }
                 return;
             }
@@ -275,40 +485,42 @@ class ServoController {
             this.pendingResponse = data;
         }
         
-        // Try to parse the complete packet
-        const result = this.parseResponsePacket(this.pendingResponse);
-        
-        if (result.complete) {
-            // Check if this packet is for our servo ID
+        // Parse one or more complete packets (shared bus may deliver other IDs first)
+        while (this.pendingResponse && this.pendingResponse.length >= 6) {
+            const result = this.parseResponsePacket(this.pendingResponse);
+
+            if (!result.complete) {
+                if (result.error && result.error !== 'Invalid header' && result.error !== 'Header at wrong position') {
+                    if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] Packet parse error: ${result.error}`);
+                }
+                break;
+            }
+
+            const packetLen = result.packetByteLength || (result.responseLength + 4);
+            if (this.pendingResponse.length < packetLen) {
+                break;
+            }
+
             if (result.id === this.servoIdNumber) {
-                // This packet is for us - resolve the promise
                 if (this.responseResolve) {
-                    // Clear timeout
                     if (this.responseTimeout) {
                         clearTimeout(this.responseTimeout);
                         this.responseTimeout = null;
                     }
-                    
-                    // Resolve the promise
-                    const resolve = this.responseResolve;
-                    this.responseResolve = null;
-                    this.responseReject = null;
-                    this.pendingResponse = null;
-                    console.log("[HID s"+this.servoIdNumber+"] RESOLVING id=" + result.id + " error=" + result.error + " params=" + (result.parameters ? result.parameters.toString("hex") : "null"));
-                    resolve(result);
+
+                    const deliver = this.responseResolve;
+                    this.pendingResponse = this.pendingResponse.slice(packetLen);
+                    deliver(result);
+                } else if (DEBUG) {
+                    console.log(`[DEBUG Servo ${this.servoId}] Late reply ignored (no pending command)`);
+                    this.pendingResponse = this.pendingResponse.slice(packetLen);
                 }
-            } else {
-                // This packet is for a different servo - clear our pending response
-                // and let other servos handle it
-                this.pendingResponse = null;
+                return;
             }
-        } else if (result.error) {
-            // Only log actual errors, not incomplete packets
-            if (result.error !== 'Invalid header' && result.error !== 'Header at wrong position') {
-                if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] Packet parse error: ${result.error}`);
-            }
+
+            // Another device on the bus — remove its packet and keep waiting for ours
+            this.pendingResponse = this.pendingResponse.slice(packetLen);
         }
-        // If not complete, keep accumulating data in pendingResponse
     }
 
     /**
@@ -396,19 +608,14 @@ class ServoController {
             parameters = Buffer.alloc(0);
         }
 
-        // commResult is the BUS-LEVEL outcome: header ok, length ok, checksum
-        // ok → COMM_SUCCESS. The servo's status byte (`error`) is data carried
-        // INSIDE a successful reply — it tells us about latched faults
-        // (overload, motor error, etc.) but is not a comm failure. Conflating
-        // the two used to make a faulted servo look exactly like a bus storm
-        // and starved the dedicated fault-byte handling path in readData.
         return {
             complete: true,
             id: id,
             error: error,
             parameters: parameters,
-            commResult: COMM_SUCCESS,
-            responseLength: length
+            commResult: error === 0 ? COMM_SUCCESS : COMM_RX_CORRUPT,
+            responseLength: length,  // Length field from packet (distinguishes write vs read)
+            packetByteLength: expectedLength  // Total bytes consumed from the RX buffer
         };
     }
 
@@ -457,13 +664,24 @@ class ServoController {
         // If using shared port, we need to check if there's a write queue
         const writeFn = () => {
             return new Promise((resolve, reject) => {
+                let settled = false;
+                const timer = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    reject(new Error(`Serial write callback did not fire within ${SERIAL_WRITE_CALLBACK_TIMEOUT_MS}ms`));
+                }, SERIAL_WRITE_CALLBACK_TIMEOUT_MS);
+
                 this.serialPort.write(packet, (error) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
                     if (error) {
-                        console.error(`[WRITE ERROR Servo ${this.servoId}]`, error.message);
+                        if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Write error:`, error);
                         reject(error);
                     } else {
                         // Short wait to ensure the packet has been handed off to the driver.
-setTimeout(resolve, 1);
+                        // 1 ms at 1 Mbps is plenty for our packet sizes.
+                        setTimeout(resolve, 1);
                     }
                 });
             });
@@ -494,130 +712,175 @@ setTimeout(resolve, 1);
             length & 0xFF            // Number of bytes to read
         ];
 
-        // Clear any pending response
-        this.pendingResponse = null;
-        if (this.responseTimeout) {
-            clearTimeout(this.responseTimeout);
-            this.responseTimeout = null;
-        }
-        this.responseResolve = null;
-        this.responseReject = null;
+        this.clearPendingBusTransaction();
+        // Clear any post-timeout drain — this is a fresh request and we must
+        // accept the response, including one that arrives quickly on a retry.
+        this.rxDrainUntilMs = 0;
 
-        const cleanupPendingRead = () => {
-            if (this.responseTimeout) {
-                clearTimeout(this.responseTimeout);
-                this.responseTimeout = null;
-            }
-            this.responseResolve = null;
-            this.responseReject = null;
-            this.pendingResponse = null;
-        };
+        let settled = false;
 
-        // Set up response handler BEFORE sending packet to avoid race condition
-        let rejectRead = null;
         const readPromise = new Promise((resolve, reject) => {
-            rejectRead = reject;
-            // Store reject callback for timeout/error handling
-            this.responseReject = reject;
-            this.responseResolve = (result) => {
-                // Check communication result and error
-                if (result.commResult !== COMM_SUCCESS) {
-                    cleanupPendingRead();
-                    reject(new Error(`Communication error: ${result.commResult}`));
+            const finishReject = (error) => {
+                if (settled) {
                     return;
                 }
-                // Return the parameter data (which contains the register values)
-                // For read commands, parameters should be a Buffer with the register data
-                if (!result.parameters) {
-                    if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] No parameters in read response, result:`, result);
-                    cleanupPendingRead();
-                    reject(new Error('No data in read response'));
+                settled = true;
+                this.clearPendingBusTransaction();
+                deferPromiseReject(reject, error);
+            };
+
+            const finishResolve = (data) => {
+                if (settled) {
                     return;
                 }
-                // Convert to Buffer if it's not already (it should be a Buffer slice)
-                const data = Buffer.isBuffer(result.parameters) ? result.parameters : Buffer.from(result.parameters);
-                if (data.length === 0) {
-                    // Empty parameters - check if this is a write response (length=2) being matched to read
-                    if (result.responseLength === 2) {
-                        // This is a write response (Error + Checksum only), not a read response
-                        // Ignore it and wait for the actual read response
-                        // Keep quiet to avoid spamming logs during normal operation.
-                        return; // Don't resolve or reject, wait for actual read response
-                    } else {
-                        // This is a read response but with no data - error
-                        if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Read response has no data, responseLength=${result.responseLength}`);
-                        cleanupPendingRead();
-                        reject(new Error('Empty read response data'));
-                        return;
-                    }
-                }
-                // SERVO ERROR BYTE: a non-zero status byte means the servo is
-                // reachable but reporting a fault. The register data in this
-                // packet is still valid — the servo just wants us to know it
-                // has e.g. an overload, over-temp, or under-voltage condition.
-                // Previously we rejected here, which caused the bridge to null
-                // the slot and start the 5s revive loop forever (the latched
-                // fault bit never clears under that loop). Now we stash the
-                // fault byte and resolve with the data so callers can decide
-                // how to respond (typically: surface the fault to the UI,
-                // continue polling, optionally try to clear it).
-                if (result.error !== 0) {
-                    this.lastReadFaultByte = result.error;
-                    console.warn(`Servo ${this.servoId}: read returned with fault byte 0x${result.error.toString(16).padStart(2, '0')} (${describeServoFaultByte(result.error)}) — data still valid, slot stays alive`);
-                } else {
-                    this.lastReadFaultByte = 0;
-                }
-                cleanupPendingRead();
+                settled = true;
+                this.clearPendingBusTransaction();
                 resolve(data);
             };
-            
-            // Bulk status reads can return larger payloads than simple position reads,
-            // so keep enough margin to avoid flapping the bridge on normal latency.
-            const _readStart = Date.now();
+
+            this.responseReject = finishReject;
+            this.responseResolve = (result) => {
+                if (settled) {
+                    return;
+                }
+
+                if (result.commResult !== COMM_SUCCESS || result.error !== 0) {
+                    finishReject(busErrorFromResponse(result));
+                } else if (!result.parameters) {
+                    if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] No parameters in read response, result:`, result);
+                    finishReject(new Error('No data in read response'));
+                } else {
+                    const data = Buffer.isBuffer(result.parameters) ? result.parameters : Buffer.from(result.parameters);
+                    if (data.length === 0) {
+                        if (result.responseLength === 2) {
+                            // Write ack for another transaction — keep waiting for the read reply
+                            return;
+                        }
+                        if (DEBUG) console.error(`[DEBUG Servo ${this.servoId}] Read response has no data, responseLength=${result.responseLength}`);
+                        finishReject(new Error('Empty read response data'));
+                        return;
+                    }
+                    finishResolve(data);
+                }
+            };
+
+            const readTimeoutMs = this.servoIdNumber === END_TOOL_ID
+                ? BUS_READ_TIMEOUT_END_TOOL_MS
+                : BUS_READ_TIMEOUT_MS;
+
             this.responseTimeout = setTimeout(() => {
-                console.log('[READ TIMEOUT s'+this.servoIdNumber+'] fired after ' + (Date.now()-_readStart) + 'ms, responseResolve was: ' + (this.responseResolve ? 'SET' : 'NULL'));
-                cleanupPendingRead();
-                reject(new Error('Read timeout'));
-            }, READ_RESPONSE_TIMEOUT_MS);
+                this.rxDrainUntilMs = Date.now() + 10;
+                finishReject(new Error('Read timeout'));
+            }, readTimeoutMs);
         });
 
-        // Now send read instruction
-        console.log("[SEND READ s"+this.servoIdNumber+"] addr=" + address + " len=" + length);
         try {
             await this.sendPacket(INST_READ, parameters);
+            return await readPromise;
         } catch (error) {
-            cleanupPendingRead();
-            if (rejectRead) {
-                rejectRead(error);
-            }
+            this.clearPendingBusTransaction();
             throw error;
         }
-
-        // Wait for response
-        return await readPromise;
     }
 
     /**
      * Write data to servo
      * @private
      */
-    async writeData(address, data) {
-        const parameters = [address & 0xFF, ...data];
+    async writeData(address, data, allowRetry = true) {
+        // Prepare write parameters: address (1 byte) + data bytes
+        // Python: txpacket[PKT_PARAMETER0] = address (single byte)
+        //         txpacket[PKT_PARAMETER0 + 1: PKT_PARAMETER0 + 1 + length] = data
+        const parameters = [
+            address & 0xFF,           // Address (single byte)
+            ...data                    // Data bytes follow immediately after address
+        ];
+        
+        // Debug: log the full packet structure
+        if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] writeData: address=0x${(address & 0xFF).toString(16).padStart(2,'0')}, data=[${data.map(b => '0x' + b.toString(16).padStart(2,'0')).join(', ')}], parameters=[${parameters.map(b => '0x' + b.toString(16).padStart(2,'0')).join(', ')}]`);
 
-        if (DEBUG) console.log('[DEBUG Servo ' + this.servoId + '] writeData addr=0x' + (address & 0xFF).toString(16).padStart(2,'0') + ' data=' + JSON.stringify(data));
+        let settled = false;
+        let attempt = 0;
+        const isEndTool = this.servoIdNumber === END_TOOL_ID;
+        const maxAttempts = isEndTool ? BUS_WRITE_MAX_ATTEMPTS_END_TOOL : BUS_WRITE_MAX_ATTEMPTS;
+        const retryDelayMs = isEndTool ? BUS_WRITE_RETRY_DELAY_END_TOOL_MS : BUS_WRITE_RETRY_DELAY_MS;
 
-        // Clear any stale pending state
-        this.pendingResponse = null;
-        if (this.responseTimeout) { clearTimeout(this.responseTimeout); this.responseTimeout = null; }
-        this.responseResolve = null;
-        this.responseReject = null;
+        while (attempt < maxAttempts) {
+            attempt = attempt + 1;
+            settled = false;
+            this.clearPendingBusTransaction();
 
-        // Fire-and-forget: ST3215 servos do not reliably send a write ACK
-        // when Status Return Level = 0 (factory default on many units).
-        // Send the packet then wait a short drain time before returning.
-        await this.sendPacket(INST_WRITE, parameters);
-        await new Promise(r => setTimeout(r, 8));
-        return true;
+            const writePromise = new Promise((resolve, reject) => {
+                const finishReject = (error) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    this.clearPendingBusTransaction();
+                    deferPromiseReject(reject, error);
+                };
+
+                const finishResolve = (result) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    this.clearPendingBusTransaction();
+                    resolve(result);
+                };
+
+                this.responseReject = finishReject;
+                this.responseResolve = (result) => {
+                    if (settled) {
+                        return;
+                    }
+
+                    if (result.commResult !== COMM_SUCCESS || result.error !== 0) {
+                        finishReject(busErrorFromResponse(result));
+                    } else {
+                        finishResolve(result);
+                    }
+                };
+
+                const writeTimeoutMs = isEndTool ? 1000 : BUS_WRITE_TIMEOUT_MS;
+                this.responseTimeout = setTimeout(() => {
+                    this.rxDrainUntilMs = Date.now() + 10;
+                    if (DEBUG) {
+                        console.log(`[DEBUG Servo ${this.servoId}] Write timeout - no response received`);
+                    }
+                    finishReject(busErrorFromResponse('Write timeout'));
+                }, writeTimeoutMs);
+            });
+
+            try {
+                await this.sendPacket(INST_WRITE, parameters);
+
+                if (isEndTool) {
+                    await new Promise(resolve => setTimeout(resolve, 20));
+                }
+
+                await writePromise;
+                return true;
+            } catch (writeError) {
+                this.clearPendingBusTransaction();
+
+                const canRetry = allowRetry
+                    && attempt < maxAttempts
+                    && isRetryableBusError(writeError);
+
+                if (canRetry) {
+                    console.warn(
+                        `Servo ${this.servoId}: Bus write failed (${writeError.message}), retrying (${attempt}/${maxAttempts})...`
+                    );
+                    await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+                    continue;
+                }
+
+                throw writeError;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -661,19 +924,10 @@ setTimeout(resolve, 1);
                         clearTimeout(this.responseTimeout);
                         this.responseTimeout = null;
                     }
-
-                    // For ping we only need an addressed reply. The status
-                    // (error) byte being non-zero means the servo is alive but
-                    // reporting a latched fault (e.g. overload). We MUST count
-                    // that as a successful ping; otherwise tryReviveServoSlot
-                    // never recovers a faulted joint — the same bit keeps
-                    // failing the ping, the slot stays nulled, the user sees
-                    // "joint offline" forever.
-                    const success = result.id === this.servoIdNumber;
-                    this.lastPingFaultByte = success ? (result.error || 0) : 0;
-                    if (success && result.error !== 0) {
-                        console.warn(`Servo ${this.servoId}: ping reply carried fault byte 0x${result.error.toString(16).padStart(2, '0')} (${describeServoFaultByte(result.error)}) — treating ping as alive`);
-                    }
+                    
+                    // For ping, we just need to check if we got a response with the correct ID
+                    // The error byte should be 0, and the ID should match
+                    const success = result.id === this.servoIdNumber && result.error === 0;
                     this.responseResolve = null;
                     this.pendingResponse = null;
                     resolve(success);
@@ -681,6 +935,7 @@ setTimeout(resolve, 1);
                 
                 this.responseTimeout = setTimeout(() => {
                     if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] Ping timeout - no response received`);
+                    this.rxDrainUntilMs = Date.now() + 10;
                     this.responseResolve = null;
                     this.pendingResponse = null;
                     resolve(false);
@@ -705,6 +960,34 @@ setTimeout(resolve, 1);
     }
 
     /**
+     * Check if this device is currently responsive on the bus.
+     * Simple wrapper around ping() for readability in higher-level logic.
+     * @returns {boolean} True if responsive
+     */
+    async isResponsive() {
+        return await this.ping();
+    }
+
+    /**
+     * Try to reinitialize this device after a communication issue.
+     * For ST3215 servos this means: ping, then enable torque.
+     * For other compatible nodes, subclasses can override as needed.
+     * @returns {boolean} True if successfully reinitialized
+     */
+    async reinitialize() {
+        const alive = await this.ping();
+        if (!alive) {
+            return false;
+        }
+        try {
+            await this.startServo();
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
      * Enable torque (start servo)
      * @returns {boolean} True if successful
      */
@@ -720,31 +1003,14 @@ setTimeout(resolve, 1);
     }
 
     /**
-     * Hold at the current physical position.
-     * Reads the present position register and writes it back as the goal,
-     * then enables torque. This locks the servo in place without snapping
-     * to a previously commanded angle.
-     * @returns {boolean} True if successful
+     * Send TORQUE_ENABLE=1 without waiting for the servo's ack.
+     * The ST3215 bus watchdog only resets on write packets (not reads), so status
+     * polls alone do not prevent self-disable after ~1 s of write inactivity.
+     * Calling this periodically keeps the watchdog satisfied.  The servo's ack
+     * arrives and is silently discarded by handleIncomingData (responseResolve=null).
      */
-    async holdCurrentPosition() {
-        try {
-            // Read present position (2 bytes, little-endian)
-            const posData = await this.readData(STS_PRESENT_POSITION_L, 2);
-            if (!posData || posData.length < 2) throw new Error('Could not read present position');
-            const presentPos = posData[0] | (posData[1] << 8);
-
-            // Write present position as goal position (servo stays put)
-            await this.writeData(STS_GOAL_POSITION_L, [this.stsLobyte(presentPos), this.stsHibyte(presentPos)]);
-
-            // Ensure torque is on
-            await this.writeData(STS_TORQUE_ENABLE, [1]);
-
-            if (DEBUG) console.log(`Servo ${this.servoId}: Holding at position ${presentPos}`);
-            return true;
-        } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to hold position:`, error.message);
-            return false;
-        }
+    async sendTorqueEnableFireAndForget() {
+        await this.sendPacket(INST_WRITE, [STS_TORQUE_ENABLE & 0xFF, 1]);
     }
 
     /**
@@ -757,29 +1023,7 @@ setTimeout(resolve, 1);
             if (DEBUG) console.log(`Servo ${this.servoId}: Torque disabled`);
             return true;
         } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to disable torque:`, error.message);
-            return false;
-        }
-    }
-
-    /**
-     * Set the RAM torque limit — caps maximum motor force in hardware.
-     * The servo cannot exceed this regardless of goal position or speed.
-     *
-     * @param {number} percent - Limit as a percentage of max torque (0–100)
-     * @returns {boolean} True if successful
-     */
-    async setTorqueLimit(percent) {
-        try {
-            const raw = Math.round(Math.max(0, Math.min(100, percent)) * 10); // 0-100% → 0-1000
-            await this.writeData(STS_TORQUE_LIMIT_L, [
-                this.stsLobyte(raw),
-                this.stsHibyte(raw)
-            ]);
-            if (DEBUG) console.log(`Servo ${this.servoId}: Torque limit set to ${percent}% (raw ${raw})`);
-            return true;
-        } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to set torque limit:`, error.message);
+            this.logServoCommandError('disable torque', error);
             return false;
         }
     }
@@ -815,14 +1059,30 @@ setTimeout(resolve, 1);
                 this.stsLobyte(speed),  // Low byte first (matches Python)
                 this.stsHibyte(speed)   // High byte second (matches Python)
             ];
-            await this.writeData(STS_GOAL_SPEED_L, data);
-            // Store the current speed so it can be used by moveToAngle if no speed is specified
+            // Update before writing: if the ack is lost the servo almost certainly
+            // received the command, so tracking should reflect the intended speed.
             this.currentSpeed = speed;
+            await this.writeData(STS_GOAL_SPEED_L, data);
             if (DEBUG) console.log(`Servo ${this.servoId}: Speed set to ${speed} step/s`);
         } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to set speed:`, error.message);
+            this.logServoCommandError('set speed', error);
             throw error;
         }
+    }
+
+    /**
+     * Log a failed servo command without dumping a full stack trace for expected bus faults.
+     * @param {string} action
+     * @param {Error} error
+     */
+    logServoCommandError(action, error) {
+        let line = `Servo ${this.servoId}: Failed to ${action}: ${error.message}`;
+
+        if (error.isOverload) {
+            line = line + ' (joint may be stalled or over-torqued — reduce load or move away from limit)';
+        }
+
+        console.warn(line);
     }
 
     /**
@@ -842,7 +1102,7 @@ setTimeout(resolve, 1);
         if (angleDegrees > MAX_ANGLE) angleDegrees = MAX_ANGLE;
         
         // Convert: steps = center + (angle * steps_per_degree)
-        const steps = Math.round(CENTER_POSITION + (angleDegrees * STEPS_PER_DEGREE));
+        const steps = Math.round(this.centerPosition + (angleDegrees * STEPS_PER_DEGREE));
         
         // Clamp to valid step range (should be 1024-3072, but add safety check)
         if (steps < MIN_POSITION) return MIN_POSITION;
@@ -868,7 +1128,7 @@ setTimeout(resolve, 1);
         if (steps > MAX_POSITION) steps = MAX_POSITION;
         
         // Convert: angle = (steps - center) / steps_per_degree
-        const angle = (steps - CENTER_POSITION) / STEPS_PER_DEGREE;
+        const angle = (steps - this.centerPosition) / STEPS_PER_DEGREE;
         
         // Clamp to valid angle range
         if (angle < MIN_ANGLE) return MIN_ANGLE;
@@ -897,8 +1157,20 @@ setTimeout(resolve, 1);
             // Check explicitly for null/undefined, but allow 0 as a valid speed value
             const speedToUse = (speed !== null && speed !== undefined) ? speed : this.currentSpeed;
             
-            // Always set speed to ensure it's applied (either the provided one or the stored one)
-            await this.setSpeed(speedToUse);
+            // Always write the speed register before the position command.
+            // Skipping when speedToUse === currentSpeed was an optimisation, but it
+            // caused intermittent "too slow" moves: if a previous speed write failed
+            // silently (ack timeout — the catch in setSpeed swallows it), currentSpeed
+            // tracks the intended value while the servo still holds the old value.
+            // The next call with the same intended speed then skips the write, so the
+            // servo runs at the stale speed.  Always writing costs one extra bus write
+            // (~7 ms) per joint per move — acceptable.
+            try {
+                await this.setSpeed(speedToUse);
+            } catch (_) {
+                // Ack lost; servo very likely received the write anyway — continue.
+            }
+            await new Promise((resolve) => setTimeout(resolve, BUS_GAP_BETWEEN_WRITES_MS));
             
             // Don't read position before move - it can cause response matching issues
             // Just proceed with the move
@@ -911,7 +1183,7 @@ setTimeout(resolve, 1);
             await this.writeData(STS_GOAL_POSITION_L, data);
             if (DEBUG) console.log(`Servo ${this.servoId}: Position command sent (bytes: 0x${data[0].toString(16).padStart(2,'0')} 0x${data[1].toString(16).padStart(2,'0')})`);
         } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to move to angle:`, error.message);
+            this.logServoCommandError('move to angle', error);
             throw error;
         }
     }
@@ -988,91 +1260,33 @@ setTimeout(resolve, 1);
     }
 
     /**
-     * Read all servo statistics
+     * Read all servo statistics in a single bulk bus transaction.
+     * Reads registers STS_TORQUE_ENABLE (40) through STS_MOVING (66) inclusive — 27 bytes.
      * @returns {Object} Status object with all information
      */
     async readStatus() {
         try {
-            // Read position
-            const positionData = await this.readData(STS_PRESENT_POSITION_L, 2);
-            if (!positionData || positionData.length < 2) {
-                // Log more details for debugging
-                if (DEBUG) {
-                    console.log(`[DEBUG Servo ${this.servoId}] Invalid position data:`, {
-                        hasData: !!positionData,
-                        length: positionData ? positionData.length : 0,
-                        data: positionData ? Array.from(positionData).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ') : 'null'
-                    });
-                }
-                throw new Error('Invalid position data received');
+            const startAddr = STS_TORQUE_ENABLE; // 40
+            const blockLen  = (STS_MOVING - STS_TORQUE_ENABLE) + 1; // 27
+            const data = await this.readData(startAddr, blockLen);
+            if (!data || data.length < blockLen) {
+                throw new Error(`Invalid bulk status data (len=${data ? data.length : 0}, expected ${blockLen})`);
             }
-            const position = this.makeWord(positionData[0], positionData[1]);
-            // Convert position to angle using the conversion function
-            const angleDegrees = this.stepsToAngle(position);
-            
-            // Debug: log position and angle conversion
-            // Log when angle is unexpected or when position is near center
-            if (Math.abs(angleDegrees - (-90)) < 1.0 || (position >= 2040 && position <= 2150)) {
-                const byte0 = positionData[0] !== undefined ? '0x' + positionData[0].toString(16).padStart(2,'0') : 'undefined';
-                const byte1 = positionData[1] !== undefined ? '0x' + positionData[1].toString(16).padStart(2,'0') : 'undefined';
-                const expectedAngle = ((position - CENTER_POSITION) / STEPS_PER_DEGREE).toFixed(2);
-                if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] Position: ${position} (bytes: ${byte0} ${byte1}), angle: ${angleDegrees.toFixed(2)}°, expected: ${expectedAngle}°`);
-            }
-            
-            // Read speed
-            const speedData = await this.readData(STS_PRESENT_SPEED_L, 2);
-            if (!speedData || speedData.length < 2) {
-                throw new Error('Invalid speed data received');
-            }
-            const speed = this.makeWord(speedData[0], speedData[1]);
-            
-            // Read load
-            const loadData = await this.readData(STS_PRESENT_LOAD_L, 1);
-            if (!loadData || loadData.length < 1) {
-                throw new Error('Invalid load data received');
-            }
-            const load = loadData[0] * 0.1; // Convert to percentage
-            
-            // Read voltage
-            const voltageData = await this.readData(STS_PRESENT_VOLTAGE, 1);
-            if (!voltageData || voltageData.length < 1) {
-                throw new Error('Invalid voltage data received');
-            }
-            const voltage = voltageData[0] * 0.1; // Convert to Volts
-            
-            // Read temperature
-            const tempData = await this.readData(STS_PRESENT_TEMPERATURE, 1);
-            if (!tempData || tempData.length < 1) {
-                throw new Error('Invalid temperature data received');
-            }
-            const temperature = tempData[0]; // Celsius
-            
-            // Read moving status
-            const movingData = await this.readData(STS_MOVING, 1);
-            if (!movingData || movingData.length < 1) {
-                throw new Error('Invalid moving status data received');
-            }
-            const isMoving = movingData[0] !== 0;
-            
-            // Read torque enable status
-            const torqueData = await this.readData(STS_TORQUE_ENABLE, 1);
-            if (!torqueData || torqueData.length < 1) {
-                throw new Error('Invalid torque status data received');
-            }
-            const torqueEnabled = torqueData[0] !== 0;
-            
-            return {
-                angleDegrees: angleDegrees,
-                position: position,
-                speed: speed,
-                load: load,
-                voltage: voltage,
-                temperature: temperature,
-                isMoving: isMoving,
-                torqueEnabled: torqueEnabled,
-                faultByte: this.lastReadFaultByte || 0,
-                faultDescription: describeServoFaultByte(this.lastReadFaultByte || 0)
-            };
+
+            const torqueEnabled  = data[STS_TORQUE_ENABLE        - startAddr] !== 0;
+            const posL           = data[STS_PRESENT_POSITION_L   - startAddr];
+            const posH           = data[STS_PRESENT_POSITION_H   - startAddr];
+            const position       = this.makeWord(posL, posH);
+            const angleDegrees   = this.stepsToAngle(position);
+            const spdL           = data[STS_PRESENT_SPEED_L      - startAddr];
+            const spdH           = data[STS_PRESENT_SPEED_H      - startAddr];
+            const speed          = this.makeWord(spdL, spdH);
+            const load           = data[STS_PRESENT_LOAD_L       - startAddr] * 0.1;
+            const voltage        = data[STS_PRESENT_VOLTAGE       - startAddr] * 0.1;
+            const temperature    = data[STS_PRESENT_TEMPERATURE   - startAddr];
+            const isMoving       = data[STS_MOVING                - startAddr] !== 0;
+
+            return { angleDegrees, position, speed, load, voltage, temperature, isMoving, torqueEnabled };
         } catch (error) {
             console.error(`Servo ${this.servoId}: Failed to read status:`, error.message);
             throw error;
@@ -1080,88 +1294,477 @@ setTimeout(resolve, 1);
     }
 
     /**
-     * Read a full status set in a single bus transaction.
-     * Uses ONE bulk read from STS_TORQUE_ENABLE to STS_MOVING (27 bytes) so we
-     * only hit the half-duplex UART bus once per servo.
-     *
+     * Arm this controller to receive the next response without sending a packet.
+     * Used by syncReadAll: arm all controllers first, then send one broadcast.
+     * @private
+     */
+    armForResponse(length, timeoutMs) {
+        this.clearPendingBusTransaction();
+        let settled = false;
+
+        return new Promise((resolve, reject) => {
+            const finishReject = (error) => {
+                if (settled) return;
+                settled = true;
+                this.clearPendingBusTransaction(10);
+                deferPromiseReject(reject, error);
+            };
+
+            const finishResolve = (data) => {
+                if (settled) return;
+                settled = true;
+                this.clearPendingBusTransaction();
+                resolve(data);
+            };
+
+            this.responseReject = finishReject;
+            this.responseResolve = (result) => {
+                if (settled) return;
+                if (result.commResult !== COMM_SUCCESS || result.error !== 0) {
+                    finishReject(busErrorFromResponse(result));
+                } else if (!result.parameters) {
+                    finishReject(new Error('No data in sync read response'));
+                } else {
+                    const data = Buffer.isBuffer(result.parameters) ? result.parameters : Buffer.from(result.parameters);
+                    if (data.length === 0) {
+                        if (result.responseLength === 2) return; // write ack, keep waiting
+                        finishReject(new Error('Empty sync read response'));
+                        return;
+                    }
+                    if (data.length < length) {
+                        finishReject(new Error(`Short sync read response (got ${data.length}, expected ${length})`));
+                        return;
+                    }
+                    finishResolve(data);
+                }
+            };
+
+            this.responseTimeout = setTimeout(() => {
+                this.rxDrainUntilMs = Date.now() + 10;
+                finishReject(new Error('Read timeout'));
+            }, timeoutMs);
+        });
+    }
+
+    /**
+     * Parse a raw quick-status buffer (from syncReadAll) into the same shape
+     * that readQuickStatus() returns.  Buffer must start at STS_TORQUE_ENABLE.
+     */
+    quickStatusFromBuffer(data) {
+        const startAddr   = STS_TORQUE_ENABLE;
+        const torqueEnabled = data[0] !== 0;
+        const position    = this.makeWord(
+            data[STS_PRESENT_POSITION_L - startAddr],
+            data[STS_PRESENT_POSITION_H - startAddr]
+        );
+        const angleDegrees = this.stepsToAngle(position);
+        const isMoving    = data[STS_MOVING - startAddr] !== 0;
+        const speed       = this.makeWord(data[STS_PRESENT_SPEED_L - startAddr], data[STS_PRESENT_SPEED_H - startAddr]);
+        const load        = data[STS_PRESENT_LOAD_L - startAddr] * 0.1;
+        const voltage     = data[STS_PRESENT_VOLTAGE - startAddr] * 0.1;
+        const temperature = data[STS_PRESENT_TEMPERATURE - startAddr];
+        return { angleDegrees, position, isMoving, torqueEnabled, speed, load, voltage, temperature };
+    }
+
+    /**
+     * Read a minimal status set (fast path for frequent polling).
+     * Uses ONE bulk read starting at STS_TORQUE_ENABLE so we only hit the bus once.
      * Extracts:
-     *  - torqueEnabled  (STS_TORQUE_ENABLE  addr 40)
-     *  - position/angleDegrees (STS_PRESENT_POSITION_L/H  addr 56-57)
-     *  - speed          (STS_PRESENT_SPEED_L/H  addr 58-59)
-     *  - load           (STS_PRESENT_LOAD_L  addr 60, × 0.1 → %)
-     *  - voltage        (STS_PRESENT_VOLTAGE  addr 62, × 0.1 → V)
-     *  - temperature    (STS_PRESENT_TEMPERATURE  addr 63, °C)
-     *  - isMoving       (STS_MOVING  addr 66)
+     *  - torqueEnabled (STS_TORQUE_ENABLE)
+     *  - position -> angleDegrees (STS_PRESENT_POSITION_L/H)
+     *  - speed, load, voltage, temperature (STS_PRESENT_SPEED_L/H, STS_PRESENT_LOAD_L, STS_PRESENT_VOLTAGE, STS_PRESENT_TEMPERATURE)
+     *  - isMoving (STS_MOVING)
      *
-     * @returns {Object} { angleDegrees, position, speed, load, voltage, temperature, isMoving, torqueEnabled }
+     * @returns {Object} { angleDegrees, position, isMoving, torqueEnabled, speed, load, voltage, temperature }
      */
     async readQuickStatus() {
         try {
-            // Single bulk read from STS_TORQUE_ENABLE up to (and including) STS_MOVING.
+            // Read from STS_TORQUE_ENABLE up to (and including) STS_MOVING in one block.
             const startAddr = STS_TORQUE_ENABLE;
-            const length = (STS_MOVING - STS_TORQUE_ENABLE) + 1; // 27 bytes
+            const length = (STS_MOVING - STS_TORQUE_ENABLE) + 1; // inclusive range
             const data = await this.readData(startAddr, length);
             if (!data || data.length < length) {
                 throw new Error(`Invalid quick status data received (len=${data ? data.length : 0}, expected>=${length})`);
             }
 
-            // Torque enabled at STS_TORQUE_ENABLE (offset 0)
+            // Torque enabled at STS_TORQUE_ENABLE
             const torqueEnabled = data[0] !== 0;
 
-            // Position (STS_PRESENT_POSITION_L/H, offsets 16-17)
-            const posLowIndex  = STS_PRESENT_POSITION_L - startAddr;
+            // Position bytes at STS_PRESENT_POSITION_L/H
+            const posLowIndex = STS_PRESENT_POSITION_L - startAddr;
             const posHighIndex = STS_PRESENT_POSITION_H - startAddr;
             const position = this.makeWord(data[posLowIndex], data[posHighIndex]);
             const angleDegrees = this.stepsToAngle(position);
 
-            // Speed (STS_PRESENT_SPEED_L/H, offsets 18-19)
-            const speedLowIndex  = STS_PRESENT_SPEED_L - startAddr;
-            const speedHighIndex = STS_PRESENT_SPEED_H - startAddr;
-            const speed = this.makeWord(data[speedLowIndex], data[speedHighIndex]);
-
-            // Load (STS_PRESENT_LOAD_L, offset 20) — 0-100 raw → %
-            const loadIndex = STS_PRESENT_LOAD_L - startAddr;
-            const load = Math.round(data[loadIndex] * 0.1 * 10) / 10; // one decimal place %
-
-            // Voltage (STS_PRESENT_VOLTAGE, offset 22) — raw × 0.1 = Volts
-            const voltageIndex = STS_PRESENT_VOLTAGE - startAddr;
-            const voltage = Math.round(data[voltageIndex] * 0.1 * 10) / 10;
-
-            // Temperature (STS_PRESENT_TEMPERATURE, offset 23) — °C
-            const tempIndex = STS_PRESENT_TEMPERATURE - startAddr;
-            const temperature = data[tempIndex];
-
-            // Moving flag (STS_MOVING, offset 26)
+            // Moving flag at STS_MOVING
             const movingIndex = STS_MOVING - startAddr;
             const isMoving = data[movingIndex] !== 0;
+
+            const speed       = this.makeWord(data[STS_PRESENT_SPEED_L - startAddr], data[STS_PRESENT_SPEED_H - startAddr]);
+            const load        = data[STS_PRESENT_LOAD_L - startAddr] * 0.1;
+            const voltage     = data[STS_PRESENT_VOLTAGE - startAddr] * 0.1;
+            const temperature = data[STS_PRESENT_TEMPERATURE - startAddr];
 
             return {
                 angleDegrees,
                 position,
+                isMoving,
+                torqueEnabled,
                 speed,
                 load,
                 voltage,
-                temperature,
-                isMoving,
-                torqueEnabled,
-                // Servo status byte from the same packet. 0 = no fault. Non-zero
-                // is a bitmask of latched faults (OVERLOAD, OVERTEMP, etc).
-                faultByte: this.lastReadFaultByte || 0,
-                faultDescription: describeServoFaultByte(this.lastReadFaultByte || 0)
+                temperature
             };
         } catch (error) {
-            console.error(`Servo ${this.servoId}: Failed to read quick status:`, error.message);
+            if (DEBUG) console.error(`Servo ${this.servoId}: Failed to read quick status:`, error.message);
             throw error;
         }
     }
+
+    /**
+     * Read current PID coefficients and minimum startup force from EEPROM.
+     * @returns {{ p, d, i, minStartupForce }} — all bytes 0–254
+     */
+    async readPIDValues() {
+        const data = await this.readData(STS_P_COEF, 4);
+        return {
+            p:               data[0],
+            d:               data[1],
+            i:               data[2],
+            minStartupForce: data[3],
+        };
+    }
+
+    /**
+     * Write PID coefficients and minimum startup force to EEPROM.
+     * Unlocks EEPROM first; takes effect immediately without power-cycle.
+     * @param {number} p  - Proportional gain  (0–254, default 32)
+     * @param {number} d  - Derivative gain     (0–254, default 32)
+     * @param {number} i  - Integral gain       (0–254, default  0)
+     * @param {number} minStartupForce          (0–254, default 16)
+     */
+    async writePIDValues(p, d, i = 0, minStartupForce = 16) {
+        await this.writeData(STS_EEPROM_LOCK, [0]);                   // unlock EEPROM
+        await new Promise(r => setTimeout(r, 25));
+        await this.writeData(STS_P_COEF, [p, d, i, minStartupForce]); // write 4 bytes in one packet
+        await new Promise(r => setTimeout(r, 40));
+    }
+}
+
+/**
+ * EndToolController class - controls the ESP32 end-tool node (ID 64)
+ *
+ * This class reuses the same packet transport as ServoController so it can
+ * share the ST3215 bus safely. It only talks to ID 64.
+ */
+class EndToolController extends ServoController {
+    /**
+     * Creates a new end-tool controller for tool node ID 64
+     *
+     * @param {string|SerialPort} serialPortPathOrInstance - Serial port path or shared SerialPort instance
+     * @param {number} baudRate - Serial baud rate (default: 1000000)
+     */
+    constructor(serialPortPathOrInstance, baudRate = DEFAULT_BAUDRATE) {
+        super('TOOL', serialPortPathOrInstance, END_TOOL_ID, baudRate);
+    }
+
+    /**
+     * Ping the tool node
+     * @returns {boolean} True if tool responds
+     */
+    async pingTool() {
+        return await this.ping();
+    }
+
+    /**
+     * Read identity information from tool node
+     * @returns {Object} { id, protocolVersion, firmwareMajor, firmwareMinor, toolTypeId }
+     */
+    async getToolIdentity() {
+        const data = await this.readData(TOOL_PROTOCOL_VERSION, 4);
+        if (!data || data.length < 4) {
+            throw new Error('Invalid tool identity data');
+        }
+
+        return {
+            id: END_TOOL_ID,
+            protocolVersion: data[0],
+            firmwareMajor: data[1],
+            firmwareMinor: data[2],
+            toolTypeId: data[3]
+        };
+    }
+
+    /**
+     * Read current tool type ID byte
+     * @returns {number} Tool type ID (0-255)
+     */
+    async getToolTypeId() {
+        const data = await this.readData(TOOL_TYPE_ID, 1);
+        if (!data || data.length < 1) {
+            throw new Error('Invalid tool type ID data');
+        }
+        return data[0];
+    }
+
+    /**
+     * Set tool type ID byte
+     * @param {number} toolTypeId - Tool type ID (0-255)
+     */
+    async setToolTypeId(toolTypeId) {
+        let value = toolTypeId;
+        if (value < 0) value = 0;
+        if (value > 255) value = 255;
+        await this.writeData(TOOL_TYPE_ID, [value & 0xFF]);
+    }
+
+    /**
+     * Set both PWM channels and enable bits in one simple call
+     * @param {number} pwm1Duty - PWM1 duty (0-255)
+     * @param {number} pwm2Duty - PWM2 duty (0-255)
+     * @param {boolean} enable1 - Enable PWM1 output
+     * @param {boolean} enable2 - Enable PWM2 output
+     */
+    async setPwmOutputs(pwm1Duty, pwm2Duty, enable1 = true, enable2 = true) {
+        let duty1 = pwm1Duty;
+        let duty2 = pwm2Duty;
+        if (duty1 < 0) duty1 = 0;
+        if (duty1 > 255) duty1 = 255;
+        if (duty2 < 0) duty2 = 0;
+        if (duty2 > 255) duty2 = 255;
+
+        let control = 0;
+        if (enable1) control |= 0x01;
+        if (enable2) control |= 0x02;
+
+        await this.writeData(PWM1_DUTY, [duty1 & 0xFF]);
+        await this.writeData(PWM2_DUTY, [duty2 & 0xFF]);
+        await this.writeData(PWM_CONTROL, [control & 0xFF]);
+    }
+
+    /**
+     * Read current PWM duty values and control register
+     * @returns {Object} { pwm1Duty, pwm2Duty, pwmControl }
+     */
+    async getPwmState() {
+        const data = await this.readData(PWM1_DUTY, 3);
+        if (!data || data.length < 3) {
+            throw new Error('Invalid PWM state data');
+        }
+        return {
+            pwm1Duty: data[0],
+            pwm2Duty: data[1],
+            pwmControl: data[2]
+        };
+    }
+
+    /**
+     * Read all current-sense channels (16-bit little-endian mA each)
+     * @returns {Object} { pwm1CurrentRaw, pwm2CurrentRaw, servoCurrentRaw }
+     */
+    async readPwmCurrents() {
+        const data = await this.readData(PWM1_CURRENT_MA_L, 6);
+        if (!data || data.length < 6) {
+            throw new Error('Invalid current measurement data');
+        }
+
+        return {
+            pwm1CurrentRaw: this.makeWord(data[0], data[1]),
+            pwm2CurrentRaw: this.makeWord(data[2], data[3]),
+            servoCurrentRaw: this.makeWord(data[4], data[5])
+        };
+    }
+
+    /**
+     * Read ADC0 and ADC1 raw values and millivolts (16-bit little-endian each)
+     * @returns {Object} { adc0Raw, adc1Raw, adc0mV, adc1mV }
+     */
+    async readAdcData() {
+        const data = await this.readData(ADC0_RAW_L, 8);
+        if (!data || data.length < 8) {
+            throw new Error('Invalid ADC data');
+        }
+
+        return {
+            adc0Raw: this.makeWord(data[0], data[1]),
+            adc1Raw: this.makeWord(data[2], data[3]),
+            adc0mV: this.makeWord(data[4], data[5]),
+            adc1mV: this.makeWord(data[6], data[7])
+        };
+    }
+
+    /**
+     * Enable or disable hobby servo output
+     * @param {boolean} enabled - True to enable, false to disable
+     */
+    async setHobbyServoEnabled(enabled) {
+        await this.writeData(SERVO_ENABLE, [enabled ? 1 : 0]);
+    }
+
+    /**
+     * Enable the hobby servo and move to angle in a single bus write.
+     * Writes SERVO_ENABLE=1, SERVO_POSITION_8BIT=0, SERVO_ANGLE_DEG=angle to
+     * registers 0x30–0x32 in one packet, halving bus traffic compared to two
+     * separate writes. The firmware applies the angle from register 0x32 because
+     * the last write address is 0x30 (the "enable" branch maps stored angle).
+     * @param {number} angle - Angle 0–180 degrees
+     */
+    async setHobbyServoEnabledAndAngle(angle) {
+        let degrees = angle;
+        if (degrees < 0) degrees = 0;
+        if (degrees > 180) degrees = 180;
+        // Write [enable=1, position=0, angle] starting at SERVO_ENABLE (0x30).
+        // FCV_LASTADDRESS=0x30 triggers the "else" path in FCM_ApplyPendingHobbyServo
+        // which reads FCV_REGSERVOANGLEDEG (register 0x32 = degrees we just wrote).
+        await this.writeData(SERVO_ENABLE, [1, 0, degrees & 0xFF]);
+    }
+
+    /**
+     * Set hobby servo by raw 8-bit position
+     * @param {number} position - 0 to 255
+     */
+    async setHobbyServoPosition(position) {
+        let pos = position;
+        if (pos < 0) pos = 0;
+        if (pos > 255) pos = 255;
+        await this.writeData(SERVO_POSITION_8BIT, [pos & 0xFF]);
+    }
+
+    /**
+     * Set hobby servo by angle in degrees
+     * @param {number} angle - 0 to 180
+     */
+    async setHobbyServoAngle(angle) {
+        let degrees = angle;
+        if (degrees < 0) degrees = 0;
+        if (degrees > 180) degrees = 180;
+        await this.writeData(SERVO_ANGLE_DEG, [degrees & 0xFF]);
+    }
+
+    /**
+     * Read hobby servo enable flag, commanded position, and angle.
+     * Uses registers 0x30-0x32 (R/W). Older docs used 0x37-0x38 which many
+     * firmware builds do not implement yet.
+     * @returns {Object} { enabled, currentPosition8bit, currentAngle }
+     */
+    async getHobbyServoState() {
+        const data = await this.readData(SERVO_ENABLE, 3);
+        if (!data || data.length < 3) {
+            throw new Error('Invalid hobby servo state data');
+        }
+        return {
+            enabled: data[0] === 1,
+            currentPosition8bit: data[1],
+            currentAngle: data[2]
+        };
+    }
+
+    /**
+     * Set watchdog timeout in milliseconds (0 disables)
+     * @param {number} timeoutMs - 0 to 65535 ms
+     */
+    async setWatchdogTimeout(timeoutMs) {
+        let timeout = timeoutMs;
+        if (timeout < 0) timeout = 0;
+        if (timeout > 65535) timeout = 65535;
+        const data = [this.stsLobyte(timeout), this.stsHibyte(timeout)];
+        await this.writeData(WATCHDOG_TIMEOUT_L, data);
+    }
+
+    /**
+     * Read status, last error code, and uptime
+     * @returns {Object} { statusFlags, lastErrorCode, uptimeSecLow16 }
+     */
+    async getToolStatus() {
+        const statusData = await this.readData(TOOL_STATUS_FLAGS, 1);
+        const errorData = await this.readData(LAST_ERROR_CODE, 1);
+        const uptimeData = await this.readData(UPTIME_SEC_L, 2);
+
+        if (!statusData || statusData.length < 1 ||
+            !errorData || errorData.length < 1 ||
+            !uptimeData || uptimeData.length < 2) {
+            throw new Error('Invalid tool status data');
+        }
+
+        return {
+            statusFlags: statusData[0],
+            lastErrorCode: errorData[0],
+            uptimeSecLow16: this.makeWord(uptimeData[0], uptimeData[1])
+        };
+    }
+
+    /**
+     * Clear latched tool faults using documented magic value
+     */
+    async clearToolFaults() {
+        await this.writeData(FAULT_CLEAR_CMD, [CLEAR_FAULTS_MAGIC_VALUE]);
+    }
+
+    /**
+     * Request a tool soft reset using documented magic value
+     */
+    async resetTool() {
+        await this.writeData(DEVICE_RESET_CMD, [RESET_MAGIC_VALUE]);
+    }
+}
+
+/**
+ * Read the same register range from multiple servos in a single bus transaction.
+ *
+ * Sends one SYNC_READ broadcast (0xFF 0xFF 0xFE ...) and collects one
+ * standard read-response from each listed controller. Each controller's
+ * handleIncomingData already knows how to skip packets addressed to other IDs,
+ * so arming them all before the broadcast is safe.
+ *
+ * @param {SerialPort} sharedPort   - The shared SerialPort instance (must have ._writeQueue)
+ * @param {ServoController[]} controllers - Controllers to poll (in bus order by ID)
+ * @param {number} startAddress     - First register to read
+ * @param {number} length           - Number of bytes to read from each servo
+ * @returns {Promise<Array<PromiseSettledResult>>} One entry per controller
+ */
+async function syncReadAll(sharedPort, controllers, startAddress, length) {
+    if (!controllers || controllers.length === 0) return [];
+
+    // Timeout: base read window + 5 ms per extra servo in the response sequence
+    const timeoutMs = BUS_READ_TIMEOUT_MS + (controllers.length - 1) * 5;
+
+    // Arm every controller BEFORE the broadcast so no response is missed
+    const promises = controllers.map(ctrl => ctrl.armForResponse(length, timeoutMs));
+
+    // Build broadcast SYNC_READ packet:
+    //   FF FF FE <len> 82 <startAddr> <dataLen> <id1> <id2> … <idN> <checksum>
+    const ids    = controllers.map(c => c.servoIdNumber);
+    const params = [startAddress & 0xFF, length & 0xFF, ...ids];
+    const pktLen = 2 + params.length; // instruction(1) + params + checksum(1)
+    const packet = Buffer.alloc(4 + pktLen);
+    packet[0] = 0xFF;
+    packet[1] = 0xFF;
+    packet[2] = BROADCAST_ID;
+    packet[3] = pktLen;
+    packet[4] = INST_SYNC_READ;
+    for (let i = 0; i < params.length; i++) packet[5 + i] = params[i];
+    let checksum = 0;
+    for (let i = 2; i < packet.length - 1; i++) checksum += packet[i];
+    packet[packet.length - 1] = (~checksum) & 0xFF;
+
+    await sharedPort._writeQueue(() => new Promise((resolve, reject) => {
+        sharedPort.write(packet, err => err ? reject(err) : setTimeout(resolve, 1));
+    }));
+
+    return Promise.allSettled(promises);
 }
 
 // Export the module
 module.exports = {
     ServoController: ServoController,
+    EndToolController: EndToolController,
+    BusCommunicationError: BusCommunicationError,
+    END_TOOL_ID: END_TOOL_ID,
+    syncReadAll: syncReadAll,
     // Export conversion constants and functions for external use
     CENTER_POSITION: CENTER_POSITION,
     STEPS_PER_DEGREE: STEPS_PER_DEGREE,
     MIN_ANGLE: MIN_ANGLE,
     MAX_ANGLE: MAX_ANGLE
 };
+

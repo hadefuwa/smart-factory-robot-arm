@@ -1,15 +1,29 @@
 {
-  "name": "robotarmv3-pi-service",
+  "name": "robot-arm-control-st3215",
   "version": "1.0.0",
-  "description": "Raspberry Pi Node.js service for RobotArmv3 I2C control",
-  "main": "server.js",
+  "description": "Raspberry Pi Node.js control system for robot arm with ST3215 serial bus servo motors",
+  "main": "robotArmST3215.js",
   "scripts": {
-    "server": "node server.js",
-    "test": "node test-i2c.js"
+    "test": "node test-st3215.js",
+    "server": "node server.js"
   },
+  "keywords": [
+    "robot",
+    "st3215",
+    "servo",
+    "serial",
+    "raspberry-pi"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.9",
-    "i2c-bus": "^5.2.3",
+    "serialport": "^12.0.0",
     "ws": "^8.16.0"
   }
 }
+
+
+
+
+
+

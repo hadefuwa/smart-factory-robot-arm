@@ -1,0 +1,17 @@
+[Unit]
+Description=RobotArmv3 Pi WebSocket Service (ST3215, GPIO UART)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service
+Environment=PORT=8090
+Environment=SERIAL_PORT=/dev/serial0
+Environment=SERIAL_BAUDRATE=1000000
+ExecStart=/usr/bin/node /home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
