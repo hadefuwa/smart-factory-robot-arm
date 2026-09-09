@@ -775,8 +775,14 @@
 
   // Reject (Q0.6) is a physical-output actuator button, not a DB123 command
   // bit — it mirrors a button already on the physical HMI's Manual Controls
-  // screen. Wired as press-and-hold (like the real panel) rather than a
-  // fixed-duration pulse: output goes HIGH while held, LOW on release.
+  // screen. Wired as press-and-hold: output goes HIGH on press, LOW on
+  // release. The PLC needs the signal HIGH for more than 1s to actually
+  // fire, but that minimum-hold guarantee is enforced server-side
+  // (plc_integration.write_raw_output_bit), not here — a browser timeout
+  // is anchored to the click, not to when the write actually lands on the
+  // PLC, and the worker's cycle can lag well behind real time under vision
+  // load, so a client-side delay can't guarantee the real physical HIGH
+  // time. The client just reports press/release as they happen.
   function initRawOutputButtons() {
     const buttons = Array.from(document.querySelectorAll('[data-raw-output]'));
     if (!buttons.length) return;

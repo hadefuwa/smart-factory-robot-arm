@@ -3,6 +3,7 @@
 import logging
 import threading
 import time
+from typing import Dict
 import snap7
 from snap7.util import set_bool, set_int, set_real
 from plc_worker import PLCWorker
@@ -302,12 +303,31 @@ RAW_OUTPUT_WRITABLE = {
     'reject': (0, 6),  # Q0.6 — see RAW_OUTPUT_NAMES in plc_worker.py
 }
 
+# Some outputs need to stay HIGH longer than a quick UI click/tap naturally
+# holds them (the PLC's reject mechanism needs >1s to actually fire). This
+# is enforced here rather than client-side: a browser setTimeout is anchored
+# to when the click happened, not to when the write actually lands on the
+# PLC, and plc_worker's cycle can lag well behind real time under vision
+# load (see 'slow_cycle' events) — a fixed client delay can't account for
+# that gap and the physical HIGH time ends up far short of the requirement.
+RAW_OUTPUT_MIN_HOLD_S = {
+    'reject': 1.2,
+}
+_raw_output_hold_lock = threading.Lock()
+_raw_output_true_at: Dict[str, float] = {}
+_raw_output_pending_off_timer: Dict[str, threading.Timer] = {}
+
 
 def write_raw_output_bit(name: str, value: bool) -> bool:
     """
     Write a single whitelisted physical output (%Q) bit, e.g. the Reject
     solenoid on Q0.6. Returns False (and writes nothing) if the worker
     isn't up or the name isn't whitelisted.
+
+    If the output has a configured minimum hold time and this call is
+    releasing it (value=False) before that time has elapsed since the
+    True write was queued, the release is deferred via a timer instead
+    of dropped or applied early.
     """
     if plc_worker is None:
         logger.warning("PLC worker not initialized")
@@ -317,8 +337,35 @@ def write_raw_output_bit(name: str, value: bool) -> bool:
         logger.warning(f"Refused to write non-whitelisted raw output: {name}")
         return False
     byte, bit = coords
-    plc_worker.queue_pa_bit_write(byte, bit, bool(value), f"{name} (Q{byte}.{bit})={value}")
-    return True
+    min_hold_s = RAW_OUTPUT_MIN_HOLD_S.get(name, 0)
+
+    with _raw_output_hold_lock:
+        pending_timer = _raw_output_pending_off_timer.pop(name, None)
+        if pending_timer is not None:
+            pending_timer.cancel()
+
+        if value or min_hold_s <= 0:
+            if value:
+                _raw_output_true_at[name] = time.time()
+            plc_worker.queue_pa_bit_write(byte, bit, bool(value), f"{name} (Q{byte}.{bit})={value}")
+            return True
+
+        elapsed = time.time() - _raw_output_true_at.get(name, 0.0)
+        remaining = min_hold_s - elapsed
+        if remaining <= 0:
+            plc_worker.queue_pa_bit_write(byte, bit, False, f"{name} (Q{byte}.{bit})=False")
+            return True
+
+        def _deferred_release():
+            plc_worker.queue_pa_bit_write(byte, bit, False, f"{name} (Q{byte}.{bit})=False (deferred {remaining:.2f}s)")
+            with _raw_output_hold_lock:
+                _raw_output_pending_off_timer.pop(name, None)
+
+        timer = threading.Timer(remaining, _deferred_release)
+        timer.daemon = True
+        _raw_output_pending_off_timer[name] = timer
+        timer.start()
+        return True
 
 
 def on_hmi_reset(reset_active: bool):
