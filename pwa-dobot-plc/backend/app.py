@@ -562,7 +562,7 @@ def _seed_joint_angles_from_last_status() -> Optional[List[float]]:
 # factor. 12 mm/s (the default before this became PLC-adjustable) sits
 # comfortably inside this range.
 PLC_AUTO_MOVE_SPEED_MIN_MM_PER_SEC = 2
-PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC = 40
+PLC_AUTO_MOVE_SPEED_MAX_MM_PER_SEC = 60
 PLC_AUTO_MOVE_STEP_MM = 2.0
 
 
