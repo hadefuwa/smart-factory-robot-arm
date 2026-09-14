@@ -119,13 +119,6 @@
     async readMainDbTags() {
       return fetchJSON(`${API_BASE}/api/plc/db123/read`);
     },
-    async writeRawOutputBit(output, value) {
-      return fetchJSON(`${API_BASE}/api/plc/io/write-bit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ output, value }),
-      });
-    },
   };
 
   // HMI Start/Stop/Reset/Fault Reset are momentary pushbuttons on the real
@@ -773,60 +766,12 @@
     window.setInterval(syncFromPlc, HMI_OVERRIDE_POLL_MS);
   }
 
-  // Reject (Q0.6) is a physical-output actuator button, not a DB123 command
-  // bit — it mirrors a button already on the physical HMI's Manual Controls
-  // screen. Wired as press-and-hold: output goes HIGH on press, LOW on
-  // release. The PLC needs the signal HIGH for more than 1s to actually
-  // fire, but that minimum-hold guarantee is enforced server-side
-  // (plc_integration.write_raw_output_bit), not here — a browser timeout
-  // is anchored to the click, not to when the write actually lands on the
-  // PLC, and the worker's cycle can lag well behind real time under vision
-  // load, so a client-side delay can't guarantee the real physical HIGH
-  // time. The client just reports press/release as they happen.
-  function initRawOutputButtons() {
-    const buttons = Array.from(document.querySelectorAll('[data-raw-output]'));
-    if (!buttons.length) return;
-
-    buttons.forEach((button) => {
-      const output = button.getAttribute('data-raw-output');
-      let active = false;
-
-      const press = (ev) => {
-        if (ev.cancelable) ev.preventDefault();
-        if (active) return;
-        active = true;
-        button.classList.add('sf-action-btn-pressed');
-        apiClient.writeRawOutputBit(output, true).catch((err) => {
-          console.error(`Failed to activate ${output}`, err);
-          notify(`${output} activation failed — check PLC connection`, 'danger');
-        });
-      };
-
-      const release = () => {
-        if (!active) return;
-        active = false;
-        button.classList.remove('sf-action-btn-pressed');
-        apiClient.writeRawOutputBit(output, false).catch((err) => {
-          console.error(`Failed to release ${output}`, err);
-        });
-      };
-
-      button.addEventListener('mousedown', press);
-      button.addEventListener('touchstart', press, { passive: false });
-      button.addEventListener('mouseup', release);
-      button.addEventListener('mouseleave', release);
-      button.addEventListener('touchend', release);
-      button.addEventListener('touchcancel', release);
-    });
-  }
-
   async function init() {
     buildBindMap();
     initNavigation();
     initSegmentedControls();
     initActions();
     initHmiOverrides();
-    initRawOutputButtons();
     initTileStagger();
     startEntranceSequence();
 
