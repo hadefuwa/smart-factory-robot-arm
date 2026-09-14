@@ -194,7 +194,7 @@
     "load_max_pct": 80
   },
   "robot_arm": {
-    "plc_auto_move_enabled": false
+    "plc_auto_move_enabled": true
   },
   "vision": {
     "fault_bit_enabled": false,
