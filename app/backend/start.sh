@@ -1,5 +1,5 @@
 #!/bin/bash
-# Startup script for PWA Dobot-PLC Backend
+# Startup script for the Smart Factory backend
 # Ensures backend runs on port 8080
 
 cd "$(dirname "$0")"

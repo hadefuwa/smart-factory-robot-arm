@@ -1,5 +1,5 @@
 """
-PWA Dobot-PLC Control Backend
+Smart Factory Backend
 Flask API with WebSocket support for real-time PLC monitoring
 """
 
@@ -30,7 +30,6 @@ import snap7.util
 import plc_integration
 from plc_integration import init_plc_worker, PLCClientCompatWrapper, get_plc_cache, queue_vision_result, queue_invalid_target, queue_robot_status, queue_robot_faults, queue_robot_position, queue_cube_detection_bits, queue_defect_detected, get_plc_io_snapshot, write_main_db_bit
 from event_logger import log_event, read_recent_events, SEVERITY_INFO, SEVERITY_WARN, SEVERITY_ERROR
-from dobot_client import DobotClient
 from camera_service import CameraService
 import poe_vision_service
 import defect_detector
@@ -193,7 +192,6 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Initialize clients
 plc_client = None  # Will be None if snap7 fails
-dobot_client = None
 camera_service = None
 
 # When False, all colour-detection vision cycles are suppressed (e.g. PoE CAM mode active)
@@ -1580,11 +1578,6 @@ def load_config():
             base_config = json.load(f)
     except FileNotFoundError:
         base_config = {
-            "dobot": {
-                "usb_path": "/dev/ttyACM0",
-                "home_position": {"x": 200.0, "y": 0.0, "z": 150.0, "r": 0.0},
-                "use_usb": True
-            },
             "plc": {
                 "ip": "192.168.7.2",
                 "rack": 0,
@@ -1995,8 +1988,8 @@ def get_saved_object_params() -> Dict[str, int]:
 
 
 def init_clients():
-    """Initialize PLC and Dobot clients from config"""
-    global plc_client, dobot_client, camera_service
+    """Initialize PLC and camera clients from config"""
+    global plc_client, camera_service
 
     config = load_config()
 
@@ -2013,16 +2006,6 @@ def init_clients():
         plc_worker = None
         plc_client = None
 
-    # Dobot settings
-    dobot_config = config['dobot']
-    dobot_client = DobotClient(
-        use_usb=dobot_config.get('use_usb', True),
-        usb_path=dobot_config.get('usb_path', '/dev/ttyACM0')
-    )
-    
-    # Update home position if specified
-    if 'home_position' in dobot_config:
-        dobot_client.HOME_POSITION = dobot_config['home_position']
 
     # Camera settings
     camera_config = config.get('camera', {})
@@ -2168,7 +2151,7 @@ def init_clients():
         plc_worker = None
         plc_client = None
 
-    logger.info(f"Clients initialized - PLC: {plc_config['ip']}, Dobot USB: {dobot_config.get('usb_path', 'auto-detect')}")
+    logger.info(f"Clients initialized - PLC: {plc_config['ip']}")
 
 # ==================================================
 # REST API Endpoints
@@ -2323,12 +2306,14 @@ def get_all_data():
                 plc_ip = plc_client.ip
             plc_status = {'connected': False, 'ip': plc_ip, 'last_error': str(e)}
 
-    # Get Dobot data
-    dobot_status_data = {
-        'connected': dobot_client.connected,
-        'last_error': dobot_client.last_error
+    # Robot arm (ST3215 bridge) from the cached bridge state - no bridge I/O here
+    arm_xyz = (robot_arm_bridge_state.get('last_status') or {}).get('currentXYZ') or {}
+    arm_pose = {
+        'x': arm_xyz.get('x', 0.0),
+        'y': arm_xyz.get('y', 0.0),
+        'z': arm_xyz.get('z', 0.0),
+        'r': 0.0
     }
-    dobot_pose = dobot_client.get_pose() if dobot_client.connected else {'x': 0.0, 'y': 0.0, 'z': 0.0, 'r': 0.0}
 
     return jsonify({
         'plc': {
@@ -2336,9 +2321,12 @@ def get_all_data():
             'pose': target_pose,
             'control': control_bits
         },
-        'dobot': {
-            'status': dobot_status_data,
-            'pose': dobot_pose
+        'robot': {
+            'status': {
+                'connected': bool(robot_arm_bridge_state.get('connected')),
+                'last_error': robot_arm_bridge_state.get('last_error') or ''
+            },
+            'pose': arm_pose
         }
     })
 
@@ -2453,30 +2441,6 @@ def set_control_bit(bit_name):
         logger.debug(f"PLC control bit write error: {e}")
         return jsonify({'success': False, 'error': 'PLC not available'})
 
-@app.route('/api/dobot/status', methods=['GET'])
-def dobot_status():
-    """Get Dobot connection status"""
-    return jsonify({
-        'connected': dobot_client.connected,
-        'last_error': dobot_client.last_error
-    })
-
-@app.route('/api/robot/status', methods=['GET'])
-def robot_status():
-    """Compatibility alias for dashboard clients expecting /api/robot/status."""
-    pose = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'r': 0.0}
-    if dobot_client.connected:
-        try:
-            pose = dobot_client.get_pose()
-        except Exception as e:
-            logger.debug(f"Robot pose read error: {e}")
-
-    return jsonify({
-        'connected': dobot_client.connected,
-        'status': 'READY' if dobot_client.connected else 'OFFLINE',
-        'position': pose,
-        'last_error': dobot_client.last_error
-    })
 
 
 def close_robot_arm_bridge():
@@ -3051,190 +3015,13 @@ def robot_arm_scan():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/dobot/debug', methods=['GET'])
-def dobot_debug():
-    """Get detailed Dobot debug information"""
-    import os
-    import glob
-    
-    # Get available USB ports
-    available_ports = dobot_client.find_dobot_ports()
-    
-    # Check if pydobot is available
-    try:
-        from pydobot import Dobot as PyDobot
-        pydobot_available = True
-    except ImportError:
-        pydobot_available = False
-    
-    # Check port permissions
-    port_info = []
-    for port in available_ports:
-        try:
-            import stat
-            port_stat = os.stat(port)
-            permissions = oct(port_stat.st_mode)[-3:]
-            port_info.append({
-                'port': port,
-                'exists': True,
-                'permissions': permissions,
-                'readable': bool(port_stat.st_mode & stat.S_IRUSR),
-                'writable': bool(port_stat.st_mode & stat.S_IWUSR)
-            })
-        except Exception as e:
-            port_info.append({
-                'port': port,
-                'exists': False,
-                'error': str(e)
-            })
-    
-    return jsonify({
-        'pydobot_available': pydobot_available,
-        'use_usb': dobot_client.use_usb,
-        'configured_port': dobot_client.usb_path,
-        'actual_port': dobot_client.actual_port,
-        'connected': dobot_client.connected,
-        'last_error': dobot_client.last_error,
-        'available_ports': available_ports,
-        'port_details': port_info
-    })
-
-@app.route('/api/dobot/connect', methods=['POST'])
-def dobot_connect():
-    """Connect to Dobot"""
-    logger.info("ðŸ”Œ Manual Dobot connection requested")
-    success = dobot_client.connect()
-    if success:
-        logger.info("âœ… Manual Dobot connection successful")
-    else:
-        logger.error(f"âŒ Manual Dobot connection failed: {dobot_client.last_error}")
-    return jsonify({
-        'success': success,
-        'connected': dobot_client.connected,
-        'error': dobot_client.last_error if not success else None
-    })
-
-@app.route('/api/dobot/home', methods=['POST'])
-def dobot_home():
-    """Home Dobot robot"""
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected'}), 503
-
-    logger.info("ðŸ  Home command received from web interface")
-    success = dobot_client.home(wait=True)  # Wait=True for immediate execution
-    logger.info(f"âœ… Home command result: {success}")
-    return jsonify({'success': success})
-
-@app.route('/api/dobot/move', methods=['POST'])
-def dobot_move():
-    """Move Dobot to position"""
-    data = request.json
-    if not all(k in data for k in ['x', 'y', 'z']):
-        return jsonify({'error': 'Missing x, y, or z'}), 400
-
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected'}), 503
-
-    # Get position before move
-    pos_before = dobot_client.get_pose()
-    logger.info(f"â–¶ï¸ Move command: ({data['x']}, {data['y']}, {data['z']}, {data.get('r', 0)}) - Current: ({pos_before['x']:.1f}, {pos_before['y']:.1f}, {pos_before['z']:.1f})")
-
-    success = dobot_client.move_to(
-        data['x'],
-        data['y'],
-        data['z'],
-        data.get('r', 0),
-        wait=True  # Wait=True for immediate execution
-    )
-
-    if success:
-        # Verify robot actually moved
-        time.sleep(0.3)  # Brief delay to ensure movement settled
-        pos_after = dobot_client.get_pose()
-
-        # Calculate distance moved
-        distance = ((pos_after['x'] - pos_before['x'])**2 +
-                   (pos_after['y'] - pos_before['y'])**2 +
-                   (pos_after['z'] - pos_before['z'])**2)**0.5
-
-        if distance > 1.0:  # Moved more than 1mm
-            logger.info(f"âœ… ACTUAL MOVEMENT: Moved {distance:.1f}mm to ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
-            return jsonify({'success': True, 'executed': True, 'distance_moved': round(distance, 1)})
-        else:
-            logger.error(f"âš ï¸ ROBOT DID NOT MOVE! Distance: {distance:.1f}mm - Position: ({pos_after['x']:.1f}, {pos_after['y']:.1f}, {pos_after['z']:.1f})")
-            return jsonify({'success': False, 'error': f'Robot did not move (only {distance:.1f}mm)', 'distance_moved': round(distance, 1)}), 500
-    else:
-        error_msg = dobot_client.last_error or 'Movement failed'
-        logger.error(f"âŒ Move command failed: {error_msg}")
-        return jsonify({'success': False, 'error': error_msg}), 500
-
-@app.route('/api/dobot/pose', methods=['GET'])
-def get_dobot_pose():
-    """Get current Dobot pose"""
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected'}), 503
-
-    pose = dobot_client.get_pose()
-    return jsonify(pose)
-
-@app.route('/api/dobot/suction', methods=['POST'])
-def dobot_suction():
-    """Control suction cup"""
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected'}), 503
-
-    data = request.json
-    enable = data.get('enable', False)
-    
-    try:
-        logger.info(f"ðŸ’¨ Suction cup: {'ON' if enable else 'OFF'}")
-        dobot_client.set_suction(enable)
-        return jsonify({'success': True, 'enabled': enable})
-    except Exception as e:
-        logger.error(f"âŒ Suction control failed: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/dobot/gripper', methods=['POST'])
-def dobot_gripper():
-    """Control gripper (if available)"""
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected'}), 503
-
-    data = request.json
-    open_gripper = data.get('open', True)
-    
-    try:
-        # Check if gripper control method exists
-        if hasattr(dobot_client, 'set_gripper'):
-            logger.info(f"âœ‹ Gripper: {'OPEN' if open_gripper else 'CLOSE'}")
-            dobot_client.set_gripper(open_gripper)
-            return jsonify({'success': True, 'open': open_gripper})
-        else:
-            logger.warning("âš ï¸ Gripper not available on this Dobot model")
-            return jsonify({
-                'success': False,
-                'message': 'Gripper not available. This Dobot model only has suction cup.'
-            })
-    except Exception as e:
-        logger.error(f"âŒ Gripper control failed: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/emergency-stop', methods=['POST'])
 def emergency_stop():
-    """Emergency stop - stop both Dobot and signal PLC"""
+    """Emergency stop - signal the PLC"""
     logger.error("ðŸ›‘ EMERGENCY STOP TRIGGERED")
 
     results = {}
 
-    # Stop Dobot
-    try:
-        if dobot_client.connected:
-            dobot_client.stop_queue()  # Stop queue execution first
-            dobot_client.clear_queue()  # Then clear queued commands
-            results['dobot'] = 'stopped'
-    except Exception as e:
-        logger.error(f"Dobot emergency stop error: {e}")
-        results['dobot'] = 'error'
 
     # Signal PLC (gracefully handle if PLC is offline)
     try:
@@ -3251,103 +3038,6 @@ def emergency_stop():
         results['plc'] = 'error'
 
     return jsonify({'success': True, **results})
-
-@app.route('/api/dobot/test', methods=['POST'])
-def dobot_test():
-    """Run comprehensive Dobot test sequence"""
-    if not dobot_client.connected:
-        return jsonify({'error': 'Dobot not connected', 'steps': []}), 503
-
-    results = []
-    success = True
-
-    try:
-        # Step 1: Get current position
-        logger.info("ðŸ§ª Test Step 1: Getting current position...")
-        pos = dobot_client.get_pose()
-        results.append({
-            'step': 1,
-            'name': 'Get Current Position',
-            'success': True,
-            'message': f"X: {pos['x']:.2f}, Y: {pos['y']:.2f}, Z: {pos['z']:.2f}, R: {pos['r']:.2f}"
-        })
-        time.sleep(0.5)
-
-        # Step 2: Move to home position
-        logger.info("ðŸ§ª Test Step 2: Moving to HOME position...")
-        if dobot_client.home(wait=True):
-            results.append({
-                'step': 2,
-                'name': 'Move to Home',
-                'success': True,
-                'message': f"Moved to ({dobot_client.HOME_POSITION['x']}, {dobot_client.HOME_POSITION['y']}, {dobot_client.HOME_POSITION['z']})"
-            })
-        else:
-            results.append({'step': 2, 'name': 'Move to Home', 'success': False, 'message': 'Failed to move'})
-            success = False
-        time.sleep(1)
-
-        # Step 3: Verify home position
-        logger.info("ðŸ§ª Test Step 3: Verifying position...")
-        pos = dobot_client.get_pose()
-        results.append({
-            'step': 3,
-            'name': 'Verify Position',
-            'success': True,
-            'message': f"X: {pos['x']:.2f}, Y: {pos['y']:.2f}, Z: {pos['z']:.2f}"
-        })
-        time.sleep(0.5)
-
-        # Step 4: Small movement test (20mm forward)
-        logger.info("ðŸ§ª Test Step 4: Small movement test...")
-        home = dobot_client.HOME_POSITION
-        if dobot_client.move_to(home['x'] + 20, home['y'], home['z'], home['r'], wait=True):
-            results.append({
-                'step': 4,
-                'name': 'Small Movement (forward 20mm)',
-                'success': True,
-                'message': 'Movement completed successfully'
-            })
-            time.sleep(1)
-            
-            # Move back
-            logger.info("ðŸ§ª Test Step 4b: Moving back...")
-            dobot_client.home(wait=True)
-            time.sleep(0.5)
-        else:
-            results.append({'step': 4, 'name': 'Small Movement', 'success': False, 'message': 'Failed to move'})
-            success = False
-
-        # Step 5: Suction test
-        logger.info("ðŸ§ª Test Step 5: Testing suction cup...")
-        try:
-            dobot_client.set_suction(True)
-            time.sleep(2)
-            dobot_client.set_suction(False)
-            results.append({
-                'step': 5,
-                'name': 'Suction Cup Test',
-                'success': True,
-                'message': 'ON/OFF cycle completed'
-            })
-        except Exception as e:
-            results.append({'step': 5, 'name': 'Suction Cup Test', 'success': False, 'message': str(e)})
-            success = False
-
-        logger.info("âœ… Dobot test sequence completed!")
-        return jsonify({
-            'success': success,
-            'steps': results,
-            'message': 'All tests passed!' if success else 'Some tests failed'
-        })
-
-    except Exception as e:
-        logger.error(f"âŒ Test failed: {e}")
-        return jsonify({
-            'success': False,
-            'steps': results,
-            'error': str(e)
-        }), 500
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -3435,9 +3125,6 @@ def get_settings():
     try:
         config = load_config()
         
-        # Add available USB ports to the response
-        available_ports = dobot_client.find_dobot_ports() if dobot_client else []
-        config['available_usb_ports'] = available_ports
         
         return jsonify(config)
     except Exception as e:
@@ -3451,12 +3138,11 @@ def update_settings():
         new_config = request.json
         
         # Validate required fields
-        if 'dobot' not in new_config or 'plc' not in new_config:
+        if 'plc' not in new_config:
             return jsonify({'error': 'Missing required config sections'}), 400
         
         # Load current config and merge
         current_config = load_config()
-        current_config['dobot'].update(new_config['dobot'])
         current_config['plc'].update(new_config['plc'])
         
         # Update vision config if provided
@@ -7674,14 +7360,6 @@ if __name__ == '__main__':
     else:
         logger.info("PLC client not initialized - PLC features disabled")
 
-    # Auto-connect to Dobot
-    logger.info("ðŸ¤– Attempting to connect to Dobot robot...")
-    dobot_connected = dobot_client.connect()
-    if dobot_connected:
-        logger.info("âœ… Dobot connected successfully")
-    elif dobot_client.use_usb:
-        logger.error(f"âŒ Dobot connection failed: {dobot_client.last_error}")
-        logger.error("ðŸ’¡ Check the debug logs above for detailed troubleshooting steps")
 
 
     # Start server

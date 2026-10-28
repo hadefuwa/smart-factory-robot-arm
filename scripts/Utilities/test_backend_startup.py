@@ -21,14 +21,6 @@ except Exception as e:
     sys.exit(1)
 
 try:
-    print("2. Importing dobot_client...")
-    from dobot_client import DobotClient
-    print("   ✓ dobot_client imported successfully")
-except Exception as e:
-    print(f"   ✗ FAILED: {e}")
-    sys.exit(1)
-
-try:
     print("3. Importing camera_service...")
     from camera_service import CameraService
     print("   ✓ camera_service imported successfully")

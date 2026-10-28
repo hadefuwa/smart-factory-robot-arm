@@ -95,7 +95,6 @@ def replace_element(content: str, open_marker: str, close_tag: str, replacement:
 
 PAGES = {
     "color-voting-test.html": "/color-voting-test.html",
-    "dobot.html": "",
     "edge-device-stats.html": "/edge-device-stats.html",
     "hotspot-status.html": "/hotspot-status.html",
     "index.html": "/index.html",

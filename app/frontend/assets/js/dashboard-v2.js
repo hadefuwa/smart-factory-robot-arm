@@ -38,12 +38,12 @@
   const apiClient = {
     async getRobotStatus() {
       const data = await fetchJSON(`${API_BASE}/api/data`);
-      const dobot = data.dobot || {};
+      const robot = data.robot || {};
       return {
-        connected: !!(dobot.status && dobot.status.connected),
-        status: (dobot.status && dobot.status.connected) ? 'READY' : 'OFFLINE',
-        position: dobot.pose || { x: 0, y: 0, z: 0, r: 0 },
-        last_error: (dobot.status && dobot.status.last_error) || '',
+        connected: !!(robot.status && robot.status.connected),
+        status: (robot.status && robot.status.connected) ? 'READY' : 'OFFLINE',
+        position: robot.pose || { x: 0, y: 0, z: 0, r: 0 },
+        last_error: (robot.status && robot.status.last_error) || '',
       };
     },
     async getPLCStatus() {

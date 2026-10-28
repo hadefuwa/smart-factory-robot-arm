@@ -50,7 +50,6 @@ smart-factory-robot-arm/
 │   │   ├── camera_service.py       # USB camera + v4l2-ctl integration
 │   │   │                           # (focus, brightness, contrast, exposure,
 │   │   │                           # white balance)
-│   │   ├── dobot_client.py         # Dobot Magician (legacy, wiring commented)
 │   │   ├── vision_service.py       # Legacy HSV colour-voting (DISABLED)
 │   │   └── ssl/                    # Self-signed certs (not in git)
 │   ├── frontend/
@@ -60,7 +59,7 @@ smart-factory-robot-arm/
 │   │   │                           # Training Image button serves /api/poe-
 │   │   │                           # camera/capture (cached raw JPEG).
 │   │   ├── plc-setup.html          # DB editors + Raw I/O tab (PE/PA reads)
-│   │   ├── robot-arm.html, rfid.html, io-link.html, dobot.html,
+│   │   ├── robot-arm.html, rfid.html, io-link.html,
 │   │   ├── edge-device-stats.html, hotspot-status.html,
 │   │   ├── color-voting-test.html  # legacy test tool, kept under Utilities
 │   │   └── assets/js/app-shell.js  # Sidebar nav + per-page enhancements

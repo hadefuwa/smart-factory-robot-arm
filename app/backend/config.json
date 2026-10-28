@@ -1,14 +1,4 @@
 {
-  "dobot": {
-    "usb_path": "/dev/ttyACM0",
-    "home_position": {
-      "x": 200,
-      "y": 0,
-      "z": 150,
-      "r": 0
-    },
-    "use_usb": false
-  },
   "camera": {
     "index": 0,
     "width": 1640,
