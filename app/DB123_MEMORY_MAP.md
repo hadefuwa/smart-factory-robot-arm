@@ -26,7 +26,7 @@ DB123 is the **single source of truth** for all PLC communication in this system
 ### Byte 2-21: Robot (`Robot_UDT`)
 | Address | Type | Name | Access | Description |
 |---------|------|------|--------|-------------|
-| `DBX2.0` | Bool | Robot_Connected | Pi → PLC | Dobot/Robot connected |
+| `DBX2.0` | Bool | Robot_Connected | Pi → PLC | Robot arm bridge connected |
 | `DBX2.1` | Bool | Robot_Busy | Pi → PLC | Robot executing movement |
 | `DBX2.2` | Bool | Robot_Cycle_Complete | PLC → Pi | **READ-ONLY** Robot cycle completed |
 | `DBW4` | Int | Target_X | PLC → Pi | **READ-ONLY** Target X position |

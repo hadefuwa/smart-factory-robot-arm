@@ -1,30 +1,21 @@
 #!/bin/bash
-# Quick start script for development testing
+# Run the backend in the foreground for development testing (on the Pi).
+# Stop the service first so port 8080 is free:  sudo systemctl stop smart-factory.service
 
-cd ~/rpi-dobot/app/backend
+cd ~/sf2/app/backend
 
 # Activate virtual environment
 if [ ! -d "venv" ]; then
-    echo "❌ Virtual environment not found!"
-    echo "   Run: ./deploy/install.sh first"
+    echo "Virtual environment not found!"
+    echo "   Run: ~/sf2/app/deploy/install.sh first"
     exit 1
 fi
 
 source venv/bin/activate
 
-# Check for .env file
-if [ ! -f .env ]; then
-    echo "⚠️ .env file not found! Creating from example..."
-    cp .env.example .env
-    echo "📝 Please edit .env and set your DOBOT_USB_PATH"
-    exit 1
-fi
-
-# Start the server
-echo "🚀 Starting PWA Dobot-PLC Control..."
-echo "📡 Server will be available at http://$(hostname -I | awk '{print $1}'):8080"
+echo "Starting Smart Factory backend..."
+echo "Server will be available at https://$(hostname -I | awk '{print $1}'):8080"
 echo "   Press Ctrl+C to stop"
 echo ""
 
 python app.py
-

@@ -5,7 +5,7 @@ This guide will help you set up your Raspberry Pi as a WiFi access point so you 
 ## What This Does
 
 After setup, your Raspberry Pi will:
-- Create a WiFi network called "DobotPi"
+- Create a WiFi network called "SmartFactory"
 - Allow your phone to connect to it
 - Give your phone an IP address automatically
 - Let you access the web server from your phone
@@ -17,7 +17,7 @@ After setup, your Raspberry Pi will:
    ```bash
    # If you're on your computer, copy the script to your Pi
    # Or if you're already on the Pi, the script should be in:
-   cd ~/rpi-dobot/scripts
+   cd ~/sf2/scripts
    ```
 
 2. **Make the script executable**:
@@ -228,7 +228,7 @@ Password: `1`
 
 1. Make sure your Flask app is running:
    ```bash
-   cd ~/rpi-dobot/app/backend
+   cd ~/sf2/app/backend
    source venv/bin/activate
    python app.py
    ```

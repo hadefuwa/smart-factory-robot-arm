@@ -111,7 +111,7 @@ sudo systemctl restart hostapd
 ps aux | grep app.py
 
 # Start Flask if not running
-cd ~/rpi-dobot/app/backend
+cd ~/sf2/app/backend
 source venv/bin/activate
 python app.py
 ```

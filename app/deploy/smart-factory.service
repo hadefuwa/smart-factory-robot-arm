@@ -1,0 +1,15 @@
+[Unit]
+Description=Smart Factory Backend
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/sf2/app/backend
+ExecStart=/home/pi/sf2/app/backend/venv/bin/python app.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

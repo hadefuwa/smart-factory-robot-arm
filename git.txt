@@ -27,8 +27,8 @@ always resolve.
     ssh pi@192.168.7.5 "sudo systemctl restart smart-factory.service robotarmv3-pi.service"    (both)
 
    Frontend-only changes (html/js/css) need no restart, just refresh the browser.
-   Restarting the arm bridge turns arm torque off via the safety interlock; re-enable
-   it from the PLC/HMI (DB123.DBX40.0) afterwards.
+   After restarting the backend or the arm bridge the safety interlock disabled arm
+   torque (DB123.DBX40.0 was FALSE); set that bit from the PLC/HMI before using the arm.
 
 Keeping the Pi's git history in sync (optional, when the Pi checkout is clean)
 ------------------------------------------------------------------------------

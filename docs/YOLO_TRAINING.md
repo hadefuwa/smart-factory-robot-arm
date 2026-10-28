@@ -1,5 +1,7 @@
 # YOLO Counter Detection Training Guide
 
+> Note: this is the older counter-detection guide. The current cube-detection training workflow is in `cube-training/Guides/CUBE_TRAINING_GUIDE.md`.
+
 This guide shows you how to train a YOLOv8 model to detect counters on your conveyor belt.
 
 ## Overview
@@ -13,7 +15,7 @@ This guide shows you how to train a YOLOv8 model to detect counters on your conv
 On your Raspberry Pi, capture ~50 images:
 
 ```bash
-cd ~/rpi-dobot
+cd ~/sf2
 python3 scripts/prepare_yolo_dataset.py --num 50
 ```
 
@@ -118,12 +120,12 @@ The trained model will be saved to: `runs/detect/train/weights/best.pt`
 Copy the trained model to your Pi:
 
 ```bash
-scp runs/detect/train/weights/best.pt pi@rpi:~/rpi-dobot/models/counter_detector.pt
+scp runs/detect/train/weights/best.pt pi@rpi:~/sf2/models/counter_detector.pt
 ```
 
 On the Pi, create models directory:
 ```bash
-mkdir -p ~/rpi-dobot/models
+mkdir -p ~/sf2/models
 ```
 
 ## Step 6: Update Backend to Use Custom Model
@@ -132,7 +134,7 @@ Edit `app/backend/app.py` and add model loading on startup:
 
 ```python
 # Load YOLO model on startup
-model_path = os.path.expanduser('~/rpi-dobot/models/counter_detector.pt')
+model_path = os.path.expanduser('~/sf2/models/counter_detector.pt')
 if os.path.exists(model_path):
     camera_service.load_yolo_model(model_path)
     logger.info(f"Loaded custom YOLO model: {model_path}")
@@ -144,7 +146,7 @@ else:
 
 1. Restart your backend service:
    ```bash
-   sudo systemctl restart dobot-backend
+   sudo systemctl restart smart-factory.service
    ```
 
 2. Open Vision System UI

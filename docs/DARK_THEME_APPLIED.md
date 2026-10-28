@@ -106,13 +106,13 @@ Just open the app in your browser and refresh - the changes are already applied!
 **Option 1: Git Push/Pull**
 ```bash
 # On Windows
-cd C:\Users\Hamed\Documents\rpi-dobot
+cd "<repo folder>"   # i.e. Software/RaspberryPi Software
 git add app/frontend/index.html docs/
 git commit -m "Apply dark modern theme to UI"
 git push origin main
 
 # On Raspberry Pi
-cd ~/rpi-dobot
+cd ~/sf2
 git pull origin main
 # No restart needed - just refresh browser!
 ```
@@ -120,7 +120,7 @@ git pull origin main
 **Option 2: Direct File Transfer**
 ```bash
 # From Windows
-scp app/frontend/index.html pi@<pi-ip>:~/rpi-dobot/app/frontend/
+scp app/frontend/index.html pi@<pi-ip>:~/sf2/app/frontend/
 ```
 
 ## Testing

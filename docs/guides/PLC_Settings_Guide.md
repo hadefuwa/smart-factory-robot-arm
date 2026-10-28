@@ -89,7 +89,7 @@ After successfully configuring your PLC connection:
 
 If you continue to have issues, check the application logs:
 ```bash
-pm2 logs dobot-gateway
+sudo journalctl -u smart-factory.service -f
 # or
-tail -f /var/log/dobot-gateway/combined.log
+sudo journalctl -u smart-factory.service -n 100
 ```

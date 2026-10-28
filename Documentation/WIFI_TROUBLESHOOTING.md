@@ -5,14 +5,14 @@
 ### SSH to Pi and Run Diagnostic
 ```bash
 ssh pi@rpi
-cd ~/rpi-dobot/scripts
+cd ~/sf2/scripts
 chmod +x check_wifi_ap.sh
 ./check_wifi_ap.sh
 ```
 
 ### Fix WiFi Access Point
 ```bash
-cd ~/rpi-dobot/scripts
+cd ~/sf2/scripts
 chmod +x fix_wifi_ap.sh
 sudo ./fix_wifi_ap.sh
 ```

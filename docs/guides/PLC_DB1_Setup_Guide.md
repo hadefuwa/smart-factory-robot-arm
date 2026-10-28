@@ -98,7 +98,7 @@ M0.3 := FALSE; // Emergency Stop
 
 ## Testing
 After setting up DB1:
-1. Restart your Dobot Gateway application
+1. Restart the backend: `sudo systemctl restart smart-factory.service`
 2. Check the dashboard - PLC should show "Online" with DB1 accessible
 3. The PLC Monitor should display pose data instead of errors
 

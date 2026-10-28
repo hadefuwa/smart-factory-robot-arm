@@ -1,6 +1,6 @@
 # 🏭 Smart Factory
 
-A comprehensive smart factory automation system featuring Dobot Magician robot control with PLC integration, real-time monitoring, and a modern web-based interface. Perfect for Industry 4.0 applications with automatic alarm clearing and seamless PLC communication.
+A comprehensive smart factory automation system featuring 6-DOF ST3215 robot arm control with PLC integration, real-time monitoring, and a modern web-based interface. Perfect for Industry 4.0 applications with seamless PLC communication.
 
 ## 📋 Table of Contents
 
@@ -53,7 +53,7 @@ cd sf2
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-venv build-essential
 
-# USB serial access (needed for Dobot)
+# Serial port access (needed for the arm bridge)
 sudo usermod -a -G dialout $USER
 ```
 
@@ -81,7 +81,7 @@ pip install -r requirements.txt
 
 #### 5. Configure your hardware
 
-Edit `config.json` in the backend folder — update `dobot.port` to match your USB device (`/dev/ttyACM0` or `/dev/ttyACM1` — run `ls /dev/ttyACM*` to check) and `plc.ip` to your PLC's IP address.
+Edit `config.json` in the backend folder — update `plc.ip` to your PLC's IP address. The arm bridge's serial port is set in `robotarmv3-pi.service`.
 
 #### 6. Test it manually first
 
@@ -94,7 +94,7 @@ If you see `Starting Flask server on 0.0.0.0:8080`, open `http://your-pi-ip:8080
 
 #### 7. Set up autostart on boot
 
-See the [Autostart on Boot](#-autostart-on-boot) section below — choose **systemd** (recommended, no extra software) or **PM2**.
+See the [Autostart on Boot](#-autostart-on-boot) section below — the backend runs as the **systemd** service `smart-factory.service`.
 
 ---
 
@@ -102,7 +102,7 @@ See the [Autostart on Boot](#-autostart-on-boot) section below — choose **syst
 
 Two options. Pick one.
 
-#### Option A — systemd (recommended)
+#### systemd
 
 No extra software needed. Create a single service file:
 
@@ -151,24 +151,6 @@ sudo systemctl stop smart-factory        # stop
 sudo journalctl -u smart-factory -n 50   # last 50 log lines
 ```
 
-#### Option B — PM2
-
-Requires Node.js (`sudo apt-get install -y nodejs npm`).
-
-```bash
-npm install -g pm2
-
-cd ~/sf2/app
-pm2 start deploy/ecosystem.config.js
-
-# Save and enable on boot
-pm2 save
-pm2 startup
-# Run the sudo command it prints out
-```
-
-Note: the `ecosystem.config.js` paths assume the repo is at `/home/pi/sf2`. Edit the file if your path is different.
-
 **Access the web interface:** Open your browser and visit `http://your-pi-ip-address:8080`
 
 #### HTTPS (for WinCC Unified HMI)
@@ -179,7 +161,7 @@ WinCC Unified requires HTTPS for embedded camera streams. Generate a self-signed
 cd ~/sf2/app
 chmod +x deploy/generate_ssl_cert.sh
 ./deploy/generate_ssl_cert.sh 192.168.7.5   # use your Pi's IP
-pm2 restart pwa-dobot-plc   # or systemctl restart smart-factory
+sudo systemctl restart smart-factory.service
 ```
 
 Then use `https://192.168.7.5:8080/api/camera/stream` in WinCC. Accept the certificate warning on first load.
@@ -235,12 +217,8 @@ smart-factory-robot-arm/
 │   │   └── assets/js/app-shell.js
 │   ├── robotarmv3-pi-service/      # Node.js arm bridge (ST3215, port 8090)
 │   └── deploy/
-│       ├── ecosystem.config.js     # PM2 config
+│       ├── smart-factory.service, vision.service  # systemd units (see also robotarmv3-pi.service)
 │       └── generate_ssl_cert.sh    # HTTPS certificate generator
-├── poe-camera-firmware/
-│   ├── M5PoECAM_SmartFactory/
-│   │   └── M5PoECAM_SmartFactory.ino  # v1.1.0 — ETH.h, static 192.168.7.6
-│   └── FIRMWARE_CHANGELOG.md
 ├── cube-training/                  # Local-only training workflow (gitignored)
 │   ├── CUBE_TRAINING_GUIDE.md      # Capture → CVAT → organise → train → SCP
 │   ├── capture_cube_images.py, organize_cube_dataset.py, train_cube_detector.py
@@ -259,7 +237,7 @@ smart-factory-robot-arm/
 ### Prerequisites
 
 - Raspberry Pi (3 or 4 recommended)
-- Dobot Magician robot connected via USB
+- 6-DOF ST3215 robot arm (driven by the Node.js arm bridge over serial)
 - Siemens S7-1200 PLC (optional, for PLC integration)
 - Python 3.7 or higher
 - Internet connection (for initial setup)
@@ -311,16 +289,16 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### 4. Configure USB Permissions (for Dobot)
+#### 4. Configure Serial Permissions (for the arm bridge)
 
 ```bash
-# Add your user to dialout group (allows USB access)
+# Add your user to dialout group (allows serial port access)
 sudo usermod -a -G dialout $USER
 
 # Log out and back in, or run:
 newgrp dialout
 
-# Find your Dobot device
+# Find your serial devices
 ls -la /dev/ttyACM*
 ```
 
@@ -330,10 +308,6 @@ Edit `app/backend/config.json`:
 
 ```json
 {
-  "dobot": {
-    "port": "/dev/ttyACM0",
-    "baudrate": 115200
-  },
   "plc": {
     "ip": "192.168.1.150",
     "rack": 0,
@@ -345,8 +319,6 @@ Edit `app/backend/config.json`:
   }
 }
 ```
-
-**Important:** Update the `dobot.port` to match your device (usually `/dev/ttyACM0` or `/dev/ttyACM1`)
 
 #### 6. Test the Installation
 
@@ -362,7 +334,6 @@ You should see:
 ```
 INFO - Starting Flask server on 0.0.0.0:8080
 INFO - PLC client initialized
-INFO - Dobot client initialized
 ```
 
 ---
@@ -380,7 +351,7 @@ python3 app.py
 ### Using the Web Interface
 
 1. **Open your browser** and go to `http://your-pi-ip:8080`
-2. **Check connections** - Green indicators show PLC and Dobot are connected
+2. **Check connections** - Green indicators show the PLC and robot arm are connected
 3. **Monitor data** - See real-time robot position and PLC status
 4. **Control the robot**:
    - 🏠 **Home** - Send robot to home position
@@ -504,9 +475,8 @@ M5Stack PoE CAM-W at `192.168.7.6`, firmware v1.1.0 (ETH.h driver, SVGA 800×600
 
 ### Quick Start Guides
 
-- **[Deployment Guide](docs/guides/DEPLOY_TO_PI.md)** - Full deployment instructions
+- **[Deployment workflow](CLAUDE.md)** - scp + systemd (no internet on the Pi); see also [git.txt](git.txt)
 - **[PLC Setup Guide](docs/guides/PLC_DB1_Setup_Guide.md)** - Setting up PLC communication
-- **[PLC Robot Control](docs/guides/PLC_Robot_Control_Guide.md)** - Using PLC to control robot
 - **[PLC Settings Guide](docs/guides/PLC_Settings_Guide.md)** - Configuring PLC settings
 
 ### Robot Arm
@@ -551,40 +521,9 @@ The earlier `tests/pydobot/` and `tests/official_api/` directories targeted the 
 
 ## 🔧 Troubleshooting
 
-### Dobot Not Connecting
+### Robot Arm Not Responding
 
-**Problem:** Robot doesn't connect or shows as disconnected
-
-**Solutions:**
-
-```bash
-# Check USB device exists
-ls -la /dev/ttyACM*
-
-# Check permissions (should include 'dialout')
-groups
-
-# If not in dialout group:
-sudo usermod -a -G dialout $USER
-newgrp dialout
-
-# Try different device path in config.json
-# Common paths: /dev/ttyACM0, /dev/ttyACM1, /dev/ttyUSB0
-```
-
-**Check config.json:**
-- Make sure `dobot.port` matches your actual device
-- Verify `baudrate` is set to `115200`
-
-### Robot Not Moving
-
-**Problem:** Robot connects but doesn't move when commanded
-
-**Solution:** This was the main issue fixed! The robot needs alarms cleared on startup. The fixed code (`dobot_client.py`) now does this automatically. Make sure you're using the updated version.
-
-**Verify fix is applied:**
-- Check that `dobot_client.py` includes alarm clearing in the `connect()` method
-- Historical Dobot fix notes (no longer in use; current arm is the ST3215) live in [`archive/docs/solutions/`](archive/docs/solutions/).
+Check the arm bridge: `sudo systemctl status robotarmv3-pi.service` and `sudo journalctl -u robotarmv3-pi.service -n 50`. If `DB123.DBX40.0` (system_safety_ok) is FALSE when the backend reconnects to the bridge (seen after restarts), the safety interlock disables arm torque; set the bit from the PLC/HMI. See [`app/robotarmv3-pi-service/README.md`](app/robotarmv3-pi-service/README.md).
 
 ### PLC Not Connecting
 
@@ -667,45 +606,17 @@ ls -la /dev/ttyACM*
 The production setup runs both services under systemd (see the [Autostart on Boot](#-autostart-on-boot) section above). The day-to-day deploy flow is:
 
 ```bash
-# From your dev machine — push code, then SCP individual files / git pull on the Pi
+# From your dev machine — push code to GitHub, then SCP the changed files to the Pi
 git push origin main
-ssh pi@192.168.7.5 'cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service robotarmv3-pi.service'
+scp app/backend/app.py pi@192.168.7.5:/home/pi/sf2/app/backend/
+ssh pi@192.168.7.5 'sudo systemctl restart smart-factory.service robotarmv3-pi.service'
 ```
 
-### PM2 (alternative)
+### Deploying updates
 
-If you prefer PM2 over systemd for the Flask backend:
+The Pi has no internet, so `git pull` does not work there. Copy changed files with `scp` and restart the service; see the **Deployment workflow** in [CLAUDE.md](CLAUDE.md) and [git.txt](git.txt). Services (systemd): `smart-factory.service` (Flask backend), `robotarmv3-pi.service` (arm bridge), `vision.service` (vision). PM2 is not used.
 
-```bash
-npm install -g pm2
-cd ~/sf2/app
-pm2 start deploy/ecosystem.config.js
-pm2 save
-pm2 startup  # Follow instructions to enable auto-start on boot
-```
-
-Earlier Dobot-era deployment scripts (`FINAL_DEPLOYMENT.sh`, `setup.sh`, `deploy_official_api.sh`, etc.) live in [`archive/scripts/deployment/`](archive/scripts/deployment/).
-
-### Manual PM2 Setup
-
-```bash
-# Navigate to project
-cd ~/sf2/app
-
-# Start with PM2
-pm2 start deploy/ecosystem.config.js
-
-# Save PM2 configuration
-pm2 save
-
-# Set PM2 to start on boot
-pm2 startup
-# Run the command it gives you (with sudo)
-
-# Check status
-pm2 status
-pm2 logs pwa-dobot-plc
-```
+Earlier Dobot-era deployment scripts live in [`archive/scripts/deployment/`](archive/scripts/deployment/).
 
 ---
 
@@ -836,14 +747,6 @@ Full tag map for the DBs lives in `app/DB123_MEMORY_MAP.md` and `app/PLC_PLC_REA
 
 ---
 
-## 🎯 Key Solution
-
-The main issue (Dobot not moving) was solved by adding **automatic alarm clearing** to the initialization sequence. When the robot starts up, it may have alarms from previous sessions. These alarms prevent movement commands from working. The fix clears all alarms automatically when connecting.
-
-**Historical Dobot fix details live in [`archive/docs/solutions/`](archive/docs/solutions/) — the Dobot Magician is no longer the active arm.**
-
----
-
 ## 📞 Support
 
 ### Quick Help
@@ -854,35 +757,31 @@ The main issue (Dobot not moving) was solved by adding **automatic alarm clearin
 
 ### Documentation Resources
 
-- **[Deployment Guide](docs/guides/DEPLOY_TO_PI.md)** - Setup instructions
+- **[Deployment workflow](CLAUDE.md)** - scp + systemd; see also [git.txt](git.txt)
 - **[J5 wrist-pitch bus corruption](docs/J5_WRIST_PITCH_BUS_CORRUPTION.md)** - ST3215 bus diagnosis
 - **[robotarmv3-pi-service README](app/robotarmv3-pi-service/README.md)** - Arm bridge internals
-- **[archive/](archive/)** - Historic notes (Dobot fix, frontend cleanup plans, etc.)
+- **[archive/](archive/)** - Historic notes (old Dobot setup, retired install guides, frontend cleanup plans, etc.)
 
 ### Common Questions
 
 **Q: Why isn't my robot moving?**  
-A: Make sure alarms are being cleared. Check that you're using the updated `dobot_client.py` with alarm clearing enabled.
-
-**Q: How do I find my Dobot USB device?**  
-A: Run `ls -la /dev/ttyACM*` and check which device appears when you plug/unplug the robot.
+A: If `DB123.DBX40.0` (system_safety_ok) is FALSE, the safety interlock disables arm torque (seen after restarts); set the bit from the PLC/HMI. Also check `sudo systemctl status robotarmv3-pi.service`.
 
 **Q: Can I use this without a PLC?**  
 A: Yes! The web interface allows manual control without PLC integration.
 
 **Q: How do I update the code?**  
-A: Pull latest changes with `git pull origin main` and restart the application.
+A: Copy the changed files to the Pi with `scp` (the Pi has no internet) and restart `smart-factory.service`; see CLAUDE.md.
 
 ---
 
 ## 📊 Project Status
 
-✅ **WORKING** - Dobot movement issue resolved with alarm clearing  
 ✅ **TESTED** - All core functionality verified  
 ✅ **DEPLOYED** - Production-ready on Raspberry Pi  
 ✅ **ORGANIZED** - Clean project structure for maintainability  
 ✅ **DOCUMENTED** - Comprehensive documentation available  
-✅ **PoE CAMERA** - M5Stack PoE CAM-W on 192.168.7.6, firmware v1.1.0 (ETH.h)
+✅ **VISION** - USB camera with YOLO cube detection (the M5Stack PoE camera is retired)
 
 ---
 
@@ -896,7 +795,6 @@ MIT License - Feel free to use and modify!
 
 - **Flask** - Web framework and API/stream hosting
 - **python-snap7** - PLC communication library
-- **pydobot** - Dobot robot control library
 - **OpenCV** - Camera and vision support
 
 ---

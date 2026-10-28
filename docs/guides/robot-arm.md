@@ -452,9 +452,9 @@ sudo kill <PID>
 sudo systemctl restart robotarmv3-pi.service
 ```
 
-### Dobot client logs errors about `/dev/ttyACM0`
+### Dobot errors about `/dev/ttyACM0` (historic)
 
-The Dobot client in Flask tries to connect to `/dev/ttyACM0` at startup. This is expected to fail because the robot arm owns that port. The Dobot errors are harmless as long as the crash loop is not active.
+Older versions of the Flask backend contained a Dobot client that tried to open `/dev/ttyACM0` at startup and logged errors. The Dobot code was removed on 2026-10-28, so this no longer happens. If you see it, the Pi is running old code.
 
 ---
 

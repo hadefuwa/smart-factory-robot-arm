@@ -162,7 +162,7 @@ if ping -c 2 -W 2 192.168.7.2 > /dev/null 2>&1; then
         echo "PLC is at: 192.168.7.2"
         echo ""
         echo "You may need to restart the application:"
-        echo "  pm2 restart pwa-dobot-plc"
+        echo "  sudo systemctl restart smart-factory.service"
     else
         echo "⚠ WARNING: Cannot reach port 102 (S7Comm)"
         echo "   PLC may not be configured for remote access."

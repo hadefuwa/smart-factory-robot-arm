@@ -3169,22 +3169,10 @@ def restart_server():
     try:
         logger.info("ðŸ”„ Server restart requested")
         
-        # Try PM2 restart first (if running under PM2)
-        try:
-            result = subprocess.run(['pm2', 'restart', 'pwa-dobot-plc'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                logger.info("âœ… PM2 restart successful")
-                return jsonify({
-                    'success': True,
-                    'message': 'Server restarting via PM2...'
-                })
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
         
-        # Fallback: try systemctl restart (if running as service)
+        # Restart the systemd service (Flask is managed by systemd, not PM2)
         try:
-            result = subprocess.run(['sudo', 'systemctl', 'restart', 'pwa-dobot-plc'], 
+            result = subprocess.run(['sudo', 'systemctl', 'restart', 'smart-factory.service'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 logger.info("âœ… Systemctl restart successful")
@@ -3195,7 +3183,7 @@ def restart_server():
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         
-        # Last resort: exit the process (will be restarted by supervisor/PM2)
+        # Last resort: exit the process (will be restarted by systemd (Restart=always))
         logger.info("âš ï¸ No restart method available, exiting process")
         threading.Timer(2.0, lambda: sys.exit(0)).start()
         return jsonify({
@@ -7305,8 +7293,13 @@ def serve_pwa(path):
         abort(404)  # These are image endpoints, not SPA pages
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, 'index.html')
+    # A missing page/script/image is a real 404. Only extension-less paths fall
+    # back to index.html (PWA routes).
+    if os.path.splitext(path)[1].lower() in (
+            '.html', '.js', '.css', '.map', '.png', '.jpg', '.jpeg', '.gif', '.svg',
+            '.ico', '.webp', '.json', '.woff', '.woff2', '.ttf', '.pdf'):
+        abort(404)
+    return send_from_directory(app.static_folder, 'index.html')
 
 # ==================================================
 # Application Startup
