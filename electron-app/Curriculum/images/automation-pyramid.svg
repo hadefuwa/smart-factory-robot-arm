@@ -1,0 +1,41 @@
+<svg viewBox="0 0 500 380" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <rect width="500" height="380" fill="#f8fafc" rx="8"/>
+  <text x="250" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">Levels of Automation</text>
+  <text x="250" y="40" text-anchor="middle" font-size="11" fill="#64748b">From fully manual to fully adaptive - higher levels raise productivity</text>
+
+  <!-- Level 4 - Adaptive / AI (tip) -->
+  <polygon points="250,58 178,118 322,118" fill="#7c3aed" stroke="#6d28d9" stroke-width="1.5"/>
+  <text x="250" y="102" text-anchor="middle" font-size="11" font-weight="700" fill="white">4. Adaptive / AI</text>
+
+  <!-- Level 3 - Full automation -->
+  <polygon points="178,122 134,182 366,182 322,122" fill="#2563eb" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="250" y="150" text-anchor="middle" font-size="11" font-weight="700" fill="white">3. Full Automation</text>
+  <text x="250" y="165" text-anchor="middle" font-size="9" fill="#eff6ff">Robot operates independently, monitors itself</text>
+
+  <!-- Level 2 - Partial automation -->
+  <polygon points="134,186 88,246 412,246 366,186" fill="#15803d" stroke="#166534" stroke-width="1.5"/>
+  <text x="250" y="214" text-anchor="middle" font-size="11" font-weight="700" fill="white">2. Partial Automation</text>
+  <text x="250" y="229" text-anchor="middle" font-size="9" fill="#f0fdf4">Robot does tasks; human supervises and loads parts</text>
+
+  <!-- Level 1 - Assisted manual -->
+  <polygon points="88,250 40,310 460,310 412,250" fill="#c2410c" stroke="#9a3412" stroke-width="1.5"/>
+  <text x="250" y="278" text-anchor="middle" font-size="11" font-weight="700" fill="white">1. Assisted Manual</text>
+  <text x="250" y="293" text-anchor="middle" font-size="9" fill="#fff7ed">Human works with tools/jigs; no autonomous robot motion</text>
+
+  <!-- Level 0 - Manual (base) -->
+  <polygon points="40,314 20,362 480,362 460,314" fill="#64748b" stroke="#475569" stroke-width="1.5"/>
+  <text x="250" y="336" text-anchor="middle" font-size="11" font-weight="700" fill="white">0. Fully Manual</text>
+  <text x="250" y="351" text-anchor="middle" font-size="9" fill="#f1f5f9">All tasks done by hand - no automation</text>
+
+  <!-- Right side annotations -->
+  <text x="490" y="90"  text-anchor="end" font-size="9" fill="#6d28d9">Self-learning,</text>
+  <text x="490" y="102" text-anchor="end" font-size="9" fill="#6d28d9">adaptive control</text>
+  <text x="490" y="155" text-anchor="end" font-size="9" fill="#1d4ed8">24/7, no operator</text>
+  <text x="490" y="219" text-anchor="end" font-size="9" fill="#15803d">Operator loads parts</text>
+  <text x="490" y="258" text-anchor="end" font-size="9" fill="#c2410c">Power tools,</text>
+  <text x="490" y="270" text-anchor="end" font-size="9" fill="#c2410c">jigs, fixtures</text>
+
+  <!-- Left side: where this arm sits -->
+  <text x="12" y="150" font-size="9" font-weight="700" fill="#1d4ed8">This arm →</text>
+  <text x="12" y="162" font-size="9" fill="#1d4ed8">(with G-code)</text>
+</svg>

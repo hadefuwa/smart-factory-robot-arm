@@ -1,0 +1,1723 @@
+'use strict';
+/**
+ * servoWorker.js — Dedicated child process for ST3215 serial bus communication.
+ *
+ * Runs as a forked child process (child_process.fork) so native serialport
+ * bindings stay in their own process and cannot SIGABRT the WebSocket server.
+ * Communicates with server.js via process.send / process.on('message'):
+ *
+ *   Child → Parent:
+ *     { type: 'ready',           jointConfigs: {...} }
+ *     { type: 'status',          joints, cacheAgeMs, diagnostics }
+ *     { type: 'jointConfigs',    count, total, joints }
+ *     { type: 'commandResponse', clientId, requestId, payload }
+ *     { type: 'initError',       message }
+ *
+ *   Parent → Child:
+ *     { type: 'busCommand',          clientId, command, requestId, ...data }
+ *     { type: 'immediateBusCommand', clientId, command, requestId, ...data }
+ *     { type: 'shutdown' }
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { SerialPort } = require('serialport');
+const RobotArm = require('./robotArmST3215');
+
+// Catch-all safety net: log the error and exit so the parent can restart us.
+// A silent crash (unhandled rejection with no output) is the hardest to debug.
+process.on('uncaughtException', (err) => {
+    try { process.send({ type: 'workerFault', message: 'uncaughtException: ' + (err.stack || err) }); } catch (_) {}
+    console.error('[servoWorker] uncaughtException:', err.stack || err);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    try { process.send({ type: 'workerFault', message: 'unhandledRejection: ' + (reason && reason.stack ? reason.stack : String(reason)) }); } catch (_) {}
+    console.error('[servoWorker] unhandledRejection:', reason);
+    // Do NOT exit — an unhandled rejection in a poll tick shouldn't kill the worker.
+});
+
+// ===== Configuration (mirrors server.js constants) =====
+const SERIAL_PORT = process.env.SERIAL_PORT || '/dev/serial0';
+const SERIAL_BAUDRATE = 1000000;
+const JOINT_COUNT = 6;
+const SERVO_IDS = [1, 2, 3, 4, 5, 6];
+const DEBUG = false;
+const PERF_DEBUG = false;
+const VERBOSE_LOG = process.env.VERBOSE_LOG === '1';
+const BUS_DIAGNOSTICS_LOG_INTERVAL_MS = parseInt(process.env.BUS_DIAGNOSTICS_LOG_INTERVAL_MS || '0', 10);
+
+const STATUS_POLL_INTERVAL_MS = parseInt(process.env.STATUS_POLL_INTERVAL_MS || '20', 10);
+const MIN_BUS_TICK_GAP_MS     = parseInt(process.env.MIN_BUS_TICK_GAP_MS     || '4',  10);
+const JOINTS_PER_POLL_TICK    = parseInt(process.env.JOINTS_PER_POLL_TICK    || '6',  10);
+// Pause between consecutive joint reads within one tick, so the previous servo
+// has released the half-duplex line. Dominates the tick time (5 gaps per tick).
+const JOINT_POLL_GAP_MS       = parseInt(process.env.JOINT_POLL_GAP_MS       || '4',  10);
+const MAX_BUS_WRITE_QUEUE_SIZE  = 100;
+const MAX_BUS_WRITES_WHEN_IDLE  = 0;
+const MAX_BUS_WRITES_WHEN_BUSY  = 4;
+const BUS_QUIET_BEFORE_MOVE_MS  = 12;
+const BUS_QUIET_AFTER_MOVE_MS   = 10;
+const BUS_QUIET_JOG_MS          = 4;
+const RESCAN_MIN_INTERVAL_MS    = 10000;
+
+// EEPROM addresses the Calibration page's raw-write path refuses to touch even
+// with the write password — wrong values here can make a servo unreachable on
+// the bus (ID, Baud rate) or violate the datasheet's own "do not modify" note
+// (Phase), rather than just misconfigure a tuning parameter.
+//   5  = ID, 6 = Baud rate, 18 = Phase (special byte)
+const EEPROM_WRITE_BLOCKED_ADDRESSES = new Set([5, 6, 18]);
+
+// address -> {bytes, min, max} for every other writable EEPROM register, used
+// to validate raw writes from the Calibration page. Mirrors the register
+// table in electron-app/stsMemoryTable.js — keep the two in sync if either
+// changes. Read-only fields (firmware/servo version numbers) are absent, so
+// they're rejected as "not writable" the same as the blocked addresses above.
+const EEPROM_WRITE_RANGES = {
+    7:  { bytes: 1, min: 0,     max: 254 },  // Return delay
+    8:  { bytes: 1, min: 0,     max: 1 },    // Response status level
+    9:  { bytes: 2, min: 0,     max: 4094 }, // Min angle limit
+    11: { bytes: 2, min: 1,     max: 4095 }, // Max angle limit
+    13: { bytes: 1, min: 0,     max: 100 },  // Max temperature limit
+    14: { bytes: 1, min: 0,     max: 254 },  // Max input voltage
+    15: { bytes: 1, min: 0,     max: 254 },  // Min input voltage
+    16: { bytes: 2, min: 0,     max: 1000 }, // Max torque
+    19: { bytes: 1, min: 0,     max: 254 },  // Unloading condition
+    20: { bytes: 1, min: 0,     max: 254 },  // LED alarm condition
+    21: { bytes: 1, min: 0,     max: 254 },  // P coefficient
+    22: { bytes: 1, min: 0,     max: 254 },  // D coefficient
+    23: { bytes: 1, min: 0,     max: 254 },  // I coefficient
+    24: { bytes: 2, min: 0,     max: 1000 }, // Min startup force
+    26: { bytes: 1, min: 0,     max: 32 },   // CW insensitive area
+    27: { bytes: 1, min: 0,     max: 32 },   // CCW insensitive area
+    28: { bytes: 2, min: 0,     max: 511 },  // Protection current
+    30: { bytes: 1, min: 1,     max: 100 },  // Angular resolution
+    31: { bytes: 2, min: 0,     max: 4095 }, // Position correction (raw, sign is bit11)
+    33: { bytes: 1, min: 0,     max: 2 },    // Operation mode
+    34: { bytes: 1, min: 0,     max: 254 },  // Protective torque
+    35: { bytes: 1, min: 0,     max: 254 },  // Protection time
+    36: { bytes: 1, min: 0,     max: 254 },  // Overload torque
+    37: { bytes: 1, min: 0,     max: 254 },  // Speed closed-loop P coefficient
+    38: { bytes: 1, min: 0,     max: 254 },  // Over-current protection time
+    39: { bytes: 1, min: 0,     max: 254 },  // Velocity closed-loop I coefficient
+    // 42 (Target location / goal position) is SRAM, not EEPROM — a deliberate
+    // exception so the Calibration page's Position Correction control can
+    // write 2048 (absolute step, same encoding moveToPosition() uses), which
+    // commands the servo to the mechanical center so the effect of a Position
+    // Correction change is visible immediately. The unconditional EEPROM-
+    // unlock write writeServoEepromRaw does before every write is a harmless
+    // no-op for this address.
+    42: { bytes: 2, min: 0,     max: 4095 }, // Target location (absolute step)
+};
+
+// ESP32 end tool (ID 64): the whole 64-byte register array the firmware
+// exposes, read in one go for the Calibration page. The firmware answers
+// READs of up to 8 bytes per packet (End Tool API ESP32/REGISTER_MAP.md).
+const END_TOOL_REGISTER_COUNT = 64;
+const END_TOOL_READ_CHUNK_BYTES = 8;
+
+// address -> {bytes, min, max} for every end-tool register the Calibration
+// page may write. Mirrors electron-app/endToolMemoryTable.js — keep in sync.
+// Only Tool type ID (3) persists on the tool; the rest is RAM, but writing
+// it is how the tool is driven (PWM outputs, hobby servo), so it's allowed
+// behind the same password gate. Read-only telemetry/identity is absent and
+// so gets rejected as "not writable".
+const END_TOOL_WRITE_RANGES = {
+    3:  { bytes: 1, min: 0,   max: 255 },  // Tool type ID (persisted to tool EEPROM)
+    4:  { bytes: 1, min: 0,   max: 255 },  // Status flags
+    5:  { bytes: 1, min: 0,   max: 255 },  // PWM1 duty
+    6:  { bytes: 1, min: 0,   max: 255 },  // PWM2 duty
+    7:  { bytes: 1, min: 0,   max: 3 },    // PWM control (bit0/bit1 enables)
+    48: { bytes: 1, min: 0,   max: 1 },    // Servo enable
+    49: { bytes: 1, min: 0,   max: 255 },  // Servo position 8-bit
+    50: { bytes: 1, min: 0,   max: 180 },  // Servo angle (deg)
+    51: { bytes: 2, min: 500, max: 2500 }, // Servo pulse min (us)
+    53: { bytes: 2, min: 500, max: 2500 }, // Servo pulse max (us)
+    57: { bytes: 1, min: 0,   max: 255 },  // Servo slew rate (steps per ~10 ms tick, 0 = jump) - firmware minor >= 3
+    58: { bytes: 2, min: 0,   max: 2000 }, // Servo current limit (mA, 0 = none) - stops a slewed move - firmware minor >= 3
+};
+
+// Angle limits (9, 11) can let a joint travel somewhere mechanically unsafe —
+// the UI asks for an extra confirmation before sending those writes, but the
+// server doesn't re-check that here since it can't tell a hasty click from a
+// deliberate one; it relies on the write password gate in server.js instead.
+
+const SERVO_BACKOFF_FAIL_THRESHOLD   = 3;
+const SERVO_BACKOFF_DURATION_MS      = 2000;
+const SERVO_THERMAL_BACKOFF_DURATION_MS = 30000; // 30 s cool-down after temperature fault
+// Rolling-window failure rate: if a joint fails this many times within the window
+// (even non-consecutively), enter the same 2 s backoff.  Catches post-hardware-recovery
+// intermittent timeouts that never reach the consecutive threshold.
+const SERVO_ROLLING_FAIL_THRESHOLD   = 5;
+const SERVO_ROLLING_FAIL_WINDOW_MS   = 10000;
+
+// ST3215 bus watchdog: self-disables torque ~1 s after the last *write* command.
+// Status-poll reads do not reset it.  A single broadcast WRITE TORQUE_ENABLE=1
+// (ID=0xFE) resets all servos at once with no ack responses, so no bus contention.
+// The check runs between each poll joint so that slow/failing reads cannot delay
+// the heartbeat past the watchdog threshold.
+const TORQUE_WATCHDOG_HEARTBEAT_MS = 700;
+
+const PRIORITY_BUS_COMMANDS = { moveJoint: true, stopJoint: true, stopAll: true, stopAllJoints: true, setTorqueAll: true };
+
+// Safety net for runBusTick(): every bus operation it awaits already has its
+// own internal timeout (read/write response timeouts, retries), so the
+// slowest legitimate op should finish within a few seconds. If something
+// still hangs past this (e.g. a stalled serial driver callback with no
+// timeout of its own), this stops the whole tick loop from freezing forever
+// — which otherwise stalls the write queue permanently until the service is
+// restarted, since diag.busTicks never advances and nothing more gets drained.
+const BUS_TICK_OP_TIMEOUT_MS = 8000;
+
+// ===== State =====
+let sharedSerialPort     = null;
+const servos             = [];
+let endTool              = null;
+let allServoControllers  = [];
+const jointStatusCache   = [];
+const jointSettingsCache = [];
+let cachedTorqueEnabled  = null;
+// Trainee zero trim per joint (raw steps, 0 = none). Reapplied whenever a
+// servo is (re)created so a comms dropout doesn't silently drop a trim.
+const jointZeroTrimSteps = new Array(JOINT_COUNT).fill(0);
+let busTickTimer         = null;
+let busTickLoopActive    = false;
+let busTickInProgress    = false;
+let busWriteQueue        = [];
+let statusPollJointIndex = 0;
+const pendingImmediateMoves = {};
+let immediateMoveDrainRunning = false;
+let workerShuttingDown  = false;
+let lastRescanTime      = 0;
+let cachedJointConfigs  = null;
+let writeQueue          = [];
+let isWriting           = false;
+
+const servoConsecFails    = new Array(JOINT_COUNT).fill(0);
+const servoBackoffUntilMs = new Array(JOINT_COUNT).fill(0);
+const servoRecentFailTimes = Array.from({ length: JOINT_COUNT }, () => []);
+let lastTorqueHeartbeatAt = 0;
+// Local torque state — set by explicit commands, not by polled status reads.
+// Polled reads are unreliable (stale/timed-out) and would cause spurious
+// startServo() calls before every move if used for this check.
+const servoTorqueEnabled  = new Array(JOINT_COUNT).fill(true);
+
+const diag = {
+    startedAt: Date.now(),
+    busTickIntervalMs: STATUS_POLL_INTERVAL_MS,
+    busTicks: 0, busTicksSkipped: 0, busTickErrors: 0,
+    lastBusTickAt: null, lastBusTickDurationMs: 0,
+    busWriteQueueLength: 0, busWritesCompleted: 0, busMovesCompleted: 0,
+    busWritesFailed: 0, busWritesRejected: 0,
+    lastBusWriteAt: null, lastBusWriteDurationMs: 0,
+    statusPollsCompleted: 0, statusPollJointIndex: 0,
+    lastStatusPollAt: null, lastStatusPollDurationMs: 0,
+    cacheAgeMs: null, immediateBusCommands: 0, writeTimeouts: 0, implausibleSamples: 0
+};
+
+// ===== Helpers =====
+function log(msg, isError) {
+    const line = '[' + new Date().toISOString().slice(11, 23) + '] ' + msg;
+    if (isError) { console.error(line); } else { console.log(line); }
+}
+function vlog(msg) { if (VERBOSE_LOG) log(msg); }
+
+function sendResponse(clientId, requestId, payload) {
+    if (requestId !== undefined && requestId !== null) {
+        payload.requestId = requestId;
+    }
+    process.send({ type: 'commandResponse', clientId, payload });
+}
+
+function formatCommandError(error) {
+    if (!error) return 'Unknown error';
+    let msg = error.message || String(error);
+    if (error.isOverload) msg += ' Reduce speed, check for a mechanical limit, or relieve load on the joint.';
+    return msg;
+}
+
+// ===== Watchdog Heartbeat =====
+
+/**
+ * Send a single broadcast WRITE TORQUE_ENABLE=1 packet (ID=0xFE).
+ * Broadcast packets generate no ack responses from any servo, so there is
+ * zero bus contention risk.  All servos receive the write and reset their
+ * internal bus watchdog timers, preventing self-disable.
+ */
+// Bounds this write the same way ServoController.sendPacket() bounds its own
+// (see SERIAL_WRITE_CALLBACK_TIMEOUT_MS in robotArmST3215.js). This one is
+// especially important to bound: it goes through the same shared write queue
+// every servo's commands use (sharedSerialPort._writeQueue), and unlike
+// sendPacket()'s writeFn, it previously had no internal timeout at all. If
+// serialPort.write()'s callback ever failed to fire, processWriteQueue()
+// would await it forever — permanently jamming every future write from every
+// joint behind it, not just this broadcast. That was the "bus write queue is
+// full" total-freeze bug (ticks stop advancing, everything times out) — the
+// same failure mode as the sendPacket() one, just a second unprotected raw
+// write site the earlier fix didn't cover.
+const HEARTBEAT_WRITE_TIMEOUT_MS = 300;
+
+async function sendHeartbeatBroadcast() {
+    // STS_TORQUE_ENABLE = 0x28, value = 1, INST_WRITE = 0x03, broadcast ID = 0xFE
+    const buf = Buffer.from([0xFF, 0xFF, 0xFE, 0x04, 0x03, 0x28, 0x01, 0x00]);
+    let sum = 0;
+    for (let i = 2; i < buf.length - 1; i++) sum += buf[i];
+    buf[buf.length - 1] = (~sum) & 0xFF;
+    await sharedSerialPort._writeQueue(() => new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error(`Heartbeat write callback did not fire within ${HEARTBEAT_WRITE_TIMEOUT_MS}ms`));
+        }, HEARTBEAT_WRITE_TIMEOUT_MS);
+        sharedSerialPort.write(buf, err => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            err ? reject(err) : resolve();
+        });
+    }));
+}
+
+// ===== Serial Write Queue =====
+async function queueWrite(writeFn) {
+    return new Promise((resolve, reject) => {
+        writeQueue.push({ writeFn, resolve, reject });
+        processWriteQueue();
+    });
+}
+
+async function processWriteQueue() {
+    if (isWriting || writeQueue.length === 0) return;
+    isWriting = true;
+    const { writeFn, resolve, reject } = writeQueue.shift();
+    try {
+        await writeFn();
+        resolve();
+    } catch (error) {
+        reject(error);
+    } finally {
+        isWriting = false;
+        processWriteQueue();
+    }
+}
+
+// ===== Serial Data Routing =====
+function routeIncomingSerialData(data) {
+    for (let i = 0; i < servos.length; i++) {
+        if (servos[i] && typeof servos[i].handleIncomingData === 'function') {
+            servos[i].handleIncomingData(data);
+        }
+    }
+    if (endTool && typeof endTool.handleIncomingData === 'function') {
+        endTool.handleIncomingData(data);
+    }
+}
+
+function refreshDataRoutingControllers() {
+    allServoControllers = servos.filter(s => s !== null);
+    if (endTool) allServoControllers.push(endTool);
+}
+
+// ===== Joint Status Cache =====
+function defaultJointStatus(jointNum) {
+    return { joint: jointNum, available: false, angleDegrees: 0, position: 2048, isMoving: false, speed: 0, load: 0, voltage: 0, temperature: 0, torqueEnabled: false, readStale: false, lastGoodAt: null };
+}
+
+function getJointStatusSnapshot() {
+    const snapshot = [];
+    for (let i = 0; i < JOINT_COUNT; i++) {
+        snapshot.push(jointStatusCache[i] ? { ...jointStatusCache[i] } : defaultJointStatus(i + 1));
+    }
+    return snapshot;
+}
+
+function getJointStatusCacheAgeMs() {
+    let oldest = null;
+    for (let i = 0; i < jointStatusCache.length; i++) {
+        const entry = jointStatusCache[i];
+        if (entry && entry.lastGoodAt) {
+            const age = Date.now() - entry.lastGoodAt;
+            if (oldest === null || age > oldest) oldest = age;
+        }
+    }
+    return oldest;
+}
+
+// ===== Joint Config Cache =====
+function rebuildJointConfigsCache() {
+    const discovered = servos.filter(s => s !== null).length;
+    const joints = [];
+    for (let i = 0; i < servos.length; i++) {
+        const zeroTrimDegrees = zeroTrimStepsToDegrees(jointZeroTrimSteps[i]);
+        joints.push(servos[i] !== null
+            ? { jointNumber: i + 1, servoId: servos[i].servoIdNumber, available: true, zeroTrimDegrees }
+            : { jointNumber: i + 1, servoId: SERVO_IDS[i], available: false, zeroTrimDegrees });
+    }
+    cachedJointConfigs = { count: discovered, total: JOINT_COUNT, joints };
+    process.send({ type: 'jointConfigs', count: discovered, total: JOINT_COUNT, joints });
+}
+
+function getJointConfigsSnapshot() {
+    if (!cachedJointConfigs) return { count: 0, total: JOINT_COUNT, joints: [] };
+    return { count: cachedJointConfigs.count, total: cachedJointConfigs.total, joints: cachedJointConfigs.joints.map(j => ({ ...j })) };
+}
+
+// ===== Status Push to Main Thread =====
+function postStatusToMain() {
+    diag.cacheAgeMs = getJointStatusCacheAgeMs();
+    process.send({
+        type: 'status',
+        joints: getJointStatusSnapshot(),
+        cacheAgeMs: diag.cacheAgeMs,
+        diagnostics: { ...diag, busWriteQueueLength: busWriteQueue.length }
+    });
+}
+
+// ===== Implausible-sample filter =====
+// A sync-read reply that passes the checksum can still carry a wrong position
+// (a corrupted frame whose checksum happens to match, or a late reply landing
+// in another joint's slot). One such sample used to go straight into the
+// status cache, so the 3D view and XYZ readout jumped wildly for a frame and
+// anything seeded from getStatus() at that instant started from nonsense.
+// A joint cannot physically move faster than MAX_PLAUSIBLE_DEG_PER_S, so a
+// sample further from the last good angle than the elapsed time allows is
+// held back and the previous good values are kept. It is accepted only once
+// SUSPECT_ACCEPT_AFTER consecutive samples agree with each other, which is
+// what a genuine jump looks like (arm pushed by hand with torque off, or the
+// first sample after a long poll gap, where the allowance has grown anyway).
+const MAX_PLAUSIBLE_DEG_PER_S = 400;
+const PLAUSIBLE_MARGIN_DEG    = 3;
+const SUSPECT_ACCEPT_AFTER    = 3;
+const suspectSamples = new Array(JOINT_COUNT).fill(null); // { angle, count } per joint
+
+function isPlausibleSample(previous, status, nowMs) {
+    if (!(status.position >= 0 && status.position <= 4095)) return false;
+    if (!previous || !previous.lastGoodAt || !previous.available) return true;
+    const dtS = Math.max((nowMs - previous.lastGoodAt) / 1000, 0.02);
+    const allowedDeg = MAX_PLAUSIBLE_DEG_PER_S * dtS + PLAUSIBLE_MARGIN_DEG;
+    return Math.abs(status.angleDegrees - previous.angleDegrees) <= allowedDeg;
+}
+
+// Returns true when the sample should be dropped (held back) this tick.
+function holdBackImplausibleSample(jointIndex, jointNum, previous, status, nowMs) {
+    if (isPlausibleSample(previous, status, nowMs)) {
+        suspectSamples[jointIndex] = null;
+        return false;
+    }
+    const s = suspectSamples[jointIndex];
+    if (s && Math.abs(s.angle - status.angleDegrees) <= PLAUSIBLE_MARGIN_DEG) {
+        s.count++;
+    } else {
+        suspectSamples[jointIndex] = { angle: status.angleDegrees, count: 1 };
+    }
+    const count = suspectSamples[jointIndex].count;
+    if (count >= SUSPECT_ACCEPT_AFTER) {
+        log(`[BUS] Joint ${jointNum}: accepting ${status.angleDegrees.toFixed(1)}° after ${count} consistent samples (was ${previous.angleDegrees.toFixed(1)}°)`);
+        suspectSamples[jointIndex] = null;
+        return false;
+    }
+    diag.implausibleSamples++;
+    vlog(`[POLL] joint=${jointNum} implausible sample ${status.angleDegrees.toFixed(1)}° (last good ${previous.angleDegrees.toFixed(1)}°) held back (${count}/${SUSPECT_ACCEPT_AFTER})`);
+    return true;
+}
+
+// ===== Servo Polling =====
+
+/**
+ * Poll all active (non-backed-off) joints in a single SYNC_READ bus transaction.
+ * One broadcast request → one response per servo in ID order → all cached at once.
+ * Much faster than sequential reads and eliminates inter-read timing jitter.
+ */
+async function refreshAllJointStatusSyncRead() {
+    const now = Date.now();
+    const activeControllers = [];
+    const activeIndices     = [];
+
+    for (let i = 0; i < servos.length; i++) {
+        if (servos[i] !== null && servoBackoffUntilMs[i] <= now) {
+            activeControllers.push(servos[i]);
+            activeIndices.push(i);
+        }
+    }
+    if (activeControllers.length === 0) return;
+
+    const startAddr = 40;  // STS_TORQUE_ENABLE
+    const blockLen  = 27;  // (STS_MOVING - STS_TORQUE_ENABLE) + 1
+
+    let results;
+    try {
+        results = await RobotArm.syncReadAll(sharedSerialPort, activeControllers, startAddr, blockLen);
+    } catch (err) {
+        log('[BUS] syncReadAll transport error: ' + err.message, true);
+        return;
+    }
+
+    activeIndices.forEach((jointIndex, i) => {
+        const jointNum = jointIndex + 1;
+        const result   = results[i];
+        const previous = jointStatusCache[jointIndex] || defaultJointStatus(jointNum);
+
+        if (result.status === 'fulfilled') {
+            servoConsecFails[jointIndex] = 0;
+            const status = servos[jointIndex].quickStatusFromBuffer(result.value);
+            if (holdBackImplausibleSample(jointIndex, jointNum, previous, status, Date.now())) return;
+            if (!status.torqueEnabled && servoTorqueEnabled[jointIndex]) {
+                log(`[TORQUE] Joint ${jointNum}: servo self-disabled torque (fault/overload) — will re-enable on next move`);
+                servoTorqueEnabled[jointIndex] = false;
+                // See the matching comment in the moveJoint handler: this
+                // changed one joint's torque state outside of setTorqueAll,
+                // so the cached "all on/off" state can no longer be trusted.
+                cachedTorqueEnabled = null;
+            }
+            vlog(`[POLL] joint=${jointNum} pos=${status.position} angle=${status.angleDegrees.toFixed(1)} torque=${status.torqueEnabled} moving=${status.isMoving}`);
+            jointStatusCache[jointIndex] = {
+                joint: jointNum, available: true,
+                ...status,
+                stepPosition: status.position, readStale: false, lastGoodAt: Date.now()
+            };
+        } else {
+            const errMsg = result.reason && result.reason.message ? result.reason.message : String(result.reason);
+            const isThermal = errMsg.toLowerCase().includes('temperature');
+            servoConsecFails[jointIndex]++;
+            if (isThermal) {
+                servoBackoffUntilMs[jointIndex] = Date.now() + SERVO_THERMAL_BACKOFF_DURATION_MS;
+                servoConsecFails[jointIndex] = 0;
+                log(`[BUS] Joint ${jointNum}: TEMPERATURE FAULT — entering ${SERVO_THERMAL_BACKOFF_DURATION_MS}ms thermal cool-down`, true);
+                try { process.send({ type: 'servoThermalFault', joint: jointNum, message: `Joint ${jointNum} temperature fault — cooling down for ${SERVO_THERMAL_BACKOFF_DURATION_MS / 1000}s` }); } catch (_) {}
+            } else if (servoConsecFails[jointIndex] >= SERVO_BACKOFF_FAIL_THRESHOLD) {
+                servoBackoffUntilMs[jointIndex] = Date.now() + SERVO_BACKOFF_DURATION_MS;
+                servoConsecFails[jointIndex] = 0;
+                log(`[BUS] Joint ${jointNum}: entering ${SERVO_BACKOFF_DURATION_MS}ms backoff after ${SERVO_BACKOFF_FAIL_THRESHOLD} consecutive failures`);
+            }
+            if (previous.lastGoodAt) {
+                jointStatusCache[jointIndex] = { ...previous, available: true, readStale: true, pollError: errMsg };
+            } else {
+                jointStatusCache[jointIndex] = { ...defaultJointStatus(jointNum), readStale: true, pollError: errMsg };
+            }
+            log(`[BUS] Joint ${jointNum}: sync read failed (${errMsg}) consec=${servoConsecFails[jointIndex]}`);
+        }
+    });
+}
+
+async function readServoQuickStatusWithRetry(servo) {
+    try {
+        return await servo.readQuickStatus();
+    } catch (firstError) {
+        await new Promise(r => setTimeout(r, 5));
+        return await servo.readQuickStatus();
+    }
+}
+
+async function refreshSingleJointStatusFromBus(jointIndex) {
+    const jointNum = jointIndex + 1;
+    const servo    = servos[jointIndex];
+    const previous = jointStatusCache[jointIndex] || defaultJointStatus(jointNum);
+
+    if (servo === null) {
+        jointStatusCache[jointIndex] = defaultJointStatus(jointNum);
+        return;
+    }
+
+    const nowMs = Date.now();
+    if (servoBackoffUntilMs[jointIndex] > nowMs) return;
+
+    const startServo = Date.now();
+    try {
+        const status = await readServoQuickStatusWithRetry(servo);
+        servoConsecFails[jointIndex] = 0;
+        if (holdBackImplausibleSample(jointIndex, jointNum, previous, status, Date.now())) return;
+        // If the servo has self-disabled torque (overload/fault), sync local tracking
+        // so the next moveJoint will re-enable it.
+        if (!status.torqueEnabled && servoTorqueEnabled[jointIndex]) {
+            log(`[TORQUE] Joint ${jointNum}: servo self-disabled torque — will re-enable on next move. pos=${status.position} angle=${status.angleDegrees.toFixed(1)}`);
+            servoTorqueEnabled[jointIndex] = false;
+            cachedTorqueEnabled = null; // see matching comment in the moveJoint handler
+        }
+        vlog(`[POLL] joint=${jointNum} pos=${status.position} angle=${status.angleDegrees.toFixed(1)} torque=${status.torqueEnabled} moving=${status.isMoving}`);
+        jointStatusCache[jointIndex] = { joint: jointNum, available: true, ...status, stepPosition: status.position, readStale: false, lastGoodAt: Date.now() };
+    } catch (error) {
+        const isThermal = error.message && error.message.toLowerCase().includes('temperature');
+        servoConsecFails[jointIndex]++;
+        const nowFail = Date.now();
+        const recentFails = servoRecentFailTimes[jointIndex];
+        recentFails.push(nowFail);
+        // Prune entries older than the rolling window
+        while (recentFails.length > 0 && nowFail - recentFails[0] > SERVO_ROLLING_FAIL_WINDOW_MS) {
+            recentFails.shift();
+        }
+        if (isThermal) {
+            // Temperature protection: apply long cool-down backoff immediately and notify parent.
+            servoBackoffUntilMs[jointIndex] = nowFail + SERVO_THERMAL_BACKOFF_DURATION_MS;
+            servoConsecFails[jointIndex] = 0;
+            recentFails.length = 0;
+            log(`[BUS] Joint ${jointNum}: TEMPERATURE FAULT — entering ${SERVO_THERMAL_BACKOFF_DURATION_MS}ms thermal cool-down`, true);
+            try { process.send({ type: 'servoThermalFault', joint: jointNum, message: `Joint ${jointNum} temperature fault — cooling down for ${SERVO_THERMAL_BACKOFF_DURATION_MS / 1000}s` }); } catch (_) {}
+        } else if (servoConsecFails[jointIndex] >= SERVO_BACKOFF_FAIL_THRESHOLD) {
+            servoBackoffUntilMs[jointIndex] = nowFail + SERVO_BACKOFF_DURATION_MS;
+            servoConsecFails[jointIndex] = 0;
+            recentFails.length = 0;
+            log(`[BUS] Joint ${jointNum}: entering ${SERVO_BACKOFF_DURATION_MS}ms backoff after ${SERVO_BACKOFF_FAIL_THRESHOLD} consecutive failures`);
+        } else if (recentFails.length >= SERVO_ROLLING_FAIL_THRESHOLD) {
+            servoBackoffUntilMs[jointIndex] = nowFail + SERVO_BACKOFF_DURATION_MS;
+            servoConsecFails[jointIndex] = 0;
+            recentFails.length = 0;
+            log(`[BUS] Joint ${jointNum}: entering ${SERVO_BACKOFF_DURATION_MS}ms backoff after ${SERVO_ROLLING_FAIL_THRESHOLD} failures in ${SERVO_ROLLING_FAIL_WINDOW_MS / 1000}s`);
+        }
+        if (previous.lastGoodAt) {
+            jointStatusCache[jointIndex] = { ...previous, available: true, readStale: true, pollError: error.message };
+        } else {
+            jointStatusCache[jointIndex] = { ...defaultJointStatus(jointNum), readStale: true, pollError: error.message };
+        }
+        log(`[BUS] Joint ${jointNum}: read failed (${error.message}) consec=${servoConsecFails[jointIndex]}`);
+    }
+
+    const dur = Date.now() - startServo;
+    if (PERF_DEBUG && dur > 50) log(`PERF: status poll joint ${jointNum} took ${dur} ms`);
+}
+
+async function refreshJointStatusCacheFromBus() {
+    for (let i = 0; i < servos.length; i++) {
+        await refreshSingleJointStatusFromBus(i);
+        await new Promise(r => setTimeout(r, 5));
+    }
+}
+
+// ===== Bus Tick Loop =====
+function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    });
+    // If the timeout wins the race, `promise` may still settle later in the
+    // background — swallow a late rejection so it doesn't surface as an
+    // unhandled promise rejection.
+    promise.catch(() => {});
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function runBusTick() {
+    if (workerShuttingDown || !busTickLoopActive) return;
+    if (busTickInProgress) { diag.busTicksSkipped++; return; }
+
+    busTickInProgress = true;
+    const tickStart = Date.now();
+    diag.busTicks++;
+
+    try {
+        const queueAtStart = busWriteQueue.length;
+        const maxWrites = queueAtStart > 0 ? MAX_BUS_WRITES_WHEN_BUSY : MAX_BUS_WRITES_WHEN_IDLE;
+
+        for (let w = 0; w < maxWrites && busWriteQueue.length > 0 && !workerShuttingDown; w++) {
+            const { commandFn, resolve, reject, meta } = busWriteQueue.shift();
+            diag.busWriteQueueLength = busWriteQueue.length;
+            const writeStart = Date.now();
+            try {
+                await withTimeout(commandFn(), BUS_TICK_OP_TIMEOUT_MS, (meta && meta.command) || 'queued bus write');
+                await new Promise(r => setTimeout(r, 15));
+                resolve();
+                diag.busWritesCompleted++;
+                diag.lastBusWriteDurationMs = Date.now() - writeStart;
+                diag.lastBusWriteAt = Date.now();
+            } catch (error) {
+                reject(error);
+                diag.busWritesFailed++;
+            }
+        }
+
+        const pollStart = Date.now();
+        const jointsToPoll = Math.min(JOINTS_PER_POLL_TICK, JOINT_COUNT);
+        for (let p = 0; p < jointsToPoll; p++) {
+            // Check heartbeat before each joint poll so that slow/failing reads
+            // cannot delay it past the ~1 s watchdog threshold.
+            const nowHb = Date.now();
+            if (nowHb - lastTorqueHeartbeatAt >= TORQUE_WATCHDOG_HEARTBEAT_MS) {
+                lastTorqueHeartbeatAt = nowHb;
+                if (servoTorqueEnabled.some(Boolean)) {
+                    try { await withTimeout(sendHeartbeatBroadcast(), BUS_TICK_OP_TIMEOUT_MS, 'heartbeat broadcast'); } catch (_) {}
+                }
+            }
+            await withTimeout(refreshSingleJointStatusFromBus(statusPollJointIndex), BUS_TICK_OP_TIMEOUT_MS, 'joint status poll');
+            statusPollJointIndex = (statusPollJointIndex + 1) % JOINT_COUNT;
+            if (p < jointsToPoll - 1 && JOINT_POLL_GAP_MS > 0) await new Promise(r => setTimeout(r, JOINT_POLL_GAP_MS));
+        }
+        diag.statusPollJointIndex = statusPollJointIndex;
+        await new Promise(r => setTimeout(r, 1));
+
+        postStatusToMain();
+        diag.statusPollsCompleted++;
+        diag.lastStatusPollDurationMs = Date.now() - pollStart;
+        diag.lastStatusPollAt = Date.now();
+    } catch (error) {
+        diag.busTickErrors++;
+        log('Bus tick error: ' + (error.message || error), true);
+    } finally {
+        diag.lastBusTickDurationMs = Date.now() - tickStart;
+        diag.lastBusTickAt = Date.now();
+        diag.busWriteQueueLength = busWriteQueue.length;
+        busTickInProgress = false;
+
+        if (busTickLoopActive && !workerShuttingDown) {
+            const elapsed = Date.now() - tickStart;
+            const delay = Math.max(MIN_BUS_TICK_GAP_MS, STATUS_POLL_INTERVAL_MS - elapsed);
+            scheduleNextBusTick(delay);
+        }
+    }
+}
+
+function scheduleNextBusTick(delayMs) {
+    if (!busTickLoopActive || workerShuttingDown) return;
+    if (busTickTimer) clearTimeout(busTickTimer);
+    busTickTimer = setTimeout(() => { busTickTimer = null; runBusTick(); }, delayMs);
+}
+
+function startBusTickLoop() {
+    if (busTickLoopActive) return;
+    busTickLoopActive = true;
+    log('Starting bus tick loop (gap ' + MIN_BUS_TICK_GAP_MS + ' ms, target ' + STATUS_POLL_INTERVAL_MS + ' ms)');
+    runBusTick();
+
+    if (BUS_DIAGNOSTICS_LOG_INTERVAL_MS > 0) {
+        setInterval(() => {
+            // TEMPORARY: mem=... breaks down where RSS growth is coming from
+            // (heapUsed = plain JS objects, external/arrayBuffers = Buffers,
+            // typed arrays, and native addon allocations e.g. serialport) —
+            // added to chase a ~15MB/hour leak in this process. Remove once
+            // the leak is found and fixed.
+            const mem = process.memoryUsage();
+            const mb = (n) => (n / 1024 / 1024).toFixed(1);
+            log('BUS diag: ticks=' + diag.busTicks + ' skipped=' + diag.busTicksSkipped + ' writeQ=' + busWriteQueue.length + ' cacheAgeMs=' + diag.cacheAgeMs + ' lastTickMs=' + diag.lastBusTickDurationMs + ' implausible=' + diag.implausibleSamples +
+                ' mem: rss=' + mb(mem.rss) + 'MB heapUsed=' + mb(mem.heapUsed) + 'MB heapTotal=' + mb(mem.heapTotal) + 'MB external=' + mb(mem.external) + 'MB arrayBuffers=' + mb(mem.arrayBuffers) + 'MB');
+        }, BUS_DIAGNOSTICS_LOG_INTERVAL_MS);
+    }
+}
+
+function stopBusTickLoop() {
+    busTickLoopActive = false;
+    if (busTickTimer) { clearTimeout(busTickTimer); busTickTimer = null; }
+}
+
+// ===== Bus Write Queue =====
+function enqueueBusWrite(commandFn, meta) {
+    return new Promise((resolve, reject) => {
+        if (workerShuttingDown) { reject(new Error('Worker is shutting down')); return; }
+        if (busWriteQueue.length >= MAX_BUS_WRITE_QUEUE_SIZE) {
+            diag.busWritesRejected++;
+            reject(new Error('Bus write queue is full'));
+            return;
+        }
+        if (meta && meta.command === 'moveJoint' && meta.joint !== undefined) {
+            for (let i = busWriteQueue.length - 1; i >= 0; i--) {
+                const item = busWriteQueue[i];
+                if (item.meta && item.meta.command === 'moveJoint' && item.meta.joint === meta.joint) {
+                    item.reject(new Error('Superseded by newer move for joint ' + meta.joint));
+                    busWriteQueue.splice(i, 1);
+                }
+            }
+        }
+        const item = { commandFn, resolve, reject, meta: meta || null, enqueuedAt: Date.now() };
+        if (meta && PRIORITY_BUS_COMMANDS[meta.command]) {
+            busWriteQueue.unshift(item);
+        } else {
+            busWriteQueue.push(item);
+        }
+        diag.busWriteQueueLength = busWriteQueue.length;
+        kickBusTickIfIdle();
+    });
+}
+
+function kickBusTickIfIdle() {
+    if (!busTickLoopActive || workerShuttingDown || busTickInProgress) return;
+    runBusTick();
+}
+
+// ===== Immediate Bus Commands =====
+function clearAllServoPendingTransactions() {
+    for (const servo of servos) {
+        if (servo && typeof servo.clearPendingBusTransaction === 'function') servo.clearPendingBusTransaction();
+    }
+    if (endTool && typeof endTool.clearPendingBusTransaction === 'function') endTool.clearPendingBusTransaction();
+}
+
+function scheduleImmediateCommand(msg) {
+    if (msg.command === 'moveJoint' && msg.joint !== undefined) {
+        const key = String(msg.joint);
+        const prev = pendingImmediateMoves[key];
+        if (prev && prev.requestId !== undefined) {
+            sendResponse(prev.clientId, prev.requestId, { type: 'error', message: 'Superseded by newer move for joint ' + msg.joint });
+        }
+        pendingImmediateMoves[key] = msg;
+        drainImmediateMoveQueue();
+        return;
+    }
+    runImmediateCommand(msg, false);
+}
+
+async function drainImmediateMoveQueue() {
+    if (immediateMoveDrainRunning) return;
+    immediateMoveDrainRunning = true;
+    try {
+        while (Object.keys(pendingImmediateMoves).length > 0) {
+            const key = Object.keys(pendingImmediateMoves)[0];
+            const item = pendingImmediateMoves[key];
+            delete pendingImmediateMoves[key];
+            const moreAfter = Object.keys(pendingImmediateMoves).length > 0;
+            await runImmediateCommand(item, moreAfter);
+        }
+    } finally {
+        immediateMoveDrainRunning = false;
+    }
+}
+
+async function waitForBusTickToFinish() {
+    const waitStart = Date.now();
+    while (busTickInProgress && Date.now() - waitStart < 2000) {
+        await new Promise(r => setTimeout(r, 50));
+    }
+}
+
+async function runImmediateCommand(msg, moreMovesQueued) {
+    await waitForBusTickToFinish();
+
+    if (busTickTimer) { clearTimeout(busTickTimer); busTickTimer = null; }
+
+    // Send a heartbeat broadcast NOW, before pausing the bus tick loop.
+    // The ST3215 watchdog self-disables all torques ~1 s after the last write.
+    // The bus tick (which normally fires the heartbeat every 700 ms) is stopped
+    // for the duration of this command; if the heartbeat was already overdue when
+    // the command arrived (e.g. a slow failing joint held up the tick), the
+    // watchdog could fire during the command and disable all servo torques.
+    // Resetting it here gives a full fresh 1-second window.
+    if (servoTorqueEnabled.some(Boolean)) {
+        try { await sendHeartbeatBroadcast(); lastTorqueHeartbeatAt = Date.now(); } catch (_) {}
+    }
+
+    const isRapidJog = moreMovesQueued === true;
+    const quietBefore = isRapidJog ? BUS_QUIET_JOG_MS : BUS_QUIET_BEFORE_MOVE_MS;
+    const quietAfter  = isRapidJog ? BUS_QUIET_JOG_MS : BUS_QUIET_AFTER_MOVE_MS;
+
+    const resumeLoop = busTickLoopActive;
+    busTickLoopActive = false;
+    busTickInProgress = true;
+    const cmdStart = Date.now();
+
+    try {
+        clearAllServoPendingTransactions();
+        await new Promise(r => setTimeout(r, quietBefore));
+        // Bounded the same way runBusTick() bounds its queued commands (see
+        // BUS_TICK_OP_TIMEOUT_MS). This call previously had no timeout at
+        // all — if the bus was still busy (e.g. a slow end-tool operation
+        // still in flight), handleBusCommand() could hang indefinitely.
+        // Since busTickLoopActive was already set false above, that left
+        // the finally block below unreached forever: the tick loop never
+        // resumed, and every future command failed with "Bus write queue
+        // is full" until the service was restarted. Same class of bug as
+        // the heartbeat-write and PID-EEPROM-write freezes fixed earlier —
+        // an unprotected await able to jam the shared bus resource, just a
+        // third call site those fixes didn't cover.
+        await withTimeout(handleBusCommand(msg.clientId, msg), BUS_TICK_OP_TIMEOUT_MS, msg.command || 'immediate bus command');
+        diag.immediateBusCommands++;
+        await new Promise(r => setTimeout(r, quietAfter));
+        if (DEBUG) log('Immediate bus command OK: ' + msg.command + ' (' + (Date.now() - cmdStart) + ' ms)');
+    } catch (error) {
+        const errMsg = error && error.message ? error.message : String(error);
+        if (errMsg.toLowerCase().includes('timeout')) diag.writeTimeouts++;
+        log('Immediate bus command failed: ' + msg.command + ' — ' + errMsg, true);
+        sendResponse(msg.clientId, msg.requestId, { type: 'error', message: formatCommandError(error) });
+    } finally {
+        busTickInProgress = false;
+        busTickLoopActive = resumeLoop;
+        if (resumeLoop && !workerShuttingDown) scheduleNextBusTick(MIN_BUS_TICK_GAP_MS + BUS_QUIET_AFTER_MOVE_MS);
+    }
+}
+
+// ===== Servo Initialization =====
+async function initializeServos() {
+    log('Initializing ST3215 servo controllers...');
+
+    log(`Using serial port: ${SERIAL_PORT} @ ${SERIAL_BAUDRATE} baud`);
+    sharedSerialPort = new SerialPort({ path: SERIAL_PORT, baudRate: SERIAL_BAUDRATE, dataBits: 8, parity: 'none', stopBits: 1, autoOpen: false });
+
+    await new Promise((resolve, reject) => {
+        sharedSerialPort.open((error) => {
+            if (error) reject(error); else resolve();
+        });
+    });
+    log('Shared serial port opened');
+
+    // Deliberately NOT sharedSerialPort.on('data', ...) — attaching a 'data'
+    // listener puts the underlying stream into "flowing" mode, which is
+    // exactly the trigger for a confirmed, still-open upstream memory leak
+    // in serialport's native binding (serialport/node-serialport#2838):
+    // steady RSS growth with negligible V8 heap growth, matching what we
+    // measured here (~15-17MB/hour via a heap snapshot diff, unaffected by
+    // a 13.0.0 upgrade). 'readable' + explicit .read() keeps the stream in
+    // "paused" mode instead — same data, same routeIncomingSerialData()
+    // callback, different pull-vs-push mechanism — which avoids the buggy
+    // code path entirely rather than waiting on an upstream fix.
+    sharedSerialPort.on('readable', () => {
+        let chunk;
+        while ((chunk = sharedSerialPort.read()) !== null) {
+            routeIncomingSerialData(chunk);
+        }
+    });
+    sharedSerialPort.on('error', (error) => log('Serial port error: ' + error.message, true));
+    sharedSerialPort._writeQueue = queueWrite;
+
+    for (let i = 0; i < JOINT_COUNT; i++) {
+        servos[i] = null;
+        if (i > 0) await new Promise(r => setTimeout(r, 150));
+        const servo = new RobotArm.ServoController(i + 1, sharedSerialPort, SERVO_IDS[i], SERIAL_BAUDRATE);
+        try {
+            await servo.open();
+            servos[i] = servo;
+            log(`Pinging servo ${i + 1} (ID: ${SERVO_IDS[i]})...`);
+            const alive = await servo.ping();
+            if (!alive) {
+                log(`Servo ${i + 1} did not respond to ping — skipping`);
+                servos[i] = null;
+                continue;
+            }
+            log(`Servo ${i + 1} (ID: ${SERVO_IDS[i]}) responded to ping`);
+            log(`Servo ${i + 1} initialized (ST3215 ID: ${SERVO_IDS[i]})`);
+            await new Promise(r => setTimeout(r, 50));
+            await servo.startServo();
+        } catch (error) {
+            log(`Failed to initialize servo ${i + 1}: ${error.message}`, true);
+            servos[i] = null;
+        }
+    }
+
+    log(`Initialized ${servos.filter(s => s !== null).length} of ${JOINT_COUNT} servos`);
+
+    try {
+        const tool = new RobotArm.EndToolController(sharedSerialPort, SERIAL_BAUDRATE);
+        await tool.open();
+        endTool = tool;
+        const toolAlive = await endTool.pingTool();
+        log(toolAlive ? 'End tool node (ID 64) OK' : 'End tool node did not respond at startup');
+    } catch (error) {
+        log('End tool init failed: ' + error.message, true);
+        endTool = null;
+    }
+
+    refreshDataRoutingControllers();
+    rebuildJointConfigsCache();
+    cachedTorqueEnabled = true;
+}
+
+async function createAndInitializeServo(jointIndex) {
+    const servoId = SERVO_IDS[jointIndex];
+    const servo   = new RobotArm.ServoController(jointIndex + 1, sharedSerialPort, servoId, SERIAL_BAUDRATE);
+    await servo.open();
+    servos[jointIndex] = servo;
+    const alive = await servo.ping();
+    if (!alive) {
+        servos[jointIndex] = null;
+        throw new Error(`Servo ${jointIndex + 1} (ID: ${servoId}) did not respond`);
+    }
+    servo.setZeroTrimSteps(jointZeroTrimSteps[jointIndex]);
+
+    // Match whatever torque state is currently in effect rather than always
+    // forcing it on — a servo that drops out while the user has torque
+    // deliberately switched off should come back off, not on.
+    const desiredTorque = cachedTorqueEnabled !== false;
+    if (desiredTorque) await servo.startServo(); else await servo.stopServo();
+    servoTorqueEnabled[jointIndex] = desiredTorque;
+    return servo;
+}
+
+async function resolveServoForJoint(jointIndex, jointNum) {
+    if (servos[jointIndex] !== null && servos[jointIndex] !== undefined) return servos[jointIndex];
+    try {
+        clearAllServoPendingTransactions();
+        await new Promise(r => setTimeout(r, 20));
+        const servo = await createAndInitializeServo(jointIndex);
+        servoConsecFails[jointIndex] = 0;
+        servoBackoffUntilMs[jointIndex] = 0;
+        refreshDataRoutingControllers();
+        rebuildJointConfigsCache();
+        log('Recovered servo for joint ' + jointNum);
+        return servo;
+    } catch (error) {
+        log('Could not recover joint ' + jointNum + ': ' + error.message, true);
+        return null;
+    }
+}
+
+async function rescanServos() {
+    const results = [];
+    for (let i = 0; i < JOINT_COUNT; i++) {
+        const jointNumber = i + 1;
+        const servoId     = SERVO_IDS[i];
+        const existing    = servos[i] || null;
+
+        if (existing !== null) {
+            try {
+                const alive = await existing.isResponsive();
+                if (alive) {
+                    // Match current desired torque state, not force it on —
+                    // this servo was never lost, so don't override the user's
+                    // choice just because a rescan touched it.
+                    const desiredTorque = cachedTorqueEnabled !== false;
+                    if (desiredTorque) await existing.startServo(); else await existing.stopServo();
+                    servoTorqueEnabled[i] = desiredTorque;
+                    results.push({ joint: jointNumber, servoId, available: true, action: 'kept_existing' });
+                    continue;
+                }
+            } catch (e) { /* fall through to replacement */ }
+            servos[i] = null;
+        }
+
+        try {
+            await createAndInitializeServo(i);
+            servoConsecFails[i] = 0;
+            servoBackoffUntilMs[i] = 0;
+            results.push({ joint: jointNumber, servoId, available: true, action: 'rediscovered' });
+        } catch (e) {
+            servos[i] = null;
+            results.push({ joint: jointNumber, servoId, available: false, action: 'not_found', error: e.message });
+        }
+
+        if (i < JOINT_COUNT - 1) await new Promise(r => setTimeout(r, 100));
+    }
+    return results;
+}
+
+async function applyJointSpeedIfChanged(servo, jointIndex, speed) {
+    if (!jointSettingsCache[jointIndex]) jointSettingsCache[jointIndex] = {};
+    if (jointSettingsCache[jointIndex].speed === speed) return false;
+    await servo.setSpeed(speed);
+    jointSettingsCache[jointIndex].speed = speed;
+    return true;
+}
+
+async function applyJointAccelerationIfChanged(servo, jointIndex, acc) {
+    if (!jointSettingsCache[jointIndex]) jointSettingsCache[jointIndex] = {};
+    if (jointSettingsCache[jointIndex].acceleration === acc) return false;
+    await servo.setAcceleration(acc);
+    jointSettingsCache[jointIndex].acceleration = acc;
+    return true;
+}
+
+// ===== Bus Command Handler =====
+async function handleBusCommand(clientId, data) {
+    const command   = data.command;
+    const requestId = data.requestId;
+
+    const reply = (payload) => sendResponse(clientId, requestId, payload);
+
+    const requireEndTool = () => {
+        if (!endTool) throw new Error('End tool controller is not initialized');
+        return endTool;
+    };
+
+    switch (command) {
+
+        case 'rescanServos': {
+            const now = Date.now();
+            if (now - lastRescanTime < RESCAN_MIN_INTERVAL_MS) {
+                reply({ type: 'error', message: 'Rescan rate limited — wait ' + Math.ceil((RESCAN_MIN_INTERVAL_MS - (now - lastRescanTime)) / 1000) + ' s' });
+                return;
+            }
+            lastRescanTime = now;
+            log('[SCAN] Rescanning all servos...');
+            try {
+                const results = await rescanServos();
+                refreshDataRoutingControllers();
+                rebuildJointConfigsCache();
+                const found = results.filter(r => r.available).map(r => r.joint).join(',') || 'none';
+                const lost  = results.filter(r => !r.available).map(r => r.joint).join(',') || 'none';
+                log(`[SCAN] Rescan complete — available=${found} unavailable=${lost}`);
+                reply({ type: 'servoRescan', joints: results });
+            } catch (error) {
+                log('[SCAN] Rescan failed: ' + error.message, true);
+                reply({ type: 'error', message: 'Failed to rescan servos: ' + error.message });
+            }
+            break;
+        }
+
+        case 'moveJoint': {
+            const jointIndex = data.joint - 1;
+            const angle      = data.angle;
+            const moveSpeed  = (typeof data.speed === 'number' && !isNaN(data.speed) && data.speed >= 0) ? data.speed : 1500;
+
+            log(`[MOVE] joint=${data.joint} angle=${angle} speed=${moveSpeed} torqueTracked=${servoTorqueEnabled[jointIndex]} servoSlot=${servos[jointIndex] !== null ? 'present' : 'null'}`);
+
+            if (jointIndex < 0 || jointIndex >= servos.length) {
+                log(`[MOVE] joint=${data.joint} REJECTED: invalid joint number`, true);
+                reply({ type: 'error', message: `Invalid joint number: ${data.joint}` });
+                return;
+            }
+            const servo = await resolveServoForJoint(jointIndex, data.joint);
+            if (!servo) {
+                log(`[MOVE] joint=${data.joint} REJECTED: servo not available`, true);
+                reply({ type: 'error', message: `Servo ${data.joint} is not available` });
+                return;
+            }
+            const moveStart = Date.now();
+            try {
+                if (!servoTorqueEnabled[jointIndex]) {
+                    log(`[TORQUE] joint=${data.joint}: re-enabling torque before move`);
+                    // startServo() catches internally and returns bool — never throws.
+                    // Ack loss is treated as "assumed received"; poll will correct if not.
+                    const torqueOk = await servo.startServo();
+                    log(`[TORQUE] joint=${data.joint}: startServo ${torqueOk ? 'OK' : 'ack lost — assuming received'}`);
+                    servoTorqueEnabled[jointIndex] = true;
+                    // This just turned ONE joint's torque back on outside of
+                    // setTorqueAll, so the "all torque off" cache is now wrong.
+                    // Invalidate it (rather than guessing true/false) so the
+                    // next setTorqueAll call can't short-circuit as a no-op
+                    // and skip actually writing to the servos — that's exactly
+                    // what let a torque-off request silently do nothing after
+                    // a home/move re-enabled torque on individual joints.
+                    cachedTorqueEnabled = null;
+                }
+                await servo.moveToAngle(angle, moveSpeed);
+                diag.busMovesCompleted++;
+                await refreshSingleJointStatusFromBus(jointIndex);
+                postStatusToMain();
+                log(`[MOVE] joint=${data.joint} OK (${Date.now() - moveStart}ms)`);
+                reply({ type: 'success', message: `Servo ${data.joint} moving to ${angle}° at ${moveSpeed} step/s` });
+            } catch (error) {
+                log(`[MOVE] joint=${data.joint} FAILED after ${Date.now() - moveStart}ms: ${formatCommandError(error)}`, true);
+                reply({ type: 'error', message: `Failed to move joint ${data.joint}: ${formatCommandError(error)}`, servoFault: !!(error && error.isOverload), joint: data.joint });
+            }
+            break;
+        }
+
+        case 'stopJoint': {
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                log(`[TORQUE] joint=${data.joint}: stopJoint — disabling torque`);
+                const stopped = await sv.stopServo();
+                if (stopped) {
+                    servoTorqueEnabled[idx] = false;
+                    cachedTorqueEnabled = null; // see matching comment in the moveJoint handler
+                    log(`[TORQUE] joint=${data.joint}: torque disabled`);
+                    reply({ type: 'success', message: `Servo ${data.joint} stopped` });
+                } else {
+                    log(`[TORQUE] joint=${data.joint}: stopServo returned false`, true);
+                    reply({ type: 'error', message: `Could not disable torque on joint ${data.joint}`, joint: data.joint });
+                }
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to stop joint ${data.joint}: ${formatCommandError(error)}`, joint: data.joint });
+            }
+            break;
+        }
+
+        case 'stopAll':
+        case 'stopAllJoints': {
+            log(`[TORQUE] ${command}: disabling torque on all joints`);
+            try {
+                const failed = [];
+                for (let i = 0; i < servos.length; i++) {
+                    if (servos[i] !== null) {
+                        const ok = await servos[i].stopServo();
+                        if (ok) { servoTorqueEnabled[i] = false; } else { failed.push(i + 1); }
+                    } else {
+                        // Disconnected servo isn't holding torque either way —
+                        // don't leave a stale `true` here (see setTorqueAll).
+                        servoTorqueEnabled[i] = false;
+                    }
+                }
+                // This bypasses setTorqueAll, so its cache can no longer be
+                // trusted (see matching comment in the moveJoint handler) —
+                // invalidate rather than assume, since some writes may have
+                // failed above.
+                cachedTorqueEnabled = null;
+                if (failed.length === 0) {
+                    reply({ type: 'success', message: 'All servos stopped' });
+                } else {
+                    reply({ type: 'error', message: 'Could not disable torque on joint(s): ' + failed.join(', ') });
+                }
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to stop all servos: ${formatCommandError(error)}` });
+            }
+            break;
+        }
+
+        case 'setServo':
+        case 'setServoAngle': {
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                await sv.moveToAngle(data.angle);
+                reply({ type: 'success', message: `Servo ${data.joint} set to ${data.angle}°` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set servo angle: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'setSpeed': {
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                const changed = await applyJointSpeedIfChanged(sv, idx, data.speed);
+                reply({ type: 'success', message: changed ? `Servo ${data.joint} speed set to ${data.speed}` : `Servo ${data.joint} speed already ${data.speed}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set speed on joint ${data.joint}: ${formatCommandError(error)}`, servoFault: !!(error && error.isOverload), joint: data.joint });
+            }
+            break;
+        }
+
+        case 'setSpeedAll': {
+            try {
+                for (let i = 0; i < servos.length; i++) {
+                    if (servos[i] !== null) await applyJointSpeedIfChanged(servos[i], i, data.speed);
+                }
+                reply({ type: 'success', message: `All servos speed set to ${data.speed}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set servo speeds: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'setTorqueAll': {
+            const torqueEnabled = data.enabled !== false;
+            log(`[TORQUE] setTorqueAll enabled=${torqueEnabled}`);
+            try {
+                if (cachedTorqueEnabled === torqueEnabled) {
+                    log(`[TORQUE] setTorqueAll: already ${torqueEnabled ? 'enabled' : 'disabled'}, no-op`);
+                    // Still self-heal servoTorqueEnabled[] in case a joint was
+                    // momentarily disconnected during a previous call and its
+                    // flag never got cleared (see below) — a stale `true` here
+                    // keeps the watchdog heartbeat re-enabling torque bus-wide
+                    // even though cachedTorqueEnabled correctly says off.
+                    for (let i = 0; i < servos.length; i++) servoTorqueEnabled[i] = torqueEnabled;
+                    reply({ type: 'success', message: `All servos torque already ${torqueEnabled ? 'enabled' : 'disabled'}` });
+                    return;
+                }
+                for (let i = 0; i < servos.length; i++) {
+                    if (servos[i] !== null) {
+                        if (torqueEnabled) await servos[i].startServo(); else await servos[i].stopServo();
+                    }
+                    // Set regardless of connection state: a disconnected servo
+                    // isn't holding torque, and leaving a stale `true` here for
+                    // a momentarily-null joint would keep servoTorqueEnabled.some(Boolean)
+                    // true forever, causing the watchdog heartbeat broadcast to
+                    // keep re-enabling torque on every other servo on the bus.
+                    servoTorqueEnabled[i] = torqueEnabled;
+                }
+                cachedTorqueEnabled = torqueEnabled;
+                reply({ type: 'success', message: `All servos torque ${torqueEnabled ? 'enabled' : 'disabled'}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set torque: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'setAcceleration': {
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                const changed = await applyJointAccelerationIfChanged(sv, idx, data.acceleration);
+                reply({ type: 'success', message: changed ? `Servo ${data.joint} acceleration set to ${data.acceleration}` : `Servo ${data.joint} acceleration already ${data.acceleration}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set acceleration: ${error.message}` });
+            }
+            break;
+        }
+
+        // ===== Trainee zero trims (software only, no password) =====
+        case 'setJointZeroTrim': {
+            // Makes the joint's CURRENT physical position read as 0° - the
+            // student lines the joint up with its alignment mark first. No
+            // movement and no servo EEPROM write; undone by resetJointZeroTrim.
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                const rawPosition = await sv.getPosition();
+                if (rawPosition < 0) { reply({ type: 'error', message: `Failed to read current position for joint ${data.joint}` }); return; }
+                const trimSteps = rawPosition - RobotArm.CENTER_POSITION;
+                if (Math.abs(trimSteps) > MAX_ZERO_TRIM_STEPS) {
+                    reply({ type: 'error', message: `Joint ${data.joint} is ${zeroTrimStepsToDegrees(trimSteps)}° from its factory zero - more than the ${MAX_ZERO_TRIM_DEGREES}° a trainee trim allows. Check the joint is really at its alignment mark; a bigger error needs a teacher to check the servo's assembly.` });
+                    return;
+                }
+                const saved = applyJointZeroTrim(idx, trimSteps);
+                log(`[ZERO TRIM] Joint ${data.joint}: trim ${trimSteps} steps (${zeroTrimStepsToDegrees(trimSteps)}°)${saved ? '' : ' - WARNING: not saved to disk'}`);
+                reply({
+                    type: saved ? 'success' : 'error',
+                    message: saved
+                        ? `Joint ${data.joint} zero trim set to ${zeroTrimStepsToDegrees(trimSteps)}° - its current position now reads 0°`
+                        : `Joint ${data.joint} zero trim set for this session only - it could not be saved and will be lost when the server restarts. Check server logs.`,
+                    joint: data.joint,
+                    zeroTrimDegrees: zeroTrimStepsToDegrees(trimSteps)
+                });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to set zero trim: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'resetJointZeroTrim': {
+            // data.joint = 1-6, or 'all'. Restores the servo's own calibration.
+            const indexes = data.joint === 'all'
+                ? jointZeroTrimSteps.map((_, i) => i)
+                : [data.joint - 1];
+            if (indexes.some(i => !(i >= 0 && i < JOINT_COUNT))) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            let saved = true;
+            for (const i of indexes) saved = applyJointZeroTrim(i, 0) && saved;
+            const which = data.joint === 'all' ? 'All joints' : `Joint ${data.joint}`;
+            log(`[ZERO TRIM] ${which}: trim reset to 0${saved ? '' : ' - WARNING: not saved to disk'}`);
+            reply({
+                type: saved ? 'success' : 'error',
+                message: saved
+                    ? `${which} zero trim reset - using the servo's own calibration again`
+                    : `${which} zero trim reset for this session, but could not be saved - an old trim may return when the server restarts. Check server logs.`
+            });
+            break;
+        }
+
+        // ===== Commissioning (EEPROM) Commands =====
+        case 'readServoEeprom': {
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                const profile = await sv.readEepromProfile();
+                reply({ type: 'servoEeprom', joint: data.joint, profile });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to read servo ${data.joint} EEPROM: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'readServoEepromRaw': {
+            // Full raw EEPROM + SRAM blocks for the Calibration page — decoded
+            // against the STS3215 memory table client-side, not the small
+            // known-field subset readServoEeprom() above returns. Two separate
+            // reads since the ranges aren't contiguous on the servo's own map.
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            try {
+                const eepromBytes = await sv.readData(0, 40);  // addresses 0x00-0x27
+                const sramBytes   = await sv.readData(40, 31); // addresses 0x28-0x45 (live/runtime state)
+                reply({ type: 'servoEepromRaw', joint: data.joint, eepromBytes: Array.from(eepromBytes), sramBytes: Array.from(sramBytes) });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to read servo ${data.joint} registers: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'writeServoEepromRaw': {
+            // Single-register raw write from the Calibration page. The write
+            // password itself is checked in server.js before this ever reaches
+            // the worker; here we only validate the address/range, since those
+            // are hardware-safety concerns rather than an authorization concern.
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+
+            const address = data.address;
+            const range = EEPROM_WRITE_RANGES[address];
+            if (EEPROM_WRITE_BLOCKED_ADDRESSES.has(address) || !range) {
+                reply({ type: 'error', message: `Address 0x${Number(address || 0).toString(16)} is not writable from the Calibration page` });
+                return;
+            }
+            const rawValue = data.rawValue;
+            if (typeof rawValue !== 'number' || !Number.isFinite(rawValue) || rawValue < range.min || rawValue > range.max) {
+                reply({ type: 'error', message: `Value out of range (${range.min}-${range.max})` });
+                return;
+            }
+
+            try {
+                const bytesToWrite = range.bytes === 2
+                    ? [rawValue & 0xFF, (rawValue >> 8) & 0xFF]
+                    : [rawValue & 0xFF];
+                await sv.writeData(0x37, [0]); // unlock EEPROM
+                await new Promise(r => setTimeout(r, 25));
+                await sv.writeData(address, bytesToWrite);
+                // Longer settle than the 40ms used elsewhere (e.g. writePIDValues) —
+                // this page immediately reads the register back to confirm the write
+                // took effect, so it needs the EEPROM write to have fully committed
+                // first, not just enough time for the next unrelated bus command.
+                await new Promise(r => setTimeout(r, 100));
+                log(`[CALIBRATION] J${data.joint} wrote raw EEPROM address 0x${address.toString(16)} = ${rawValue}`);
+                reply({ type: 'success', message: `Wrote ${rawValue} to address 0x${address.toString(16)} on joint ${data.joint}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to write EEPROM: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'readEndToolRegisters': {
+            // Whole 64-byte register array of the ESP32 end tool (ID 64) for
+            // the Calibration page, decoded client-side against
+            // endToolMemoryTable.js. The firmware caps a READ at 8 bytes, so
+            // it's fetched in chunks; addresses it doesn't implement read 0.
+            let tool;
+            try { tool = requireEndTool(); }
+            catch (e) { reply({ type: 'error', message: e.message }); return; }
+            try {
+                const bytes = [];
+                for (let addr = 0; addr < END_TOOL_REGISTER_COUNT; addr += END_TOOL_READ_CHUNK_BYTES) {
+                    const chunk = await tool.readData(addr, END_TOOL_READ_CHUNK_BYTES);
+                    for (let i = 0; i < END_TOOL_READ_CHUNK_BYTES; i++) bytes.push(chunk[i] || 0);
+                }
+                reply({ type: 'endToolRegisters', bytes });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to read end tool registers: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'writeEndToolRegister': {
+            // Single-register raw write to the end tool from the Calibration
+            // page. Password is checked in server.js (EEPROM_WRITE_COMMANDS);
+            // here only the address/range is validated.
+            let tool;
+            try { tool = requireEndTool(); }
+            catch (e) { reply({ type: 'error', message: e.message }); return; }
+
+            const address = data.address;
+            const range = END_TOOL_WRITE_RANGES[address];
+            if (!range) {
+                reply({ type: 'error', message: `End tool address ${Number(address || 0)} is not writable from the Calibration page` });
+                return;
+            }
+            const rawValue = data.rawValue;
+            if (typeof rawValue !== 'number' || !Number.isFinite(rawValue) || rawValue < range.min || rawValue > range.max) {
+                reply({ type: 'error', message: `Value out of range (${range.min}-${range.max})` });
+                return;
+            }
+
+            try {
+                const bytesToWrite = range.bytes === 2
+                    ? [rawValue & 0xFF, (rawValue >> 8) & 0xFF]
+                    : [rawValue & 0xFF];
+                await tool.writeData(address, bytesToWrite);
+                // Give the firmware time to apply the write (and, for Tool
+                // type ID, commit it to its EEPROM) before the page reads back.
+                await new Promise(r => setTimeout(r, 100));
+                log(`[CALIBRATION] End tool wrote register ${address} = ${rawValue}`);
+                reply({ type: 'success', message: `Wrote ${rawValue} to end tool register ${address}` });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to write end tool register: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'writeServoEeprom': {
+            // Writes only the fields present in data.values, directly to the
+            // servo's own EEPROM — persists there on hardware, no separate
+            // config file to keep in sync.
+            const idx = data.joint - 1;
+            if (idx < 0 || idx >= servos.length) { reply({ type: 'error', message: `Invalid joint number: ${data.joint}` }); return; }
+            const sv = servos[idx];
+            if (!sv) { reply({ type: 'error', message: `Servo ${data.joint} is not available` }); return; }
+            const jointId = String(data.joint);
+            const values = data.values || {};
+            const applied = [];
+            const errors = [];
+            try {
+                if (values.p !== undefined || values.d !== undefined || values.i !== undefined || values.minStartupForce !== undefined) {
+                    const current = await sv.readPIDValues();
+                    const p = values.p ?? current.p, d = values.d ?? current.d,
+                          i = values.i ?? current.i, minStartupForce = values.minStartupForce ?? current.minStartupForce;
+                    await sv.writePIDValues(p, d, i, minStartupForce);
+                    applied.push('pid');
+                    log(`[COMMISSION] J${jointId} PID written: P=${p} D=${d} I=${i} MinStartup=${minStartupForce}`);
+                }
+                if (values.overloadTorque !== undefined || values.protTorque !== undefined || values.protTimeMs !== undefined) {
+                    const current = await sv.readOverloadProtection();
+                    const overloadTorque = values.overloadTorque ?? current.overloadTorque,
+                          protTorque     = values.protTorque ?? current.protTorque,
+                          protTimeMs     = values.protTimeMs ?? current.protTimeMs;
+                    await sv.writeOverloadProtection(overloadTorque, protTorque, protTimeMs);
+                    applied.push('overloadProtection');
+                    log(`[COMMISSION] J${jointId} overload protection written: OverloadTorque=${overloadTorque}% ProtTorque=${protTorque}% ProtTime=${protTimeMs}ms`);
+                }
+                if (values.minAngleDeg !== undefined && values.maxAngleDeg !== undefined) {
+                    await sv.writeAngleLimits(values.minAngleDeg, values.maxAngleDeg);
+                    applied.push('angleLimits');
+                    log(`[COMMISSION] J${jointId} angle limits written: ${values.minAngleDeg}° to ${values.maxAngleDeg}°`);
+                }
+                if (values.maxTorque !== undefined) {
+                    await sv.writeMaxTorque(values.maxTorque);
+                    applied.push('maxTorque');
+                    log(`[COMMISSION] J${jointId} max torque written: ${values.maxTorque}%`);
+                }
+                if (applied.length === 0) {
+                    reply({ type: 'error', message: 'No recognized fields in values' });
+                    return;
+                }
+                reply({ type: 'success', message: `Joint ${data.joint} EEPROM updated (${applied.join(', ')})`, applied });
+            } catch (error) {
+                reply({ type: 'error', message: `Failed to write servo ${data.joint} EEPROM: ${error.message}`, applied });
+            }
+            break;
+        }
+
+        // ===== End Tool Commands =====
+        case 'toolPing': {
+            try { reply({ type: 'toolPing', ok: await requireEndTool().pingTool() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to ping tool: ' + e.message }); }
+            break;
+        }
+        case 'toolGetIdentity': {
+            try { reply({ type: 'toolIdentity', ...await requireEndTool().getToolIdentity() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool identity: ' + e.message }); }
+            break;
+        }
+        case 'toolGetStatus': {
+            try { reply({ type: 'toolStatus', ...await requireEndTool().getToolStatus() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool status: ' + e.message }); }
+            break;
+        }
+        case 'toolSetPwm': {
+            try {
+                await requireEndTool().setPwmOutputs(
+                    Number.isFinite(data.pwm1Duty) ? data.pwm1Duty : 0,
+                    Number.isFinite(data.pwm2Duty) ? data.pwm2Duty : 0,
+                    data.enable1 !== false, data.enable2 !== false);
+                reply({ type: 'success', message: 'Tool PWM outputs updated' });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool PWM: ' + e.message }); }
+            break;
+        }
+        case 'toolGetPwmState': {
+            try { reply({ type: 'toolPwmState', ...await requireEndTool().getPwmState() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool PWM state: ' + e.message }); }
+            break;
+        }
+        case 'toolReadCurrents': {
+            try { reply({ type: 'toolCurrents', ...await requireEndTool().readPwmCurrents() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool currents: ' + e.message }); }
+            break;
+        }
+        case 'toolReadAdc': {
+            try { reply({ type: 'toolAdc', ...await requireEndTool().readAdcData() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool ADC data: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoEnabled': {
+            try {
+                await requireEndTool().setHobbyServoEnabled(data.enabled !== false);
+                reply({ type: 'success', message: `Tool hobby servo ${data.enabled !== false ? 'enabled' : 'disabled'}` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo enable: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoPosition': {
+            try {
+                await requireEndTool().setHobbyServoPosition(Number.isFinite(data.position) ? data.position : 0);
+                reply({ type: 'success', message: `Tool hobby servo position set to ${data.position}` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo position: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoAngle': {
+            try {
+                await requireEndTool().setHobbyServoAngle(Number.isFinite(data.angle) ? data.angle : 0);
+                reply({ type: 'success', message: `Tool hobby servo angle set to ${data.angle}` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo angle: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoEnabledAndAngle': {
+            try {
+                const angle = Number.isFinite(data.angle) ? data.angle : 0;
+                await requireEndTool().setHobbyServoEnabledAndAngle(angle);
+                reply({ type: 'success', message: `Tool hobby servo enabled and set to ${angle}°` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo enabled+angle: ' + e.message }); }
+            break;
+        }
+        case 'toolGetServoState': {
+            try { reply({ type: 'toolServoState', ...await requireEndTool().getHobbyServoState() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool servo state: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoSlewRate': {
+            try {
+                const rate = Number.isFinite(data.rate) ? data.rate : 0;
+                await requireEndTool().setHobbyServoSlewRate(rate);
+                reply({ type: 'success', message: `Tool hobby servo slew rate set to ${rate} steps/tick` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo slew rate: ' + e.message }); }
+            break;
+        }
+        case 'toolSetServoCurrentLimit': {
+            try {
+                const limitMa = Number.isFinite(data.limitMa) ? data.limitMa : 0;
+                await requireEndTool().setHobbyServoCurrentLimit(limitMa);
+                reply({ type: 'success', message: `Tool hobby servo current limit set to ${limitMa} mA` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool servo current limit: ' + e.message }); }
+            break;
+        }
+        case 'toolGetServoSlewStatus': {
+            try { reply({ type: 'toolServoSlewStatus', ...await requireEndTool().getHobbyServoSlewStatus() }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to read tool servo slew status: ' + e.message }); }
+            break;
+        }
+        case 'toolSetWatchdog': {
+            try {
+                await requireEndTool().setWatchdogTimeout(Number.isFinite(data.timeoutMs) ? data.timeoutMs : 0);
+                reply({ type: 'success', message: `Tool watchdog set to ${data.timeoutMs} ms` });
+            } catch (e) { reply({ type: 'error', message: 'Failed to set tool watchdog: ' + e.message }); }
+            break;
+        }
+        case 'toolClearFaults': {
+            try { await requireEndTool().clearToolFaults(); reply({ type: 'success', message: 'Tool faults cleared' }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to clear tool faults: ' + e.message }); }
+            break;
+        }
+        case 'toolReset': {
+            try { await requireEndTool().resetTool(); reply({ type: 'success', message: 'Tool reset command sent' }); }
+            catch (e) { reply({ type: 'error', message: 'Failed to reset tool: ' + e.message }); }
+            break;
+        }
+
+        default:
+            reply({ type: 'error', message: `Unknown bus command: ${command}` });
+    }
+}
+
+// ===== Shutdown =====
+function abortPendingBusWork() {
+    workerShuttingDown = true;
+    stopBusTickLoop();
+    while (busWriteQueue.length > 0) busWriteQueue.shift().reject(new Error('Worker shutting down'));
+    while (writeQueue.length > 0) writeQueue.shift().reject(new Error('Worker shutting down'));
+    isWriting = false;
+    clearAllServoPendingTransactions();
+}
+
+async function closeSerialPort() {
+    if (!sharedSerialPort || !sharedSerialPort.isOpen) return;
+    await Promise.race([
+        new Promise(resolve => sharedSerialPort.close(err => { if (err) log('Serial close error: ' + err.message, true); resolve(); })),
+        new Promise(resolve => setTimeout(resolve, 2000))
+    ]);
+}
+
+async function shutdown() {
+    log('Servo worker shutting down...');
+    abortPendingBusWork();
+    await waitForBusTickToFinish();
+    await closeSerialPort();
+    log('Servo worker shutdown complete');
+    process.exit(0);
+}
+
+// ===== Message Handler (Main → Worker) =====
+process.on('message', (msg) => {
+    if (!msg || !msg.type) return;
+
+    if (msg.type !== 'status') {
+        vlog(`[CMD] type=${msg.type}${msg.command ? ' cmd=' + msg.command : ''}${msg.joint !== undefined ? ' joint=' + msg.joint : ''}${msg.angle !== undefined ? ' angle=' + msg.angle : ''} client=${msg.clientId || '-'}`);
+    }
+
+    if (msg.type === 'shutdown') {
+        shutdown();
+        return;
+    }
+
+    if (msg.type === 'immediateBusCommand') {
+        scheduleImmediateCommand(msg);
+        return;
+    }
+
+    if (msg.type === 'busCommand') {
+        enqueueBusWrite(async () => {
+            await handleBusCommand(msg.clientId, msg);
+        }, { command: msg.command, joint: msg.joint }).catch((error) => {
+            const errMsg = error && error.message ? error.message : String(error);
+            if (!errMsg.includes('Superseded')) {
+                log('[CMD] Bus command failed (' + msg.command + '): ' + errMsg, true);
+            }
+            sendResponse(msg.clientId, msg.requestId, { type: 'error', message: errMsg });
+        });
+        return;
+    }
+});
+
+// ===== Trainee zero trims (persisted across restarts) =====
+// A student zero calibration that never touches servo EEPROM: each joint's
+// trim shifts its 0° in software (ServoController.setZeroTrimSteps), so
+// resetting the trim to 0 always restores the real calibration exactly.
+// Capped so a mis-aligned joint can't be "calibrated" a long way off.
+//
+// Stored outside the git working tree: the service runs as a restricted root
+// while the repo is owned by the deploying user, so a service-written file
+// inside the repo would fail to save with EACCES.
+const MAX_ZERO_TRIM_DEGREES = 10;
+const MAX_ZERO_TRIM_STEPS   = Math.round(MAX_ZERO_TRIM_DEGREES * 2048 / 180);
+const ZERO_TRIM_CONFIG_DIR  = process.env.ROBOT_ARM_STATE_DIR || '/var/lib/robot-arm-st3215';
+const ZERO_TRIM_CONFIG_PATH = path.join(ZERO_TRIM_CONFIG_DIR, 'trainee-zero-trims.json');
+
+function zeroTrimStepsToDegrees(trimSteps) {
+    return Math.round((trimSteps * 180 / 2048) * 100) / 100;
+}
+
+function loadJointZeroTrims() {
+    if (!fs.existsSync(ZERO_TRIM_CONFIG_PATH)) return;
+    let cfg;
+    try {
+        cfg = JSON.parse(fs.readFileSync(ZERO_TRIM_CONFIG_PATH, 'utf8'));
+    } catch (e) {
+        log('trainee-zero-trims.json parse error, ignoring: ' + e.message, true);
+        return;
+    }
+    const joints = (cfg && cfg.joints) || {};
+    for (let i = 0; i < JOINT_COUNT; i++) {
+        const trimSteps = joints[String(i + 1)];
+        if (!Number.isFinite(trimSteps) || trimSteps === 0) continue;
+        if (Math.abs(trimSteps) > MAX_ZERO_TRIM_STEPS) {
+            log(`Joint ${i + 1} trainee zero trim ${trimSteps} is outside ±${MAX_ZERO_TRIM_STEPS} steps, ignoring`, true);
+            continue;
+        }
+        jointZeroTrimSteps[i] = trimSteps;
+        if (servos[i]) servos[i].setZeroTrimSteps(trimSteps);
+        log(`Joint ${i + 1} trainee zero trim loaded: ${trimSteps} steps (${zeroTrimStepsToDegrees(trimSteps)}°)`);
+    }
+}
+
+// Applies the trim live, tells clients, and saves every joint's trim.
+// Returns false if it could not be saved (the trim still applies until restart).
+function applyJointZeroTrim(jointIndex, trimSteps) {
+    jointZeroTrimSteps[jointIndex] = trimSteps;
+    if (servos[jointIndex]) servos[jointIndex].setZeroTrimSteps(trimSteps);
+    rebuildJointConfigsCache();
+
+    const joints = {};
+    jointZeroTrimSteps.forEach((steps, i) => { if (steps !== 0) joints[String(i + 1)] = steps; });
+    try {
+        fs.mkdirSync(ZERO_TRIM_CONFIG_DIR, { recursive: true });
+        fs.writeFileSync(ZERO_TRIM_CONFIG_PATH, JSON.stringify({ joints }, null, 2));
+        return true;
+    } catch (e) {
+        log('Failed to save trainee-zero-trims.json: ' + e.message, true);
+        return false;
+    }
+}
+
+// ===== Start =====
+// EEPROM values (PID, overload protection, angle limits, max torque) are no
+// longer auto-applied at startup — they're configured manually via the
+// Commissioning panel or Calibration page and persist on the servo's own
+// EEPROM, so there's nothing to reapply here.
+log(`Servo worker starting (pid=${process.pid} VERBOSE_LOG=${VERBOSE_LOG} STATUS_POLL_MS=${STATUS_POLL_INTERVAL_MS} MIN_GAP_MS=${MIN_BUS_TICK_GAP_MS} JOINT_GAP_MS=${JOINT_POLL_GAP_MS})`);
+initializeServos().then(async () => {
+    loadJointZeroTrims();
+    rebuildJointConfigsCache();
+    await refreshJointStatusCacheFromBus();
+    startBusTickLoop();
+    process.send({ type: 'ready', jointConfigs: getJointConfigsSnapshot() });
+    log('Servo worker ready');
+}).catch((error) => {
+    log('Servo worker init failed: ' + (error.message || error), true);
+    process.send({ type: 'initError', message: error.message || String(error) });
+    process.exit(1);
+});

@@ -1,0 +1,1183 @@
+/**
+ * Robot Arm Client
+ * 
+ * This module handles communication with the Raspberry Pi server.
+ * It uses WebSocket to send commands and receive status updates.
+ * 
+ * Simple, beginner-friendly WebSocket client.
+ */
+
+class RobotArmClient {
+    constructor() {
+        this.ws = null;
+        this.isConnected = false;
+        this.piAddress = '192.168.1.160';
+        this.piPort = 8080;
+        this.onStatusUpdate = null; // Callback function for status updates
+        this.onConfigUpdate = null; // Callback function for configuration updates
+        this.reconnectInterval = null;
+        this.jointConfigs = []; // Store joint configurations
+        this.isConnecting = false; // Flag to prevent multiple simultaneous connection attempts
+        this.hasEverConnected = false; // Track if we've ever successfully connected
+        this.pendingRequests = new Map(); // requestId -> {resolve, reject, timeout}
+        this.nextRequestId = 1;
+        this.serverPushesStatus = false;
+        this.serverStatusIntervalMs = 100;
+        this.lastStatusPushAt = 0;
+        this.hasArmControl = false;
+        this.controlHolder = null;
+        this.controlLocked = false;
+        this.controlLockedUntil = null;
+        this.onControlUpdate = null;
+        this.onEndToolUpdate = null; // Callback for end tool changes
+        this.endToolState = null;    // Last end tool report from the server
+        this.onReconnected = null;
+        this.onPushModeReady = null;
+        // Linear path state
+        this._linearResolve = null;
+        this._linearReject  = null;
+        this._linearTimeout = null;
+        // Motion completion listeners (functions called on each status push)
+        this._motionListeners = [];
+        // Optional hook called with a message each time moveJoint() retries a
+        // bus fault, so program runners can show it in their log.
+        this.onMoveRetry = null;
+    }
+
+    /**
+     * Connects to the Raspberry Pi server
+     * @param {string} address - IP address of Raspberry Pi
+     * @param {number} port - Port number (default: 8080)
+     */
+    async connect(address, port = 8080) {
+        // Prevent multiple simultaneous connection attempts
+        if (this.isConnecting) {
+            console.log('Connection attempt already in progress, ignoring...');
+            return Promise.reject(new Error('Connection attempt already in progress'));
+        }
+        
+        // If already connected, don't reconnect
+        if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('Already connected to Raspberry Pi');
+            return Promise.resolve();
+        }
+        
+        this.piAddress = address;
+        this.piPort = port;
+        this.isConnecting = true;
+        this.serverPushesStatus = false;
+        this.lastStatusPushAt = 0;
+
+        return new Promise((resolve, reject) => {
+            try {
+                // Create WebSocket URL
+                const wsUrl = `ws://${address}:${port}`;
+                console.log('Connecting to:', wsUrl);
+
+                // Create WebSocket connection
+                this.ws = new WebSocket(wsUrl);
+
+                // Handle connection open
+                this.ws.onopen = () => {
+                    console.log('Connected to Raspberry Pi');
+                    const isReconnect = this.hasEverConnected;
+                    this.isConnected = true;
+                    this.hasEverConnected = true;
+                    this.isConnecting = false;
+                    this.updateConnectionStatus(true);
+                    this.stopReconnect();
+                    if (isReconnect && typeof this.onReconnected === 'function') {
+                        this.onReconnected();
+                    }
+                    resolve();
+                };
+
+                // Handle incoming messages
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleMessage(data);
+                    } catch (error) {
+                        console.error('Error parsing message:', error);
+                    }
+                };
+
+                // Handle connection error
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.isConnecting = false;
+                    this.updateConnectionStatus(false);
+                    reject(error);
+                };
+
+                // Handle connection close
+                this.ws.onclose = () => {
+                    console.log('Disconnected from Raspberry Pi');
+                    this.clearPendingRequests('Connection closed');
+                    this.isConnected = false;
+                    this.isConnecting = false;
+                    this.hasArmControl = false;
+                    this.controlHolder = null;
+                    this.controlLocked = false;
+                    this.controlLockedUntil = null;
+                    this.updateConnectionStatus(false);
+                    // Only start reconnecting if we had successfully connected before
+                    if (this.hasEverConnected) {
+                    this.startReconnect();
+                    }
+                };
+
+            } catch (error) {
+                console.error('Failed to connect:', error);
+                this.isConnecting = false;
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Disconnects from the Raspberry Pi server
+     */
+    disconnect() {
+        this.stopReconnect();
+        this.clearPendingRequests('Disconnected from Raspberry Pi');
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        this.isConnected = false;
+        this.hasArmControl = false;
+        this.controlHolder = null;
+        this.controlLocked = false;
+        this.controlLockedUntil = null;
+        this.serverPushesStatus = false;
+        this.lastStatusPushAt = 0;
+        this.updateConnectionStatus(false);
+    }
+
+    /**
+     * Sends a command to the Raspberry Pi
+     * @param {string} command - Command name (e.g., 'moveJoint', 'stopJoint')
+     * @param {Object} data - Command data/parameters
+     */
+    sendCommand(command, data = {}) {
+        if (!this.isConnected || !this.ws) {
+            console.error('Not connected to Raspberry Pi');
+            return false;
+        }
+
+        try {
+            const message = {
+                command: command,
+                ...data
+            };
+            this.ws.send(JSON.stringify(message));
+            return true;
+        } catch (error) {
+            console.error('Error sending command:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Sends a command and waits for one response that has the same requestId.
+     * @param {string} command - Command name
+     * @param {Object} data - Command payload
+     * @param {number} timeoutMs - Timeout in milliseconds
+     * @returns {Promise<Object>} Response payload
+     */
+    sendRequest(command, data = {}, timeoutMs = 5000) {
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected || !this.ws) {
+                reject(new Error('Not connected to Raspberry Pi'));
+                return;
+            }
+
+            const requestId = this.nextRequestId++;
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error(`Request timeout: ${command}`));
+            }, timeoutMs);
+
+            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+
+            const sent = this.sendCommand(command, {
+                requestId: requestId,
+                ...data
+            });
+
+            if (!sent) {
+                clearTimeout(timeout);
+                this.pendingRequests.delete(requestId);
+                reject(new Error(`Failed to send command: ${command}`));
+            }
+        });
+    }
+
+    /**
+     * Updates local control state from a controlStatus message or takeControl response.
+     * @param {Object} data - Server message with youHaveControl / hasControl / holder
+     */
+    applyControlStatus(data) {
+        if (!data) {
+            return;
+        }
+
+        if (data.youHaveControl !== undefined) {
+            this.hasArmControl = !!data.youHaveControl;
+        } else if (data.hasControl !== undefined) {
+            this.hasArmControl = !!data.hasControl;
+        }
+
+        if (data.hasHolder === false) {
+            this.controlHolder = null;
+        } else if (data.holder !== undefined) {
+            this.controlHolder = data.holder || null;
+        }
+
+        if (data.locked !== undefined) {
+            this.controlLocked = !!data.locked;
+            this.controlLockedUntil = data.locked ? (data.lockedUntil || null) : null;
+        }
+    }
+
+    /**
+     * Handles incoming messages from the Raspberry Pi
+     * @param {Object} data - Parsed message data
+     */
+    handleMessage(data) {
+        // Handle request/response messages first (for async request calls)
+        if (data && data.requestId !== undefined) {
+            const pending = this.pendingRequests.get(data.requestId);
+            if (pending) {
+                clearTimeout(pending.timeout);
+                this.pendingRequests.delete(data.requestId);
+                if (data.type === 'controlStatus' || data.youHaveControl !== undefined || data.hasControl !== undefined) {
+                    this.applyControlStatus(data);
+                    if (this.onControlUpdate) {
+                        this.onControlUpdate(data);
+                    }
+                }
+                if (data.type === 'status') {
+                    this.lastStatusPushAt = Date.now();
+                    if (this.onStatusUpdate) {
+                        this.onStatusUpdate(data.joints);
+                    }
+                    this._notifyMotionListeners(data.joints);
+                }
+                if (data.type === 'error') {
+                    pending.reject(new Error(data.message || 'Server error'));
+                } else {
+                    pending.resolve(data);
+                }
+                return;
+            }
+        }
+
+        if (data.type === 'connected' && data.pushesStatus) {
+            this.serverPushesStatus = true;
+            if (typeof data.statusIntervalMs === 'number' && data.statusIntervalMs > 0) {
+                this.serverStatusIntervalMs = data.statusIntervalMs;
+            }
+            if (typeof this.onPushModeReady === 'function') {
+                this.onPushModeReady();
+            }
+        }
+
+        // Handle status updates (from getStatus or server push)
+        if (data.type === 'status') {
+            this.lastStatusPushAt = Date.now();
+            if (this.onStatusUpdate) {
+                this.onStatusUpdate(data.joints);
+            }
+            this._notifyMotionListeners(data.joints);
+        }
+
+        if (data.type === 'controlStatus') {
+            this.applyControlStatus(data);
+            if (data.message && typeof showAppMessage === 'function') {
+                showAppMessage(data.message);
+            }
+            if (this.onControlUpdate) {
+                this.onControlUpdate(data);
+            }
+        }
+
+        // Handle linear path completion events (unsolicited, no requestId)
+        if (data.type === 'linearPathComplete') {
+            if (this._linearTimeout) { clearTimeout(this._linearTimeout); this._linearTimeout = null; }
+            if (this._linearResolve) { this._linearResolve({ type: 'linearPathComplete' }); this._linearResolve = null; this._linearReject = null; }
+            return;
+        }
+        if (data.type === 'linearPathError') {
+            if (this._linearTimeout) { clearTimeout(this._linearTimeout); this._linearTimeout = null; }
+            if (this._linearReject) { this._linearReject(new Error(data.message || 'Linear path error')); this._linearResolve = null; this._linearReject = null; }
+            return;
+        }
+
+        // Handle joint configuration updates
+        if (data.type === 'jointConfigs') {
+            // Store joint configurations
+            // For ST3215 version, we get basic servo info (count, available servos)
+            // For I2C version with kinematics, we get kinematics data
+            if (data.joints && data.joints.length > 0 && data.joints[0].kinematics) {
+                // I2C version with kinematics data
+            this.jointConfigs = data.joints.map(jointConfig => {
+                if (jointConfig.available && jointConfig.kinematics) {
+                    return {
+                        d: jointConfig.kinematics.d,
+                        a: jointConfig.kinematics.a,
+                        theta: jointConfig.kinematics.theta,
+                        alpha: jointConfig.kinematics.alpha
+                    };
+                }
+                return null;
+            });
+            } else {
+                // ST3215 version - just store the count and available joints
+                this.jointConfigs = data.joints || [];
+                console.log(`Joint configurations loaded: ${data.count} of ${data.total} servos discovered`);
+            }
+            
+            // Notify callback if set
+            if (this.onConfigUpdate) {
+                this.onConfigUpdate(this.jointConfigs);
+            }
+            
+            console.log('Joint configurations loaded:', this.jointConfigs);
+        }
+
+        // End tool: the controller read register 3 and resolved it against the
+        // URDF. Mirror it so the app measures to the same tool tip.
+        if (data.type === 'endTool') {
+            this.endToolState = data;
+            if (typeof applyEndToolState === 'function') {
+                applyEndToolState(data);
+            }
+            if (this.onEndToolUpdate) {
+                this.onEndToolUpdate(data);
+            }
+        }
+
+        if (data.type === 'urdfConfig') {
+            // Server is pushing its authoritative URDF - apply it locally
+            if (data.urdfText && typeof applyLoadedUrdf === 'function') {
+                applyLoadedUrdf(data.urdfText, 'server').catch(function(e) {
+                    console.warn('Failed to apply server URDF:', e.message);
+                });
+            }
+            return;
+        }
+
+        if (data.type === 'servoThermalFault') {
+            console.warn('Servo thermal fault:', data.message);
+            if (typeof showAppMessage === 'function') {
+                showAppMessage('⚠️ ' + (data.message || 'A servo overheated - waiting for cool-down'));
+            }
+            return;
+        }
+
+        if (data.type === 'servoWorkerCrashed') {
+            console.error('Servo worker crashed (code ' + data.code + ') - server is restarting it');
+            if (typeof showAppMessage === 'function') {
+                showAppMessage('⚠️ Servo controller crashed - reconnecting automatically');
+            }
+            return;
+        }
+
+        if (data.type === 'error') {
+            console.error('Server error:', data.message);
+            if (typeof showAppMessage === 'function') {
+                if (data.controlRequired || data.joint !== undefined) {
+                    showAppMessage(data.message);
+                }
+            }
+        }
+
+        if (data.type === 'success' && data.message && data.message.indexOf('moving to') >= 0) {
+            console.log('Server:', data.message);
+        }
+
+    }
+
+    /**
+     * Updates the connection status indicator in the UI
+     * @param {boolean} connected - Whether we're connected
+     */
+    updateConnectionStatus(connected) {
+        const indicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        
+        if (indicator && statusText) {
+            if (connected) {
+                indicator.classList.add('connected');
+                statusText.textContent = 'Connected';
+            } else {
+                indicator.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+            }
+        }
+    }
+
+    /**
+     * Starts automatic reconnection attempts
+     * Only reconnects if we had successfully connected before
+     */
+    startReconnect() {
+        // Only reconnect if we had a previous successful connection
+        if (this.isConnected || !this.hasEverConnected) {
+            return;
+        }
+        
+        // Don't start reconnecting if already connecting
+        if (this.isConnecting) {
+            return;
+        }
+
+        this.stopReconnect();
+        
+        console.log('Attempting to reconnect in 5 seconds...');
+        this.reconnectInterval = setInterval(() => {
+            // Don't try to reconnect if already connected or connecting
+            if (this.isConnected || this.isConnecting) {
+                this.stopReconnect();
+                return;
+            }
+            
+            console.log('Reconnecting...');
+            this.connect(this.piAddress, this.piPort).catch(() => {
+                console.log('Reconnection failed, will try again in 5 seconds...');
+            });
+        }, 5000);
+    }
+
+    /**
+     * Stops automatic reconnection attempts
+     */
+    stopReconnect() {
+        if (this.reconnectInterval) {
+            clearInterval(this.reconnectInterval);
+            this.reconnectInterval = null;
+        }
+    }
+
+    /**
+     * Rejects all pending request promises.
+     * @param {string} reason - Reason text
+     */
+    clearPendingRequests(reason) {
+        const error = new Error(reason || 'Request cancelled');
+        this.pendingRequests.forEach((pending) => {
+            clearTimeout(pending.timeout);
+            pending.reject(error);
+        });
+        this.pendingRequests.clear();
+    }
+
+    // ===== Robot Arm Command Functions =====
+
+    /**
+     * Moves a joint to a specific angle
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     * @param {number} angle - Target angle in degrees
+     * @param {number} speed - Optional speed in step/s (default: 1500)
+     */
+    async moveJoint(jointNumber, angle, speed = 1500) {
+        // Ensure speed is a valid number
+        const speedValue = (typeof speed === 'number' && !isNaN(speed) && speed >= 0) ? speed : 1500;
+        // The worker already retries a lost ACK a few times back-to-back (a few
+        // hundred ms). A servo that stays silent longer than that - seen on
+        // joint 2 under load at a low, extended pose - needs a longer pause with
+        // the bus released so polling and the torque heartbeat keep running.
+        // Re-sending a move is idempotent, so retrying here is safe.
+        const MAX_TRIES = 3;
+        const RETRY_PAUSE_MS = 400;
+        let lastError = null;
+        for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+            try {
+                const response = await this.sendRequest('moveJoint', {
+                    joint: jointNumber,
+                    angle: angle,
+                    speed: speedValue
+                }, 8000);
+                if (response && response.type === 'error') {
+                    throw new Error(response.message || 'Move failed');
+                }
+                return response;
+            } catch (error) {
+                lastError = error;
+                if (attempt >= MAX_TRIES || !this._isRetryableMoveError(error)) break;
+                const msg = 'Joint ' + jointNumber + ' did not respond (' + error.message + '), retrying (' + attempt + '/' + (MAX_TRIES - 1) + ')';
+                console.warn(msg);
+                if (typeof this.onMoveRetry === 'function') { try { this.onMoveRetry(msg); } catch (_) {} }
+                await new Promise(resolve => setTimeout(resolve, RETRY_PAUSE_MS));
+            }
+        }
+        throw lastError;
+    }
+
+    /**
+     * True for transient bus faults worth re-sending a move for; false for
+     * things a retry cannot fix (no control session, bad joint, overload).
+     * @param {Error} error
+     */
+    _isRetryableMoveError(error) {
+        const m = String(error && error.message ? error.message : error).toLowerCase();
+        if (m.includes('control') || m.includes('invalid joint') || m.includes('overload') || m.includes('temperature')) return false;
+        return m.includes('timeout') || m.includes('bus') || m.includes('not available') || m.includes('checksum') || m.includes('no response');
+    }
+
+    /**
+     * Internal: fire all registered motion listeners with the latest joint array.
+     * @param {Array} joints
+     */
+    _notifyMotionListeners(joints) {
+        if (!this._motionListeners || this._motionListeners.length === 0) return;
+        for (const fn of this._motionListeners.slice()) {
+            try { fn(joints); } catch (_) {}
+        }
+    }
+
+    /**
+     * Returns a promise that resolves once all available joints have stopped moving.
+     * Call this after dispatching move commands to block until the arm is truly still.
+     *
+     * @param {number} timeoutMs - Safety timeout in ms (default 30000). Resolves (not rejects) on timeout.
+     */
+    waitForMotionComplete(timeoutMs = 30000) {
+        // IMPORTANT: call this AFTER awaiting Promise.allSettled() on the move
+        // commands. The Pi fires status updates during the serial write drain
+        // (immediately after writing each servo, before it starts moving) which
+        // show isMoving:false. Those fire before this listener is registered, so
+        // they are safely ignored. By the time this is called the drain is done
+        // and the bus-tick loop has resumed with real status readings.
+        return new Promise((resolve) => {
+            let stableCount = 0;
+            const STABLE_NEEDED = 3; // 3 × 20 ms poll = 60 ms stability window
+
+            const cleanup = () => {
+                const idx = this._motionListeners.indexOf(onStatus);
+                if (idx !== -1) this._motionListeners.splice(idx, 1);
+                clearTimeout(safetyTimer);
+            };
+
+            const onStatus = (joints) => {
+                if (!Array.isArray(joints) || joints.length === 0) return;
+                const available = joints.filter(j => j && j.available);
+                if (available.length === 0) return;
+
+                if (available.some(j => j.isMoving)) {
+                    stableCount = 0;
+                } else {
+                    stableCount++;
+                    if (stableCount >= STABLE_NEEDED) {
+                        cleanup();
+                        resolve();
+                    }
+                }
+            };
+
+            const safetyTimer = setTimeout(() => {
+                cleanup();
+                resolve();
+            }, timeoutMs);
+
+            this._motionListeners.push(onStatus);
+        });
+    }
+
+    /**
+     * Fire-and-forget move for jog buttons (no wait for server reply).
+     * @param {number} jointNumber
+     * @param {number} angle
+     * @param {number} speed
+     */
+    moveJointJog(jointNumber, angle, speed = 1500) {
+        const speedValue = (typeof speed === 'number' && !isNaN(speed) && speed >= 0) ? speed : 1500;
+        return this.sendCommand('moveJoint', {
+            joint: jointNumber,
+            angle: angle,
+            speed: speedValue
+        });
+    }
+
+    /**
+     * Sets the movement speed for a specific joint
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     * @param {number} speed - Speed in step/s (0-3400)
+     */
+    setSpeed(jointNumber, speed) {
+        return this.sendCommand('setSpeed', {
+            joint: jointNumber,
+            speed: speed
+        });
+    }
+
+    /**
+     * Sets the movement speed for all joints
+     * @param {number} speed - Speed in step/s (0-3400)
+     */
+    setSpeedAll(speed) {
+        return this.sendCommand('setSpeedAll', {
+            speed: speed
+        });
+    }
+
+    /**
+     * Sets the acceleration for a specific joint
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     * @param {number} acceleration - Acceleration value (0-254, unit: 100 step/s²)
+     */
+    setAcceleration(jointNumber, acceleration) {
+        // Ensure acceleration is a valid number and within range
+        const accValue = (typeof acceleration === 'number' && !isNaN(acceleration) && acceleration >= 0)
+            ? Math.max(0, Math.min(254, Math.round(acceleration)))
+            : 5; // Default acceleration
+        return this.sendCommand('setAcceleration', {
+            joint: jointNumber,
+            acceleration: accValue
+        });
+    }
+
+    /**
+     * Enables or disables torque for all joints
+     * @param {boolean} enabled - True to enable torque, false to disable
+     */
+    setTorqueAll(enabled) {
+        return this.sendRequest('setTorqueAll', {
+            enabled: enabled
+        });
+    }
+
+    /**
+     * Reads a joint's full commissioning-relevant EEPROM profile (PID gains,
+     * overload protection, angle limits, max torque) directly from the servo.
+     * @param {number} jointNumber
+     */
+    readServoEeprom(jointNumber) {
+        return this.sendRequest('readServoEeprom', {
+            joint: jointNumber
+        });
+    }
+
+    /**
+     * Reads the full raw EEPROM (0x00-0x27) and SRAM (0x28-0x45) blocks from
+     * a joint's servo, for the Calibration page - decoding against the
+     * STS3215 memory table happens client-side (see stsMemoryTable.js).
+     * Resolves to { joint, eepromBytes, sramBytes }.
+     * @param {number} jointNumber
+     */
+    readServoEepromRaw(jointNumber) {
+        return this.sendRequest('readServoEepromRaw', {
+            joint: jointNumber
+        });
+    }
+
+    /**
+     * Trainee zero calibration: makes the joint's current physical position
+     * read as 0°. Software-only (never written to servo EEPROM), needs the
+     * control session but not the password, and is capped server-side.
+     * The new trim arrives in the next jointConfigs broadcast (zeroTrimDegrees).
+     * @param {number} jointNumber - Joint number (1-6)
+     */
+    setJointZeroTrim(jointNumber) {
+        return this.sendRequest('setJointZeroTrim', {
+            joint: jointNumber
+        });
+    }
+
+    /**
+     * Removes a trainee zero trim, restoring the servo's own calibration.
+     * @param {number|string} jointNumber - Joint number (1-6), or 'all'
+     */
+    resetJointZeroTrim(jointNumber) {
+        return this.sendRequest('resetJointZeroTrim', {
+            joint: jointNumber
+        });
+    }
+
+    /**
+     * Writes a single raw EEPROM register from the Calibration page.
+     * Requires the control-lock password on top of holding the control
+     * session - this can reach registers outside the curated commissioning
+     * set, so the server gates it separately.
+     * @param {number} jointNumber
+     * @param {number} address - decimal EEPROM address
+     * @param {number} rawValue - raw register value (already scaled, not the decoded/meaningful value)
+     * @param {string} password
+     */
+    writeServoEepromRaw(jointNumber, address, rawValue, password) {
+        return this.sendRequest('writeServoEepromRaw', {
+            joint: jointNumber,
+            address,
+            rawValue,
+            password
+        });
+    }
+
+    /**
+     * Reads the ESP32 end tool's (ID 64) whole 64-byte register array for the
+     * Calibration page. Decode with endToolMemoryTable.js.
+     * @returns {Promise<{type:'endToolRegisters', bytes:number[]}>}
+     */
+    readEndToolRegisters() {
+        return this.sendRequest('readEndToolRegisters', {});
+    }
+
+    /**
+     * Writes one raw register on the end tool (Calibration page). Requires
+     * the control password, same as writeServoEepromRaw. Only Tool type ID
+     * (address 3) persists on the tool; everything else is RAM.
+     * @param {number} address - register address (see endToolMemoryTable.js)
+     * @param {number} rawValue - raw integer value (16-bit for 2-byte registers)
+     * @param {string} password - the control password
+     */
+    writeEndToolRegister(address, rawValue, password) {
+        return this.sendRequest('writeEndToolRegister', { address, rawValue, password });
+    }
+
+    /**
+     * Writes the given fields directly to a joint's servo EEPROM.
+     * @param {number} jointNumber
+     * Requires the control password, like writeServoEepromRaw.
+     * @param {object} values - any of: p, d, i, minStartupForce, overloadTorque,
+     *   protTorque, protTimeMs, minAngleDeg, maxAngleDeg, maxTorque
+     * @param {string} password - The control password
+     */
+    writeServoEeprom(jointNumber, values, password) {
+        return this.sendRequest('writeServoEeprom', {
+            joint: jointNumber,
+            values,
+            password
+        });
+    }
+
+    /**
+     * Stops motion on a specific joint
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     */
+    stopJoint(jointNumber) {
+        return this.sendCommand('stopJoint', {
+            joint: jointNumber
+        });
+    }
+
+    /**
+     * Stops all joints immediately
+     */
+    stopAllJoints() {
+        return this.sendCommand('stopAll');
+    }
+
+    /**
+     * Sets servo angle on a joint
+     * @param {number} jointNumber - Joint number
+     * @param {number} angle - Servo angle (0-180)
+     */
+    setServoAngle(jointNumber, angle) {
+        return this.sendCommand('setServo', {
+            joint: jointNumber,
+            angle: angle
+        });
+    }
+
+    /**
+     * Requests status update from all joints
+     */
+    requestStatus() {
+        return this.sendCommand('getStatus');
+    }
+
+    /**
+     * Ask the Pi to re-ping all servos and recreate any that were missing at startup.
+     */
+    rescanServos() {
+        return this.sendRequest('rescanServos', {}, 20000);
+    }
+
+    /**
+     * Best-effort hostname for this computer (Electron / Node only).
+     * @returns {string|null}
+     */
+    getClientHostname() {
+        try {
+            const os = require('os');
+            const name = os.hostname();
+            if (typeof name === 'string' && name.trim()) {
+                return name.trim();
+            }
+        } catch (error) {
+            // Browser-only build has no os module
+        }
+        return null;
+    }
+
+    /**
+     * Request exclusive control of arm bus writes (moves, torque, etc.).
+     * @param {string} label - Display name for this client
+     * @param {boolean} force - If true, take control from another app instance
+     * @param {string} [password] - Lock password, needed only to override another client's active lock
+     */
+    takeControl(label, force, password) {
+        return this.sendRequest('takeControl', {
+            label: label || 'electron',
+            force: force === true,
+            hostname: this.getClientHostname(),
+            password: password || undefined
+        }, 3000);
+    }
+
+    /**
+     * Release arm control so another client can takeControl.
+     */
+    releaseControl() {
+        return this.sendRequest('releaseControl', {}, 3000);
+    }
+
+    /**
+     * Take control (if free) and lock it exclusively until released or timed out.
+     * @param {string} password - Lock password
+     * @param {number} [durationMs] - Lock duration; server defaults to 15 min, caps at 60 min
+     * @param {string} [label] - Display name for this client
+     */
+    lockControl(password, durationMs, label) {
+        return this.sendRequest('lockControl', {
+            password: password,
+            durationMs: durationMs || undefined,
+            label: label || 'electron',
+            hostname: this.getClientHostname()
+        }, 3000);
+    }
+
+    /**
+     * Clear the control lock. The current holder needs no password; anyone
+     * else must supply the lock password.
+     * @param {string} [password]
+     */
+    unlockControl(password) {
+        return this.sendRequest('unlockControl', { password: password || undefined }, 3000);
+    }
+
+    /**
+     * Check the control-lock password without taking, locking or changing
+     * anything. Resolves { ok, message }.
+     * @param {string} password
+     */
+    verifyPassword(password) {
+        return this.sendRequest('verifyPassword', { password: password }, 3000);
+    }
+
+    /**
+     * Query who holds arm control.
+     */
+    getControlStatus() {
+        return this.sendRequest('getControlStatus', {}, 3000);
+    }
+
+    /**
+     * Read Pi server bus tick / queue diagnostics (instant - does not use servo bus).
+     */
+    getServerDiagnostics() {
+        return this.sendRequest('getServerDiagnostics', {}, 3000);
+    }
+
+    /**
+     * Gets the current status from all joints and returns it as a promise
+     * This is useful for waiting for status in Blockly programs
+     * @returns {Promise<Array>} Promise that resolves with array of joint status objects
+     */
+    async getStatus() {
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected) {
+                reject(new Error('Not connected to server'));
+                return;
+            }
+
+            // Set up a one-time listener for the status response
+            // We need to intercept the message handler temporarily to capture the response
+            const originalHandleMessage = this.handleMessage.bind(this);
+            let statusResolved = false;
+            
+            const timeout = setTimeout(() => {
+                if (!statusResolved) {
+                    statusResolved = true;
+                    this.handleMessage = originalHandleMessage;
+                    reject(new Error('Status request timeout'));
+                }
+            }, 3000); // 3 second timeout
+
+            // Temporarily override handleMessage to capture the status response
+            this.handleMessage = (data) => {
+                // If this is a status response, resolve the promise
+                if (data.type === 'status' && !statusResolved) {
+                    statusResolved = true;
+                    clearTimeout(timeout);
+                    this.handleMessage = originalHandleMessage;
+                    resolve(data.joints || []);
+                    return;
+                }
+                
+                // For all other messages, call the original handler
+                originalHandleMessage(data);
+            };
+
+            // Request status
+            this.requestStatus();
+        });
+    }
+
+    /**
+     * Requests joint configurations (kinematics parameters) from all joints
+     */
+    requestJointConfigs() {
+        return this.sendCommand('getJointConfigs');
+    }
+
+    /**
+     * Loads URDF on the server-side kinematics service.
+     * @param {string} urdfXml - Full URDF XML text
+     * @returns {Promise<Object>}
+     */
+    async loadKinematicsURDF(urdfXml) {
+        const response = await this.sendRequest('kinematicsLoadURDF', { urdfXml: urdfXml }, 8000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Failed to load URDF on server');
+        }
+        return response;
+    }
+
+    /**
+     * Gets kinematics info from the server.
+     * @returns {Promise<Object>}
+     */
+    async getKinematicsInfo() {
+        const response = await this.sendRequest('kinematicsGetInfo', {}, 5000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Failed to get kinematics info');
+        }
+        return response;
+    }
+
+    /**
+     * Runs forward kinematics on the server.
+     * @param {Array<number>} jointAngles
+     * @returns {Promise<Object>} FK result
+     */
+    async forwardKinematics(jointAngles) {
+        const response = await this.sendRequest('kinematicsForwardKinematics', { jointAngles: jointAngles }, 5000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Forward kinematics failed');
+        }
+        return response.result;
+    }
+
+    /**
+     * Runs step-by-step forward kinematics on the server.
+     * @param {Array<number>} jointAngles
+     * @returns {Promise<Object>} FK steps result
+     */
+    async forwardKinematicsSteps(jointAngles) {
+        const response = await this.sendRequest('kinematicsForwardKinematicsSteps', { jointAngles: jointAngles }, 5000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Forward kinematics steps failed');
+        }
+        return response.result;
+    }
+
+    /**
+     * Runs forward kinematics for many joint-angle sets (batch).
+     * @param {Array<Array<number>>} jointAnglesList
+     * @returns {Promise<Array<{x:number,y:number,z:number}>>} List of positions (mm)
+     */
+    async forwardKinematicsBatch(jointAnglesList) {
+        const response = await this.sendRequest('kinematicsForwardKinematicsBatch', {
+            jointAnglesList: jointAnglesList
+        }, 10000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Forward kinematics batch failed');
+        }
+        return response.positions;
+    }
+
+    /**
+     * Runs inverse kinematics on the server.
+     * @param {Object} targetPose
+     * @param {Array<number>|null} initialAngles
+     * @returns {Promise<Array<number>|null>}
+     */
+    async inverseKinematics(targetPose, initialAngles = null) {
+        const response = await this.sendRequest('kinematicsInverseKinematics', {
+            targetPose: targetPose,
+            initialAngles: initialAngles
+        }, 12000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Inverse kinematics failed');
+        }
+        return response.result;
+    }
+
+    /**
+     * Refines IK solution using both position and tool orientation.
+     * @param {{ x:number, y:number, z:number }} targetPose
+     * @param {Array<number>} baseAngles
+     * @param {{ x:number, y:number, z:number }} desiredOrientation
+     * @returns {Promise<{angles:Array<number>, positionErrorMm:number, orientationErrorDeg:number, achievedPosition:Object|null}>}
+     */
+    async refineOrientationWithAccuracy(targetPose, baseAngles, desiredOrientation, referenceAngles) {
+        const response = await this.sendRequest('kinematicsRefineOrientationWithAccuracy', {
+            targetPose: targetPose,
+            baseAngles: baseAngles,
+            desiredOrientation: desiredOrientation,
+            referenceAngles: referenceAngles || null
+        }, 20000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Refine orientation failed');
+        }
+        return response.result;
+    }
+
+    /**
+     * Sets joint 6 on the given angles so the tool spin matches
+     * orientation.rotation; joints 1-5 are returned unchanged.
+     * @param {Array<number>} angles
+     * @param {{ x, y, z, rotation: number }} orientation
+     * @returns {Promise<{angles:Array<number>, spinErrorDeg:number|null}>}
+     */
+    async applyToolSpin(angles, orientation) {
+        const response = await this.sendRequest('kinematicsApplyToolSpin', {
+            angles: angles,
+            orientation: orientation
+        }, 5000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Apply tool spin failed');
+        }
+        return response.result;
+    }
+
+    /**
+     * Execute a Cartesian-linear move on the server.
+     * The server computes the interpolated path and drives all joints simultaneously.
+     * Resolves when the move completes (linearPathComplete event received).
+     *
+     * @param {Array<number>} startAngles        - Current joint angles in degrees
+     * @param {{ x, y, z }} targetPose           - Target position in mm
+     * @param {{ x, y, z }|null} desiredOrientation - Tool Z-axis direction (null = ignore)
+     * @param {number} stepMm                    - Cartesian step size in mm (default 2)
+     * @param {number} speedMmPerSec             - Tool speed in mm/s (default 50)
+     * @returns {Promise<{ type: 'linearPathComplete' }>}
+     */
+    async executeLinearMove(startAngles, targetPose, desiredOrientation, stepMm, speedMmPerSec) {
+        return new Promise(async (resolve, reject) => {
+            this._linearResolve = resolve;
+            this._linearReject  = reject;
+
+            // Safety timeout: 60 s max for a single linear move
+            this._linearTimeout = setTimeout(() => {
+                this._linearResolve = null;
+                this._linearReject  = null;
+                this._linearTimeout = null;
+                reject(new Error('Linear move timeout after 60 s'));
+            }, 60000);
+
+            try {
+                const response = await this.sendRequest('executeLinearMove', {
+                    startAngles,
+                    targetPose,
+                    desiredOrientation: desiredOrientation || null,
+                    stepMm:       stepMm       || 2.0,
+                    speedMmPerSec: speedMmPerSec || 50
+                }, 30000); // 30 s for path computation
+
+                if (response.type === 'error') {
+                    clearTimeout(this._linearTimeout);
+                    this._linearResolve = null;
+                    this._linearReject  = null;
+                    this._linearTimeout = null;
+                    reject(new Error(response.message || 'Linear move failed'));
+                }
+                // type === 'linearPathStarted' - now wait for unsolicited linearPathComplete
+            } catch (e) {
+                clearTimeout(this._linearTimeout);
+                this._linearResolve = null;
+                this._linearReject  = null;
+                this._linearTimeout = null;
+                reject(e);
+            }
+        });
+    }
+
+    /**
+     * Abort an in-progress linear path and stop all joints.
+     */
+    abortLinearPath() {
+        if (this._linearTimeout) { clearTimeout(this._linearTimeout); this._linearTimeout = null; }
+        if (this._linearResolve) { this._linearResolve({ type: 'linearPathAborted' }); this._linearResolve = null; this._linearReject = null; }
+        this.sendCommand('abortLinearPath', {});
+        this.sendCommand('stopAll', {});
+    }
+
+    /**
+     * Gets ethernet settings from the Pi server.
+     * @returns {Promise<Object>} Ethernet settings
+     */
+    async getPiEthernetSettings() {
+        const response = await this.sendRequest('getPiEthernetSettings', {}, 6000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Failed to get ethernet settings');
+        }
+        return response.ethernet;
+    }
+
+    /**
+     * Sets ethernet settings on the Pi server.
+     * @param {{mode:string, ipAddress?:string, subnetMask?:string, gateway?:string, dns?:string}} settings
+     * @returns {Promise<Object>} Updated ethernet settings
+     */
+    async setPiEthernetSettings(settings) {
+        const response = await this.sendRequest('setPiEthernetSettings', settings || {}, 12000);
+        if (response.type === 'error') {
+            throw new Error(response.message || 'Failed to set ethernet settings');
+        }
+        return response.ethernet;
+    }
+
+    /**
+     * Gets stored joint configurations
+     * @returns {Array} Array of joint configurations
+     */
+    getJointConfigs() {
+        return this.jointConfigs;
+    }
+
+    /**
+     * Sets a kinematics parameter for a joint
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     * @param {string} parameter - 'd', 'a', 'theta', or 'alpha'
+     * @param {number} value - Parameter value
+     * @param {string} unit - 'mm' for d/a, 'degrees' for theta/alpha
+     */
+    setKinematics(jointNumber, parameter, value, unit) {
+        return this.sendCommand('setKinematics', {
+            joint: jointNumber,
+            parameter: parameter,
+            value: value,
+            unit: unit
+        });
+    }
+
+    /**
+     * Sets the AS5600 sensor offset for a joint
+     * @param {number} jointNumber - Joint number (1, 2, 3, etc.)
+     * @param {number} offsetDegrees - Offset in degrees
+     */
+    setSensorOffset(jointNumber, offsetDegrees) {
+        return this.sendCommand('setSensorOffset', {
+            joint: jointNumber,
+            offset: offsetDegrees
+        });
+    }
+}
+
+// Create a global instance
+const robotArmClient = new RobotArmClient();
+

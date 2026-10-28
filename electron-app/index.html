@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<!--
+    Robot Arm Control Application - Main HTML Interface
+    
+    This is the main HTML file for the Electron-based robot arm control application.
+    It provides a comprehensive interface for:
+    - Pendant control (real-time joint movement)
+    - G-code processing and execution
+    - 3D visualisation of the robot arm
+    - Visual programming with Blockly
+    - Stored position management
+    - Settings and calibration
+    
+    The application is designed to work offline after initial setup.
+    All external libraries are bundled locally in the libs/ directory.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Robot Arm Control - Pendant & G-Code</title>
+    <link rel="stylesheet" href="styles.css?v=20260930">
+    <script>
+    // Kiosk mode on the Pi: show a loading screen and reload until the UI is really loaded.
+    (function () {
+        if (window.location.search.indexOf('kiosk=1') < 0) {
+            return;
+        }
+
+        var reloadKey = 'kioskReloadAttempts';
+        var attempts = parseInt(sessionStorage.getItem(reloadKey) || '0', 10);
+        var maxAttempts = 40;
+        var hideTimer = null;
+
+        function setStatus(message) {
+            var status = document.getElementById('kiosk-loading-status');
+            if (status) {
+                status.textContent = message;
+            }
+        }
+
+        function showLoadingScreen() {
+            var screen = document.getElementById('kiosk-loading-screen');
+            if (screen) {
+                screen.style.display = 'flex';
+            }
+        }
+
+        function hideLoadingScreen() {
+            var screen = document.getElementById('kiosk-loading-screen');
+            if (screen) {
+                screen.style.display = 'none';
+            }
+            sessionStorage.removeItem(reloadKey);
+        }
+
+        function stylesLookLoaded() {
+            var i;
+            var sheet;
+            var bodyColor = window.getComputedStyle(document.body).backgroundColor;
+            if (bodyColor && bodyColor !== 'rgba(0, 0, 0, 0)' && bodyColor !== 'rgb(255, 255, 255)') {
+                return true;
+            }
+            for (i = 0; i < document.styleSheets.length; i++) {
+                sheet = document.styleSheets[i];
+                try {
+                    if (sheet.href && sheet.href.indexOf('styles.css') >= 0 && sheet.cssRules.length > 0) {
+                        return true;
+                    }
+                } catch (e) {
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        function pageLooksReady() {
+            var title = document.querySelector('header h1');
+            var header = document.querySelector('header');
+            if (!title || !header) {
+                return false;
+            }
+            if (title.textContent.indexOf('Robot Arm') < 0) {
+                return false;
+            }
+            if (header.offsetHeight < 10) {
+                return false;
+            }
+            return stylesLookLoaded();
+        }
+
+        function reloadSoon(reason) {
+            if (attempts >= maxAttempts) {
+                setStatus('Still loading. Please refresh the page or restart the application.');
+                return;
+            }
+            attempts = attempts + 1;
+            sessionStorage.setItem(reloadKey, String(attempts));
+            setStatus(reason + ' - retry ' + attempts + ' of ' + maxAttempts);
+            setTimeout(function () {
+                window.location.reload();
+            }, 2000);
+        }
+
+        function tryHideLoadingScreen() {
+            if (pageLooksReady()) {
+                hideLoadingScreen();
+                return true;
+            }
+            return false;
+        }
+
+        function scheduleReadyCheck() {
+            if (tryHideLoadingScreen()) {
+                return;
+            }
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+            }
+            hideTimer = setTimeout(function () {
+                if (!tryHideLoadingScreen()) {
+                    reloadSoon('Waiting for web server');
+                }
+            }, 5000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            showLoadingScreen();
+            scheduleReadyCheck();
+        });
+
+        window.addEventListener('load', function () {
+            scheduleReadyCheck();
+        });
+    })();
+    </script>
+</head>
+<body style="background-color:#ede9f0;">
+    <script>
+    if (window.location.search.indexOf('kiosk=1') >= 0) {
+        document.body.style.backgroundColor = '#ede9f0';
+    }
+    </script>
+    <div id="kiosk-loading-screen" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:999999; background-color:#ede9f0; color:#2c3e50; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif; font-size:1.2rem; text-align:center; padding:20px;">
+        <p style="font-size:1.4rem; margin-bottom:10px;">Loading robot arm UI...</p>
+        <p id="kiosk-loading-status" style="font-size:1rem; color:#5c6370;">Starting</p>
+    </div>
+
+    <!-- Main Application Container -->
+    <div class="container">
+        <!-- Application Header: Shows logo, title, and connection status -->
+        <header>
+            <div class="header-left">
+                <img src="Matrix 2024 White_Allcode Robot Arm.svg" alt="Matrix Robot Arm Logo" class="header-logo">
+                <h1>Robot Arm Control System</h1>
+                <button id="sidebarToggle" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle menu">&#9776;</button>
+            </div>
+            <div class="header-status">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-indicator" id="statusIndicator"></span>
+                    <span id="statusText">Disconnected</span>
+                </div>
+                <div class="control-status" id="armControlStatus">
+                    <span class="status-indicator" id="controlIndicator"></span>
+                    <span id="controlText">Control: - </span>
+                    <button type="button" id="releaseControlButton" class="btn btn-small btn-secondary" style="display: none;">Release control</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Simple toast-style message area -->
+        <div id="appMessage" class="app-message" style="display: none;"></div>
+
+        <!-- Main Content Area: Sidebar navigation + page content -->
+        <div class="main-layout">
+            <!-- Sidebar Tabs -->
+            <div class="tabs">
+                <button class="tab-button active" data-tab="connection">Connection</button>
+                <button class="tab-button" data-tab="pendant">Joint Control</button>
+                <button class="tab-button" data-tab="pendant-ui">Pendant Control</button>
+                <button class="tab-button" data-tab="gcode">G-Code Control</button>
+                <button class="tab-button" data-tab="rapid">RAPID</button>
+                <button class="tab-button" data-tab="blockly">Visual Programming</button>
+                <button class="tab-button" data-tab="visualization">3D Visualisation</button>
+                <button class="tab-button" data-tab="kinematics">Kinematics</button>
+                <button class="tab-button" data-tab="positions">Stored Positions</button>
+                <button class="tab-button" data-tab="calibration">Calibration</button>
+                <button class="tab-button" data-tab="deadzones">Dead Zones</button>
+                <button class="tab-button" data-tab="camera">Camera</button>
+                <button class="tab-button" data-tab="settings" style="display:none;">Settings</button>
+                <button class="tab-button" data-tab="curriculum">Curriculum</button>
+            </div>
+
+            <!-- Main Tab Content -->
+            <div class="tab-content-container">
+
+        <!-- Connection Tab -->
+        <div id="connection-tab" class="tab-content active">
+            <h2>Connection</h2>
+            <div class="connection-panel">
+                <p class="info-text">
+                    Connect to the robot arm control server on port 8080.
+                </p>
+                <div class="connection-form">
+                    <label>
+                        Controller Address:
+                        <input type="text" id="piAddress" value="192.168.1.160" placeholder="192.168.1.160">
+                    </label>
+                    <button id="connectButton" class="btn btn-primary btn-major">Connect</button>
+                    <button id="autoDetectButton" class="btn btn-secondary">Auto-Detect</button>
+                    <button id="disconnectButton" class="btn btn-secondary" disabled>Disconnect</button>
+                    <div id="autoDetectStatus" class="auto-detect-status"></div>
+                </div>
+            </div>
+
+            <div class="connection-panel">
+                <h3>Arm control</h3>
+                <p class="info-text">
+                    Only one app can move the arm at a time. If another window or kiosk has control, use the button below to take over.
+                </p>
+                <button id="takeControlButton" class="btn btn-warning btn-major" disabled>Take control</button>
+
+                <h4 class="control-lock-title">Lock control</h4>
+                <p class="info-text">
+                    Take control and keep it exclusively - no other app can take over, even with "Take control" -
+                    until you release it or the lock times out. Requires a password to set.
+                </p>
+                <div class="control-lock-row">
+                    <input type="password" id="controlLockPassword" placeholder="Lock password" class="control-lock-password" autocomplete="off">
+                    <button id="lockControlButton" class="btn btn-secondary" disabled>Lock control</button>
+                    <button id="unlockControlButton" class="btn btn-secondary" style="display: none;">Unlock control</button>
+                </div>
+                <p class="info-text" id="controlLockStatus"></p>
+            </div>
+
+            <div class="connection-panel">
+                <h3>Touch controls</h3>
+                <p class="info-text">
+                    Larger buttons and fields for touchscreen use. Auto turns them on whenever the
+                    display reports touch input.
+                </p>
+                <div class="control-buttons">
+                    <button class="btn btn-secondary" data-touch-mode="auto" onclick="setTouchModePreference('auto')">Auto</button>
+                    <button class="btn btn-secondary" data-touch-mode="on" onclick="setTouchModePreference('on')">Always on</button>
+                    <button class="btn btn-secondary" data-touch-mode="off" onclick="setTouchModePreference('off')">Off</button>
+                </div>
+                <p class="info-text" id="touchModeStatus"></p>
+            </div>
+
+            <div class="connection-panel" id="serverDiagnosticsPanel" style="display: none;">
+                <h3>Server bus diagnostics</h3>
+                <p class="info-text">
+                    The Pi server talks to servos on a fixed tick. This app reads cached status and does not block the bus.
+                </p>
+                <pre id="serverDiagnosticsDisplay" class="diagnostics-display">Not connected</pre>
+            </div>
+        </div>
+
+        <!-- Joint Control Tab -->
+        <div id="pendant-tab" class="tab-content">
+            <h2>Joint Control</h2>
+
+            <!-- kiosk-joints-row: two-column layout in kiosk mode (status+controls | movement buttons).
+                 In normal desktop mode these divs are transparent block containers. -->
+            <div class="kiosk-joints-row">
+                <div class="kiosk-joints-left">
+                    <!-- Joint Status Display -->
+                    <div class="joint-status-grid" id="jointStatusGrid">
+                        <!-- Joint status cards will be generated dynamically -->
+                    </div>
+
+                    <!-- Arm actions -->
+                    <div class="control-panel">
+                        <div class="joint-controls" id="jointControlsContainer"></div>
+
+                        <div class="control-buttons">
+                            <button class="btn btn-danger btn-motion" onclick="stopAllJoints()">Emergency Stop</button>
+                            <button class="btn btn-secondary btn-motion" onclick="homeAllJoints()">Home All Joints</button>
+                            <button class="btn btn-warning btn-major torque-toggle-button" id="torqueToggleButton" onclick="toggleTorqueAll()">Torque: On</button>
+                        </div>
+                    </div>
+                </div><!-- .kiosk-joints-left -->
+
+                <div class="kiosk-joints-right">
+                    <!-- Quick Joint Movement Controls -->
+                    <div class="joystick-area pendant2-card joint-jog-card">
+                        <div class="pendant2-card-title">Quick Joint Movement</div>
+                        <div class="joystick-controls">
+                            <div class="direction-grid" id="quickMovementButtons">
+                                <!-- Quick movement buttons will be generated dynamically -->
+                            </div>
+                            <div class="step-size">
+                                <span class="pendant2-step-label">Step:</span>
+                                <div class="step-size-presets">
+                                    <button class="step-preset-btn pendant2-step-btn active" onclick="setStepSize(1)">1°</button>
+                                    <button class="step-preset-btn pendant2-step-btn" onclick="setStepSize(5)">5°</button>
+                                    <button class="step-preset-btn pendant2-step-btn" onclick="setStepSize(10)">10°</button>
+                                    <button class="step-preset-btn pendant2-step-btn" onclick="setStepSize(45)">45°</button>
+                                </div>
+                                <input type="hidden" id="stepSize" value="1">
+                            </div>
+                        </div>
+                    </div>
+                </div><!-- .kiosk-joints-right -->
+            </div><!-- .kiosk-joints-row -->
+
+            <!-- End Tool Controls - pendant-style cards -->
+            <div class="pendant2-end-tools-row">
+
+                <div class="pendant2-card pendant2-end-tool-card" id="endToolServoPanel" data-end-tool-control="servo">
+                    <div class="pendant2-card-title">End Tool - Servo</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" id="endToolServoEnableBtn" data-end-tool-action="servo-enable" onclick="setEndToolServoEnabled(true)">Enable</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" id="endToolServoDisableBtn" data-end-tool-action="servo-disable" onclick="setEndToolServoEnabled(false)">Disable</button>
+                    </div>
+                    <div class="pendant2-end-tool-btns pendant2-end-tool-presets">
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(0)">Close<br><span class="pendant2-angle-sub">0°</span></button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(45)">45°</button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(90)">Half<br><span class="pendant2-angle-sub">90°</span></button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(135)">135°</button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(180)">Open<br><span class="pendant2-angle-sub">180°</span></button>
+                    </div>
+                </div>
+
+                <div class="pendant2-card pendant2-end-tool-card" id="endToolPneumaticPanel" data-end-tool-control="pump">
+                    <div class="pendant2-card-title">End Tool - Pump</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" id="endToolPumpEnableBtn" data-end-tool-action="pump-enable" onclick="setEndToolPumpEnabled(true)">Pump ON</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" id="endToolPumpDisableBtn" data-end-tool-action="pump-disable" onclick="setEndToolPumpEnabled(false)">Pump OFF</button>
+                    </div>
+                </div>
+
+                <div class="pendant2-card pendant2-end-tool-card" data-end-tool-control="solenoid">
+                    <div class="pendant2-card-title">End Tool - Solenoid Valve</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" id="endToolSolenoidEnableBtn" data-end-tool-action="solenoid-enable" onclick="setEndToolSolenoidEnabled(true)">Valve ON</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" id="endToolSolenoidDisableBtn" data-end-tool-action="solenoid-disable" onclick="setEndToolSolenoidEnabled(false)">Valve OFF</button>
+                    </div>
+                </div>
+
+                <p class="end-tool-none-note" data-end-tool-note hidden></p>
+
+            </div>
+        </div>
+
+        <!-- Touchscreen Pendant Tab -->
+        <div id="pendant-ui-tab" class="tab-content pendant2-page">
+
+            <!-- Header: position readout + critical controls -->
+            <div class="pendant2-header">
+                <div class="pendant2-position-box">
+                    <div class="pendant2-pos-line">X: <span id="pendantX">-</span> <span class="pendant2-unit">mm</span></div>
+                    <div class="pendant2-pos-line">Y: <span id="pendantY">-</span> <span class="pendant2-unit">mm</span></div>
+                    <div class="pendant2-pos-line">Z: <span id="pendantZ">-</span> <span class="pendant2-unit">mm</span></div>
+                </div>
+                <div class="pendant2-header-actions">
+                    <button class="btn btn-danger pendant2-estop" onclick="stopAllJoints()">EMERGENCY<br>STOP</button>
+                    <button class="btn btn-secondary pendant2-home-btn" onclick="homeAllJoints()">Home All<br>Joints</button>
+                </div>
+            </div>
+
+            <!-- Main area: jog pad + right-side controls -->
+            <div class="pendant2-main">
+
+                <!-- XYZ Jog pad -->
+                <div class="pendant2-jog-card">
+                    <div class="pendant2-jog-label">XYZ JOG</div>
+                    <div class="pendant2-jog-cluster">
+                        <!-- XY D-pad (3×3 grid) -->
+                        <div class="pendant2-dpad">
+                            <div class="pendant2-dpad-empty"></div>
+                            <button class="btn pendant2-jog-btn pendant2-jog-xy" onclick="quickMoveXYZ('Y', 1)">Y+<br>▲</button>
+                            <div class="pendant2-dpad-empty"></div>
+                            <button class="btn pendant2-jog-btn pendant2-jog-xy" onclick="quickMoveXYZ('X', -1)">◀<br>X−</button>
+                            <div class="pendant2-dpad-center">XY</div>
+                            <button class="btn pendant2-jog-btn pendant2-jog-xy" onclick="quickMoveXYZ('X', 1)">X+<br>▶</button>
+                            <div class="pendant2-dpad-empty"></div>
+                            <button class="btn pendant2-jog-btn pendant2-jog-xy" onclick="quickMoveXYZ('Y', -1)">▼<br>Y−</button>
+                            <div class="pendant2-dpad-empty"></div>
+                        </div>
+                        <!-- Z controls (vertical column) -->
+                        <div class="pendant2-z-col">
+                            <button class="btn pendant2-jog-btn pendant2-jog-z" onclick="quickMoveXYZ('Z', 1)">▲<br>Z+</button>
+                            <div class="pendant2-z-label">Z</div>
+                            <button class="btn pendant2-jog-btn pendant2-jog-z" onclick="quickMoveXYZ('Z', -1)">Z−<br>▼</button>
+                        </div>
+                    </div>
+
+                    <!-- Step size presets -->
+                    <div class="pendant2-step-row">
+                        <span class="pendant2-step-label">Step (mm):</span>
+                        <button class="btn pendant2-step-btn active" onclick="setPendantStep(1, this)">1</button>
+                        <button class="btn pendant2-step-btn" onclick="setPendantStep(5, this)">5</button>
+                        <button class="btn pendant2-step-btn" onclick="setPendantStep(10, this)">10</button>
+                        <button class="btn pendant2-step-btn" onclick="setPendantStep(25, this)">25</button>
+                        <input type="hidden" id="xyzStepSize" value="1">
+                    </div>
+                </div>
+
+                <!-- Right-side panels -->
+                <div class="pendant2-side-panels">
+
+                    <div class="pendant2-card">
+                        <div class="pendant2-card-title">Tool Orientation</div>
+                        <button id="pendantOrientBtn_free" class="btn btn-secondary pendant2-wide-btn active" onclick="pendantSetOrientation('free')">Free (No Lock)</button>
+                        <button id="pendantOrientBtn_down" class="btn btn-secondary pendant2-wide-btn" onclick="pendantSetOrientation('down')">Tool Down</button>
+                        <button id="pendantOrientBtn_up" class="btn btn-secondary pendant2-wide-btn" onclick="pendantSetOrientation('up')">Tool Up</button>
+                        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                            <label style="font-size:0.85em;white-space:nowrap;">Spin rotation (°)</label>
+                            <input id="pendantOrientationRotation" type="number" value="0" step="5"
+                                style="width:70px;" oninput="pendantSetOrientation('rotation')">
+                        </div>
+                        <div class="pendant2-orientation-info" id="pendantOrientationDisplay">Free - all 6 joints used for positioning; spin drives joint 6 directly</div>
+                    </div>
+
+                    <div class="pendant2-card" id="pendantMovementModeCard">
+                        <div class="pendant2-card-title">Movement Mode</div>
+                        <button id="movementModePtp" class="btn btn-secondary pendant2-wide-btn active" onclick="setMovementMode('ptp')" title="All joints move to their targets at once - the tool tip follows a curved path">Point to Point (PTP)</button>
+                        <button id="movementModeLinear" class="btn btn-secondary pendant2-wide-btn" onclick="setMovementMode('linear')" title="The tool tip travels in a straight line through space (XYZ jog, G1, MoveL, Move TCP)">Linear Cartesian</button>
+                        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                            <label style="font-size:0.85em;white-space:nowrap;" title="Tool-tip speed for XYZ jog and Move to XYZ in both modes. Programs (G-code F, RAPID / Blockly speed) set their own.">Tool speed (mm/s)</label>
+                            <input type="number" id="linearSpeedMmPerSec" value="50" min="5" max="500" step="5" style="width:70px;" onchange="saveLinearSettings()">
+                        </div>
+                        <div id="linearMoveSettings" style="display:none;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                                <label style="font-size:0.85em;white-space:nowrap;">Path step (mm)</label>
+                                <input type="number" id="linearStepMm" value="2" min="0.5" max="20" step="0.5" style="width:70px;" onchange="saveLinearSettings()">
+                            </div>
+                            <div class="pendant2-orientation-info">Straight-line tool path built from waypoints every "path step" mm. Needs a control session.</div>
+                        </div>
+                        <div class="pendant2-orientation-info" id="movementModeInfo">PTP - joints move together; tool path is curved</div>
+                    </div>
+
+                    <div class="pendant2-card">
+                        <div class="pendant2-card-title">Move to Stored Position</div>
+                        <select id="pendantPositionSelect" class="pendant2-select">
+                            <option value="">Select position…</option>
+                        </select>
+                        <button class="btn btn-primary pendant2-wide-btn" onclick="moveToStoredPositionFromPendant()">Move to Position</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- End tool controls (full width) -->
+            <div class="pendant2-end-tools-row">
+
+                <div class="pendant2-card pendant2-end-tool-card" data-end-tool-control="servo">
+                    <div class="pendant2-card-title">End Tool - Servo</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" data-end-tool-action="servo-enable" onclick="setEndToolServoEnabled(true)">Enable</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" data-end-tool-action="servo-disable" onclick="setEndToolServoEnabled(false)">Disable</button>
+                    </div>
+                    <div class="pendant2-end-tool-btns pendant2-end-tool-presets">
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(0)">Close<br><span class="pendant2-angle-sub">0°</span></button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(45)">45°</button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(90)">Half<br><span class="pendant2-angle-sub">90°</span></button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(135)">135°</button>
+                        <button class="btn pendant2-tool-btn pendant2-servo-btn" onclick="moveEndToolServoTo(180)">Open<br><span class="pendant2-angle-sub">180°</span></button>
+                    </div>
+                </div>
+
+                <div class="pendant2-card pendant2-end-tool-card" data-end-tool-control="pump">
+                    <div class="pendant2-card-title">End Tool - Pump</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" data-end-tool-action="pump-enable" onclick="setEndToolPumpEnabled(true)">Pump ON</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" data-end-tool-action="pump-disable" onclick="setEndToolPumpEnabled(false)">Pump OFF</button>
+                    </div>
+                </div>
+
+                <div class="pendant2-card pendant2-end-tool-card" data-end-tool-control="solenoid">
+                    <div class="pendant2-card-title">End Tool - Solenoid Valve</div>
+                    <div class="pendant2-end-tool-btns">
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-on-btn" data-end-tool-action="solenoid-enable" onclick="setEndToolSolenoidEnabled(true)">Valve ON</button>
+                        <button class="btn btn-secondary pendant2-tool-btn end-tool-off-btn" data-end-tool-action="solenoid-disable" onclick="setEndToolSolenoidEnabled(false)">Valve OFF</button>
+                    </div>
+                </div>
+
+                <p class="end-tool-none-note" data-end-tool-note hidden></p>
+
+            </div>
+        </div>
+
+        <!-- G-Code Control Tab -->
+        <div id="gcode-tab" class="tab-content">
+            <h2>G-Code Control</h2>
+            
+            <!-- File Selection -->
+            <div class="file-panel">
+                <h3>Load G-Code File</h3>
+                <div class="file-controls">
+                    <input type="file" id="gcodeFileInput" accept=".gcode,.nc,.txt" style="display: none;">
+                    <button class="btn btn-primary" onclick="document.getElementById('gcodeFileInput').click()">Select G-Code File</button>
+                    <button class="btn btn-primary btn-major" onclick="saveGCodeProgram()">Save Program</button>
+                    <button class="btn btn-secondary" onclick="loadDefaultGCode()">Load Default Example</button>
+                    <span id="fileName" class="file-name">No file selected</span>
+                </div>
+            </div>
+
+            <!-- G-Code Control -->
+            <div class="gcode-controls">
+                <h3>Execution Control</h3>
+                <div class="control-buttons">
+                    <button class="btn btn-primary btn-motion" id="startGcodeButton" onclick="startGcode()" disabled>Start Execution</button>
+                    <button class="btn btn-warning btn-motion" id="pauseGcodeButton" onclick="togglePauseResume()" disabled>Pause</button>
+                    <button class="btn btn-danger btn-motion" id="stopGcodeButton" onclick="stopGcode()" disabled>Stop</button>
+                </div>
+                <div class="execution-status">
+                    <div>Status: <span id="gcodeStatus">Ready</span></div>
+                    <div>Current Line: <span id="currentLine">-</span> / <span id="totalLines">-</span></div>
+                    <div>Progress: <span id="gcodeProgress">0</span>%</div>
+                </div>
+            </div>
+
+            <!-- G-Code Preview -->
+            <div class="gcode-preview">
+                <h3>G-Code Editor</h3>
+                <div class="gcode-editor-controls">
+                    <button class="btn btn-small" onclick="applyGCodeChanges()">Apply Changes</button>
+                    <button class="btn btn-small" onclick="reloadGCodeFromEditor()">Reload from File</button>
+                </div>
+                <textarea id="gcodeContent" placeholder="Load a G-Code file or type G-code here..."></textarea>
+                <div class="gcode-info">
+                    <span>Lines: <span id="gcodeLineCount">0</span></span>
+                    <span>Commands: <span id="gcodeCommandCount">0</span></span>
+                    <span id="gcodeModified" style="color: #e74c3c; display: none;">● Modified</span>
+                </div>
+            </div>
+
+            <!-- G-Code Log -->
+            <div class="gcode-log">
+                <h3>Execution Log</h3>
+                <div id="gcodeLog" class="log-content"></div>
+            </div>
+
+            <!-- G-Code Cheat Sheet -->
+            <div class="settings-panel" style="margin-top: 20px;">
+                <h3>G-Code Cheat Sheet (Supported Commands)</h3>
+                <p class="info-text">
+                    The app supports a small, beginner-friendly subset of G-code.
+                    Use this list as a quick reference while you are editing your program.
+                </p>
+                <table class="kinematics-step-info">
+                    <tbody>
+                        <tr>
+                            <td><strong>G0</strong>, <strong>G1</strong></td>
+                            <td>
+                                Linear move command. Supports multiple modes:<br>
+                                • <strong>Stored position (by number):</strong> <code>G1 P5 F60</code> → move to stored position 5 at 60 deg/s<br>
+                                • <strong>Stored position (by name):</strong> <code>G1 P"Home" F60</code> → move to stored position named "Home"<br>
+                                • <strong>Joint-space moves:</strong> <code>G1 J1=45 J2=20 F60</code> → move joints 1 and 2 to 45° and 20°<br>
+                                • <strong>Cartesian XYZ:</strong> <code>G1 X150 Y0 Z200 F2400</code> → move TCP to XYZ position (requires kinematics). For XYZ moves <code>F</code> is a feed rate in mm/min (G-code convention): F2400 = 40&nbsp;mm/s tool speed. For P and J moves <code>F</code> stays in deg/s.<br>
+                                • <strong>Tool orientation:</strong> <code>G1 I0 J0 K-1 R45 F90</code> → point the tool's Z-axis along vector (I,J,K) with spin rotation <code>R</code> degrees, turning the tool in place now at <code>F</code> deg/s (default 90). Later XYZ moves keep this orientation. Add <code>X Y Z</code> on the same line to set it as part of that move instead.<br>
+                                The <code>P</code> parameter can be a number (0-99) or a quoted string (position name) from the Stored Positions tab.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>G28</strong></td>
+                            <td>
+                                Home all joints to 0° (uses optional <code>F</code> for speed in deg/s).<br>
+                                <code>G28 F45</code> → home joints at 45&nbsp;deg/s.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Joint moves</strong></td>
+                            <td>
+                                Move specific joints directly using <code>J1</code>…<code>J6</code> with angles in degrees.<br>
+                                <code>J1=45 J2=-30 F60</code> → move J1 and J2 to 45° and −30° at 60&nbsp;deg/s (scaled so they finish together).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M0</strong>, <strong>M1</strong></td>
+                            <td>
+                                Pause the program.<br>
+                                <code>M0</code> or <code>M1</code> → pause for 2000&nbsp;ms (2&nbsp;s).<br>
+                                <code>M0 P5000</code> → pause for 5000&nbsp;ms (5&nbsp;s).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M204</strong></td>
+                            <td>
+                                Set servo acceleration (0–254, in units of 100&nbsp;step/s²).<br>
+                                <code>M204 A80</code> → set acceleration for all joints to 80.<br>
+                                <code>M204 J3 A100</code> → set acceleration for joint&nbsp;3 only.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M10</strong>, <strong>M11</strong></td>
+                            <td>
+                                Gripper servo shortcuts.<br>
+                                <code>M10</code> → open gripper (servo to the shared open position, 141°).<br>
+                                <code>M11</code> → close gripper (servo to 0°).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M12</strong></td>
+                            <td>
+                                End tool servo to a specific angle.<br>
+                                <code>M12 P90</code> → servo to 90° (0–180).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M62</strong>, <strong>M63</strong></td>
+                            <td>
+                                Vacuum on/off - controls pump <em>and</em> solenoid valve together.<br>
+                                <code>M62</code> → vacuum on (pump + solenoid).<br>
+                                <code>M63</code> → vacuum off (pump + solenoid).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M64</strong>, <strong>M65</strong></td>
+                            <td>
+                                Solenoid valve only (independent of pump).<br>
+                                <code>M64</code> → solenoid on.<br>
+                                <code>M65</code> → solenoid off.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M780</strong>, <strong>M781</strong></td>
+                            <td>
+                                Camera block detection. Blocks are indexed 0, 1, 2… by position in the camera's view, nearest the top first (a block lower down gets a higher index).<br>
+                                <code>M780</code> → logs how many coloured blocks are currently visible.<br>
+                                <code>M780 V1</code> → same, and stores the count in variable <code>#1</code>.<br>
+                                <code>M781 P0 L10</code> → saves block index&nbsp;0's position into Stored Position slot&nbsp;10 (table height, Z=0).<br>
+                                <code>M781 P0 L10 Z50</code> → same, but at height 50&nbsp;mm.<br>
+                                <code>M782 P0 V2</code> / <code>M783 P0 V3</code> → store block&nbsp;0's world X / Y (mm) in <code>#2</code> / <code>#3</code>, e.g. for <code>G1 X#2 Y#3 Z50</code>.<br>
+                                Requires ArUco markers to be visible so the camera has a world coordinate frame.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Variables</strong><br><code>#1</code>…<code>#999</code></td>
+                            <td>
+                                Numeric variables that can be used wherever a number goes.<br>
+                                <code>#1 = 45</code> → set variable 1.<br>
+                                <code>#1 = #1 + 10</code> → arithmetic with <code>+ - * /</code>; use <code>[ ]</code> to group: <code>#2 = [#1 * 2] / 3</code>.<br>
+                                <code>G1 J1=#1 F40</code>, <code>M0 P#2</code>, <code>G1 X[#1 + 10] Y0 Z50</code> → values are substituted when the line runs.<br>
+                                All variables start at 0 each time the program is run.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Labels &amp; loops</strong><br><code>N</code>, <code>GOTO</code>, <code>IF</code></td>
+                            <td>
+                                <code>N100</code> → label a line (on its own, or as a prefix: <code>N100 G1 J1=0</code>).<br>
+                                <code>GOTO 100</code> → jump to the line labelled <code>N100</code>.<br>
+                                <code>IF [#1 LT 3] GOTO 100</code> → jump only if the condition holds. Compare with <code>EQ NE GT GE LT LE</code> (or <code>== != &gt; &gt;= &lt; &lt;=</code>).<br>
+                                A counted loop:<br>
+                                <code>#1 = 0</code><br>
+                                <code>N100</code><br>
+                                <code>IF [#1 GE 3] GOTO 110</code><br>
+                                <code>&nbsp;&nbsp;G1 J1=20 F60</code><br>
+                                <code>&nbsp;&nbsp;G1 J1=-20 F60</code><br>
+                                <code>&nbsp;&nbsp;#1 = #1 + 1</code><br>
+                                <code>GOTO 100</code><br>
+                                <code>N110</code><br>
+                                A plain <code>GOTO</code> back to an earlier label loops forever - use <strong>Stop</strong> to end it. The Blockly → G-Code converter generates this form for repeat / while / count loops and if blocks.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>M30</strong>, <strong>M2</strong></td>
+                            <td>
+                                Program end marker. Execution stops when these are reached.<br>
+                                <code>M30</code> or <code>M2</code>.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Comments</strong></td>
+                            <td>
+                                Use <code>;</code> or <code>( ... )</code> for comments:<br>
+                                <code>G1 X10 Y0 Z0 ; move to start</code><br>
+                                <code>(This is a comment line)</code>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- RAPID Control Tab -->
+        <div id="rapid-tab" class="tab-content">
+            <h2>ABB RAPID Control (Simple Subset)</h2>
+            <p class="info-text">
+                This tab lets you experiment with a beginner-friendly subset of ABB&apos;s RAPID language:
+                joint and Cartesian moves, tool commands, and real RAPID control flow
+                (<code>VAR num</code>, <code>WHILE</code>, <code>FOR</code>, <code>IF</code>, <code>GOTO</code>).
+            </p>
+
+            <div class="gcode-controls">
+                <h3>Execution Control</h3>
+                <div class="control-buttons">
+                    <button class="btn btn-primary btn-motion" id="rapidRunButton" onclick="runRapidProgram()">Run RAPID Program</button>
+                    <button class="btn btn-danger btn-motion" id="rapidStopButton" onclick="stopRapidProgram()" disabled>Stop</button>
+                </div>
+                <div class="execution-status">
+                    <div>Status: <span id="rapidStatus">Ready</span></div>
+                    <div>Current Line: <span id="rapidCurrentLine">-</span></div>
+                </div>
+            </div>
+
+            <div class="gcode-preview">
+                <h3>RAPID Editor</h3>
+                <div class="gcode-editor-controls">
+                    <button class="btn btn-primary btn-major" onclick="saveRapidProgram()">Save Program</button>
+                    <button class="btn btn-secondary" onclick="loadRapidProgramFile()">Open Program File</button>
+                    <button class="btn btn-secondary" onclick="loadDefaultRapid()">Load RAPID Example</button>
+                </div>
+                <textarea id="rapidContent" placeholder="Type simple RAPID code here...&#10;Example:&#10;! Absolute joint move&#10;MoveJ [[0,10,20,0,0,0]];&#10;! Cartesian move&#10;MoveLXYZ [[150,0,200]];"></textarea>
+            </div>
+
+            <div class="gcode-log">
+                <h3>Execution Log</h3>
+                <div id="rapidOutput" class="log-content"></div>
+            </div>
+
+            <div class="settings-panel" style="margin-top: 20px;">
+                <h3>RAPID Cheat Sheet (Supported Subset)</h3>
+                <p class="info-text">
+                    This is not a full RAPID interpreter. It only supports a small subset that maps cleanly to your 6‑axis arm (plus fixed tool mount).
+                    Anywhere a number is expected you can write an expression using variables, e.g. <code>MoveAbsJ [[i * 10, 0, 20, 0, 0, 0]];</code>
+                </p>
+                <table class="kinematics-step-info">
+                    <tbody>
+                        <tr>
+                            <td><strong>Comments</strong></td>
+                            <td>
+                                Start a line with <code>!</code> for a comment.<br>
+                                <code>! This is a comment</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Variables</strong><br><code>VAR num</code></td>
+                            <td>
+                                <code>VAR num count := 0;</code> → declare a variable (declare before use).<br>
+                                <code>count := count + 1;</code> → assign; arithmetic with <code>+ - * / DIV MOD</code> and <code>( )</code>.<br>
+                                <code>TPWrite "Count is " \Num:=count;</code> → print to the execution log.<br>
+                                Camera functions usable in any expression: <code>GetBlockCount()</code>, <code>GetBlockX(i)</code>, <code>GetBlockY(i)</code> (mm).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Loops</strong><br><code>WHILE</code>, <code>FOR</code></td>
+                            <td>
+                                <code>WHILE count &lt; 3 DO</code> … <code>ENDWHILE</code> → repeat while the condition holds. Compare with <code>= &lt;&gt; &lt; &lt;= &gt; &gt;=</code>, combine with <code>AND OR NOT</code>, or use <code>TRUE</code> / <code>FALSE</code>.<br>
+                                <code>FOR i FROM 1 TO 5 DO</code> … <code>ENDFOR</code> → counted loop (optional <code>STEP 2</code> before <code>DO</code>).<br>
+                                <code>WHILE TRUE DO</code> … <code>ENDWHILE</code> loops forever - use <strong>Stop</strong> or <code>EXIT;</code> to end.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Conditions</strong><br><code>IF</code></td>
+                            <td>
+                                <code>IF GetBlockCount() &gt; 0 THEN</code><br>
+                                <code>&nbsp;&nbsp;MoveToPos 10;</code><br>
+                                <code>ELSEIF count = 2 THEN</code> … <code>ELSE</code> … <code>ENDIF</code><br>
+                                <code>ELSEIF</code> and <code>ELSE</code> are optional.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Jumps</strong><br><code>GOTO</code>, <code>EXIT</code></td>
+                            <td>
+                                <code>again:</code> → label a line (name followed by a colon).<br>
+                                <code>GOTO again;</code> → jump to that label (e.g. to break out of a loop).<br>
+                                <code>EXIT;</code> → end the program immediately.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveJ</strong></td>
+                            <td>
+                                Joint move using 6 joint angles in degrees.<br>
+                                <code>MoveJ [[J1,J2,J3,J4,J5,J6]];</code> or <code>MoveJ [[J1,J2,J3,J4,J5,J6]], v60;</code> (joint speed in deg/s, default 40)<br>
+                                Example: <code>MoveJ [[0,10,20,0,0,0]];</code> → move to J1=0°, J2=10°, J3=20°, J4=0°, J5=0°, J6=0° (default speed).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>SetToolOri</strong></td>
+                            <td>
+                                Turn the tool in place now, and keep that orientation for following <code>MoveLXYZ</code> / <code>MoveLOffs</code> moves: a direction vector for the tool's Z-axis, plus an optional spin rotation around it in degrees.<br>
+                                <code>SetToolOri [[0, 0, -1]];</code> → tool pointing straight down.<br>
+                                <code>SetToolOri [[0, 0, -1], 45];</code> → pointing down, rotated 45° about its own axis.<br>
+                                <code>SetToolOri [[0, 0, -1], 45], v60;</code> → same, turning at 60&nbsp;deg/s (default 90).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveJoint</strong></td>
+                            <td>
+                                Move one joint and leave the others where they are.<br>
+                                <code>MoveJoint 1, 45;</code> or <code>MoveJoint 1, 45, v60;</code> (joint speed in deg/s, default 40)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveToPos</strong></td>
+                            <td>
+                                Move to a Stored Position (slot 0–99 from the Stored Positions tab), approaching from above like the pendant does.<br>
+                                <code>MoveToPos 5;</code> or <code>MoveToPos 5, v60;</code> (joint speed in deg/s, default 40)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>SetAcc</strong></td>
+                            <td>
+                                Set a joint's acceleration (0–254, unit: 100 step/s²).<br>
+                                <code>SetAcc 2, 50;</code> → joint 2 acceleration 50.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveAbsJ</strong></td>
+                            <td>
+                                Absolute joint move (same behaviour as <code>MoveJ</code>, just a different name).<br>
+                                <code>MoveAbsJ [[0,0,30,0,0,0]];</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveJOffs</strong></td>
+                            <td>
+                                Joint move using offsets added to the current joint angles.<br>
+                                <code>MoveJOffs [[dJ1,dJ2,dJ3,dJ4,dJ5,dJ6]];</code><br>
+                                Example: <code>MoveJOffs [[0,-5,-10,0,0,0]];</code> → subtract 5° from J2 and 10° from J3.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveLXYZ</strong></td>
+                            <td>
+                                Cartesian move to an absolute XYZ position (in mm). Uses the kinematics solver internally.<br>
+                                <code>MoveLXYZ [[X,Y,Z]];</code> or <code>MoveLXYZ [[X,Y,Z]], v100;</code><br>
+                                Tool speed is in mm/s: 40 by default, or the <code>v</code> value (v100 = 100&nbsp;mm/s).<br>
+                                Example: <code>MoveLXYZ [[150,0,200]];</code> → move TCP to X=150&nbsp;mm, Y=0&nbsp;mm, Z=200&nbsp;mm.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>MoveLOffs</strong></td>
+                            <td>
+                                Cartesian offset move relative to the current XYZ position (in mm).<br>
+                                <code>MoveLOffs [[dX,dY,dZ]];</code> or <code>MoveLOffs [[dX,dY,dZ]], v100;</code> (tool speed in mm/s, default 40)<br>
+                                Example: <code>MoveLOffs [[0,0,50]];</code> → move the TCP 50&nbsp;mm upwards from where it is now.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>WaitTime</strong></td>
+                            <td>
+                                Pause the program for a number of seconds.<br>
+                                <code>WaitTime 2;</code> → wait for 2&nbsp;seconds.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>SetDO</strong></td>
+                            <td>
+                                Set a (simulated) digital output channel to 0 or 1.<br>
+                                <code>SetDO 1, 1;</code> → turn output 1 on.<br>
+                                <code>SetDO 1, 0;</code> → turn output 1 off.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Home</strong></td>
+                            <td>
+                                Convenience command that moves all joints back to 0°.<br>
+                                <code>Home;</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>GripperOpen</strong><br><strong>GripperClose</strong></td>
+                            <td>
+                                Gripper control.<br>
+                                <code>GripperOpen;</code> → open gripper (servo to the shared open position, 141°).<br>
+                                <code>GripperClose;</code> → close gripper (servo to 0°).
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>PumpOn</strong><br><strong>PumpOff</strong></td>
+                            <td>
+                                Vacuum pump control.<br>
+                                <code>PumpOn;</code> → turn vacuum pump on.<br>
+                                <code>PumpOff;</code> → turn vacuum pump off.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>GetBlockCount</strong><br><strong>SaveBlockToPos</strong></td>
+                            <td>
+                                Camera block detection. Blocks are indexed 0, 1, 2… by position in the camera's view, nearest the top first (a block lower down gets a higher index).<br>
+                                <code>GetBlockCount;</code> → shows how many coloured blocks are currently visible.<br>
+                                <code>SaveBlockToPos 0, 10;</code> → saves block index&nbsp;0's position into Stored Position slot&nbsp;10 (table height, Z=0).<br>
+                                <code>SaveBlockToPos 0, 10, 50;</code> → same, but at height 50&nbsp;mm.<br>
+                                Requires ArUco markers to be visible so the camera has a world coordinate frame.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 3D Visualisation Tab -->
+        <div id="visualization-tab" class="tab-content">
+            <h2>3D Robot Arm Visualisation</h2>
+            
+            <div class="visualization-panel">
+
+                <div class="visualization-info">
+                    <p class="info-text">
+                        The 3D visualization shows the robot arm based on kinematics parameters and current joint angles.
+                    </p>
+                </div>
+
+                <div id="robotArm3DContainer" class="robot-arm-3d-container">
+                    <!-- Three.js canvas will be inserted here -->
+                </div>
+                
+                <div class="visualization-status">
+                        <div>End Effector Position (tool tip): <span id="endEffectorPos">-</span></div>
+                        <div>Mode: <span id="visualizationMode">Real Robot</span></div>
+                </div>
+
+                <div class="visualization-controls">
+                    <button class="btn btn-secondary" onclick="reset3DCamera()">Reset Camera</button>
+                    <button class="btn btn-secondary" onclick="openVisualisationPopup()">Open 3D in Separate Window</button>
+                    <div class="view-buttons">
+                        <button class="btn btn-secondary" onclick="set3DView('front')">Front</button>
+                        <button class="btn btn-secondary" onclick="set3DView('side')">Side</button>
+                        <button class="btn btn-secondary" onclick="set3DView('top')">Top</button>
+                        <button class="btn btn-secondary" onclick="set3DView('iso')">Isometric</button>
+                        <button class="btn btn-secondary" id="cameraProjectionToggle" onclick="toggleCameraProjection()">Orthographic</button>
+                    </div>
+                    <div class="visualization-toggles">
+                        <label>
+                            <input type="checkbox" id="showDeadZonesCheckbox" checked>
+                            <span>Show Dead Zones</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="showStoredPositionsCheckbox" checked>
+                            <span>Show Stored Positions</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="showEnvelopeCheckbox" checked>
+                            <span>Show Movement Envelope</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="showEndEffectorTraceCheckbox">
+                            <span>Show End Effector Trace</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="showJointTracesCheckbox">
+                            <span>Show Joint Traces</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Simulation Mode Controls -->
+                <div class="simulation-panel">
+                    <h3>Joint Angle Control</h3>
+                    <div class="simulation-controls">
+                        <label class="simulation-toggle">
+                            <input type="checkbox" id="useSimulatedAngles" onchange="toggleSimulationMode()">
+                            <span>Use Simulated Angles (Override Robot)</span>
+                        </label>
+                        <p class="info-text" id="simulationModeText">
+                            Currently showing real robot joint angles. Enable simulation to manually set angles.
+                        </p>
+                    </div>
+                    
+                    <div id="simulatedAnglesPanel" class="simulated-angles-panel" style="display: none;">
+                        <h4>Simulated Joint Angles</h4>
+                        <div class="simulated-angles-grid" id="simulatedAnglesGrid">
+                            <!-- Simulated angle controls will be generated dynamically -->
+                        </div>
+                        <div class="simulation-buttons">
+                            <button class="btn btn-small" onclick="resetSimulatedAngles()">Reset to 0°</button>
+                            <button class="btn btn-small" onclick="copyRealAnglesToSim()">Copy from Robot</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kinematics Tab -->
+        <div id="kinematics-tab" class="tab-content">
+            <h2>Kinematics and Transform Matrices</h2>
+            <p class="info-text">
+                Every link length, joint axis and limit used here comes from the arm's URDF (Unified Robot
+                Description Format) file, <code>kinematics.urdf</code>.
+                <a href="#" id="kinematicsViewUrdfLink" onclick="openUrdfFileWindow(); return false;">View the URDF file</a>
+                to read the actual geometry (the URDF uses metres for lengths and radians for joint limits).
+            </p>
+
+            <div class="simulation-panel kinematics-source-panel">
+                <div class="simulation-controls">
+                    <label class="simulation-toggle">
+                        <input type="checkbox" id="kinematicsUseSimulated" onchange="toggleSimulationMode('kinematics')">
+                        <span>Simulate joint angles</span>
+                    </label>
+                    <p class="info-text" id="kinematicsSourceText">
+                        Showing the arm's live joint angles - each step below updates in real time as the arm moves.
+                        Tick to type your own angles into the step cards instead (shared with the 3D view's simulation mode).
+                    </p>
+                </div>
+                <div class="simulation-buttons" id="kinematicsSimButtons" style="display: none;">
+                    <button class="btn btn-small" onclick="resetSimulatedAnglesForKinematics()">Reset to 0°</button>
+                    <button class="btn btn-small" onclick="copyRealAnglesToSimForKinematics()">Copy from Robot</button>
+                </div>
+            </div>
+
+            <p class="info-text">
+                This tab shows how forward kinematics builds up from the base to the end effector.
+                For each joint, we apply a transform
+                T<sub>i</sub> = Origin<sub>i</sub> · Rotation(axis<sub>i</sub>, angle<sub>i</sub>),
+                and multiply them to get the cumulative transform.
+            </p>
+            <div class="kinematics-matrix-legend">
+                <p class="info-text"><strong>4×4 transform layout</strong></p>
+                <table class="kinematics-matrix">
+                    <tbody>
+                        <tr>
+                            <td class="kin-hl-angle">R<sub>11</sub></td>
+                            <td class="kin-hl-angle">R<sub>12</sub></td>
+                            <td class="kin-hl-angle">R<sub>13</sub></td>
+                            <td class="kin-hl-origin">T<sub>x</sub> (mm)</td>
+                        </tr>
+                        <tr>
+                            <td class="kin-hl-angle">R<sub>21</sub></td>
+                            <td class="kin-hl-angle">R<sub>22</sub></td>
+                            <td class="kin-hl-angle">R<sub>23</sub></td>
+                            <td class="kin-hl-origin">T<sub>y</sub> (mm)</td>
+                        </tr>
+                        <tr>
+                            <td class="kin-hl-angle">R<sub>31</sub></td>
+                            <td class="kin-hl-angle">R<sub>32</sub></td>
+                            <td class="kin-hl-angle">R<sub>33</sub></td>
+                            <td class="kin-hl-origin">T<sub>z</sub> (mm)</td>
+                        </tr>
+                        <tr>
+                            <td>0</td>
+                            <td>0</td>
+                            <td>0</td>
+                            <td>1</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="info-text">
+                    The top-left 3×3 entries R<sub>ij</sub> form the rotation (driven by each joint's axis and angle).
+                    The last column holds the translation in millimetres (from each joint's origin; internally stored in metres).
+                    In each step below: <strong>Origin × Rotation(axis, θ) = T<sub>i</sub></strong>, then the running product
+                    multiplies T<sub>i</sub> onto everything before it to give that frame's position in the base frame.
+                </p>
+            </div>
+            <div id="kinematicsMatricesDisplay" class="kinematics-matrices-display"></div>
+        </div>
+
+        <!-- Stored Positions Tab -->
+        <div id="positions-tab" class="tab-content">
+            <h2>Stored Positions</h2>
+            <p class="info-text">
+                Define preset positions (0-99) with custom labels. These positions can be referenced in Blockly programs.
+            </p>
+            
+            <div class="positions-panel">
+                <div class="positions-controls">
+                    <div class="position-input-group">
+                        <label>Position Number (0-99):</label>
+                        <input type="number" id="positionNumber" min="0" max="99" value="0" style="width: 80px;">
+                    </div>
+                    <div class="position-input-group">
+                        <label>Label:</label>
+                        <input type="text" id="positionLabel" placeholder="e.g., Home, Pick, Place" style="width: 200px;">
+                    </div>
+                    <button class="btn btn-primary btn-major" onclick="savePosition()">Save Position</button>
+                    <button class="btn btn-secondary btn-major" onclick="loadPosition()">Load Position</button>
+                    <button class="btn btn-secondary" onclick="loadCurrentRobotAngles()">Load from Robot</button>
+                    <button class="btn btn-danger" onclick="deletePosition()">Delete Position</button>
+                    <button class="btn btn-warning btn-major torque-toggle-button" onclick="toggleTorqueAll()">Torque: On</button>
+                </div>
+
+                <div class="positions-type-toggle">
+                    <label><input type="radio" name="positionType" value="angles" checked onchange="updatePositionTypeUI()"> Save as Angles</label>
+                    <label><input type="radio" name="positionType" value="xyz" onchange="updatePositionTypeUI()"> Save as XYZ</label>
+                    <p class="info-text">
+                        An XYZ position is resolved to joint angles at move time using whichever tool is
+                        currently attached, so the same point can drive different angles for different tool heads.
+                        An Angles position always moves to the exact same joint angles regardless of tool.
+                    </p>
+                </div>
+
+                <div class="positions-joints">
+                    <h3>Joint Angles (degrees)</h3>
+                    <div id="positionJointsGrid" class="positions-joints-grid">
+                        <!-- Joint angle inputs will be generated dynamically -->
+                    </div>
+                </div>
+
+                <div class="positions-xyz">
+                    <h3>Tool Position - XYZ (mm)</h3>
+                    <div class="positions-xyz-row">
+                        <div class="xyz-item">
+                            <label>X:</label>
+                            <input type="number" id="positionX" step="0.1" style="width: 90px;">
+                            <span>mm</span>
+                        </div>
+                        <div class="xyz-item">
+                            <label>Y:</label>
+                            <input type="number" id="positionY" step="0.1" style="width: 90px;">
+                            <span>mm</span>
+                        </div>
+                        <div class="xyz-item">
+                            <label>Z:</label>
+                            <input type="number" id="positionZ" step="0.1" style="width: 90px;">
+                            <span>mm</span>
+                        </div>
+                    </div>
+                    <p class="info-text" id="positionPreviewNote"></p>
+                    <div id="positionsXYZStatus" class="positions-xyz-status"></div>
+                </div>
+
+                <div class="positions-list">
+                    <h3>Saved Positions</h3>
+                    <div class="positions-list-controls">
+                        <button class="btn btn-small" onclick="refreshPositionsList()">Refresh List</button>
+                        <button class="btn btn-small" onclick="exportPositions()">Export All</button>
+                        <button class="btn btn-small" onclick="importPositions()">Import All</button>
+                    </div>
+                    <div id="positionsList" class="positions-list-content">
+                        <!-- List of saved positions will be displayed here -->
+                    </div>
+                </div>
+                
+                <div class="positions-status">
+                    <div>Status: <span id="positionsStatus">Ready</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calibration Tab -->
+        <div id="calibration-tab" class="tab-content">
+            <h2>Calibration</h2>
+            <p class="info-text">
+                Every EEPROM (persistent configuration) and SRAM (live/runtime state) register on a servo, read
+                directly from the hardware and decoded against the ST3215 datasheet's memory table - raw byte
+                value alongside its real-world meaning. EEPROM shows the factory default so anything that's been
+                changed stands out; SRAM is live telemetry (position, speed, current draw, fault flags, etc.) shown
+                read-only. Selecting <strong>End Tool (ID 64)</strong> shows the ESP32 end tool's registers instead:
+                its identity and the saved Tool type ID as EEPROM, and its outputs, telemetry and hobby-servo settings
+                as RAM - which, unlike servo SRAM, can be edited here once editing is enabled.
+            </p>
+
+            <div class="calibration-controls">
+                <label>
+                    Joint:
+                    <select id="calibrationJointSelect">
+                        <option value="1">Joint 1</option>
+                        <option value="2">Joint 2</option>
+                        <option value="3">Joint 3</option>
+                        <option value="4">Joint 4</option>
+                        <option value="5">Joint 5</option>
+                        <option value="6">Joint 6</option>
+                        <option value="tool">End Tool (ID 64)</option>
+                    </select>
+                </label>
+                <button id="calibrationReadButton" class="btn btn-primary" disabled onclick="readCalibrationTable()">Read Registers</button>
+                <label class="calibration-diff-toggle">
+                    <input type="checkbox" id="calibrationDiffOnly" onchange="renderCalibrationTable()">
+                    Show only values that differ from factory default
+                </label>
+            </div>
+
+            <div class="calibration-write-controls">
+                <input type="password" id="calibrationWritePassword" placeholder="Write password" autocomplete="off">
+                <button id="calibrationUnlockWritesButton" class="btn btn-warning" onclick="toggleCalibrationWriteMode()">Enable Editing</button>
+                <p class="info-text calibration-write-note">
+                    Editing writes directly to servo EEPROM and requires the control-lock password. ID, Baud rate, and
+                    Phase are never editable here (wrong values can make a servo unreachable on the bus); angle limits
+                    ask for an extra confirmation. The Commissioning panel below remains the safer route for routine
+                    PID/overload/torque changes, and only appears once the server has accepted this password.
+                </p>
+            </div>
+            <p class="info-text" id="calibrationStatus"></p>
+
+            <div class="connection-panel" id="traineeZeroTrimSection">
+                <h3>Student Zero Calibration (Trainee Trim)</h3>
+                <p class="info-text">
+                    Jog the joint selected above until its alignment marks line up exactly, then press
+                    <strong>Set current position as 0&deg;</strong>. The joint does not move - its reading changes so that
+                    this position becomes 0&deg;. This is a <strong>software trim only</strong>: nothing is written to the
+                    servo, and <strong>Reset</strong> always restores the servo's own calibration. Trims are limited to
+                    &plusmn;10&deg; and are kept until they are reset, even if the server restarts.
+                </p>
+                <div class="connection-form">
+                    <button id="zeroTrimSetButton" class="btn btn-primary" disabled onclick="setTraineeZeroTrim()">Set current position as 0&deg;</button>
+                    <button id="zeroTrimResetButton" class="btn btn-secondary" disabled onclick="resetTraineeZeroTrim(false)">Reset this joint</button>
+                    <button id="zeroTrimResetAllButton" class="btn btn-warning" disabled onclick="resetTraineeZeroTrim(true)">Reset all joints</button>
+                </div>
+                <p class="info-text" id="zeroTrimSummary">Trainee trims: -</p>
+            </div>
+
+            <h3 class="calibration-section-heading">EEPROM (persistent configuration)</h3>
+            <div class="table-wrap">
+                <table class="calibration-table" id="calibrationTable">
+                    <thead>
+                        <tr>
+                            <th>Addr</th>
+                            <th>Register</th>
+                            <th>Bytes</th>
+                            <th>Raw</th>
+                            <th>Value</th>
+                            <th>Factory default</th>
+                            <th>Range</th>
+                            <th>Access</th>
+                            <th id="calibrationEditHeader" hidden>Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calibrationTableBody">
+                        <tr><td colspan="9" class="calibration-empty">Select a joint and click "Read EEPROM".</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 class="calibration-section-heading" id="calibrationSramHeading">SRAM (live/runtime state - resets on power-off, read-only here)</h3>
+            <div class="table-wrap">
+                <table class="calibration-table" id="calibrationSramTable">
+                    <thead>
+                        <tr>
+                            <th>Addr</th>
+                            <th>Register</th>
+                            <th>Bytes</th>
+                            <th>Raw</th>
+                            <th>Value</th>
+                            <th>Access</th>
+                            <th id="calibrationSramEditHeader" hidden>Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calibrationSramTableBody">
+                        <tr><td colspan="6" class="calibration-empty">Select a joint and click "Read EEPROM".</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="connection-panel" id="calibrationPositionCorrectionSection" hidden>
+                <h3>Position Correction (Zero-Point Nudge)</h3>
+                <p class="info-text">
+                    Nudges the selected joint's zero-point offset (EEPROM 0x1F, Position Correction) up or down
+                    by the step size below, then commands the servo to its mechanical center (SRAM address 0x2A,
+                    Target Location, set to 2048) so the change is visible immediately, without a power cycle.
+                    <strong>This physically moves the joint</strong> - make sure it's clear to travel before
+                    pressing Up or Down.
+                </p>
+                <p class="info-text">
+                    Steps are 1/4096th of a full turn (0.088&deg; each) - roughly:
+                    0.5&deg; &asymp; 6 steps, 1&deg; &asymp; 11 steps, 5&deg; &asymp; 57 steps, 10&deg; &asymp; 114 steps.
+                </p>
+                <div class="connection-form">
+                    <label>Step (steps) <input type="number" id="posCorrectionStep" min="1" max="2047" step="1" value="1"></label>
+                    <button id="posCorrectionDownButton" class="btn btn-secondary" disabled onclick="adjustPositionCorrection(-1)">&minus; Down</button>
+                    <span id="posCorrectionValue">Position Correction: - </span>
+                    <button id="posCorrectionUpButton" class="btn btn-secondary" disabled onclick="adjustPositionCorrection(1)">+ Up</button>
+                </div>
+            </div>
+
+            <div class="connection-panel" id="calibrationCommissioningSection" hidden>
+                <h3>Commissioning</h3>
+                <p class="info-text">
+                    Reads each servo on the bus (joints 1-6), then writes every EEPROM register from 0x07 to 0x27
+                    that isn't already at its target value - for bringing a freshly replaced or factory-reset
+                    servo back to the arm's known-good configuration, and doing so quickly on a re-run since only
+                    what's actually changed gets written. Most registers get their factory default, except: 0x0E
+                    (Max input voltage) &rarr; 140, 0x17 (I coefficient) &rarr; 10, 0x1C (Protection current)
+                    &rarr; 100, 0x22 (Protective torque) &rarr; 10, 0x23 (Protection time) &rarr; 50, and 0x24
+                    (Overload torque) &rarr; 40 on every joint, plus 0x09/0x0B (Min/Max angle limit) &rarr; that
+                    joint's own travel range, read live from the currently loaded kinematics.urdf. ID, Baud rate,
+                    Phase, and Position Correction (0x1F - handled separately, as it's per-servo zero-point
+                    calibration, not a generic default) are never touched.
+                </p>
+                <button id="commissionAllButton" class="btn btn-warning" disabled onclick="commissionAllServos()">Write Default Values to All Servos</button>
+                <p class="info-text" id="commissionStatus"></p>
+            </div>
+        </div>
+
+        <!-- Dead Zones Tab -->
+        <div id="deadzones-tab" class="tab-content">
+            <h2>Dead Zones</h2>
+            <p class="info-text">
+                Define rectangular XYZ regions that the robot arm must avoid. Moves that would pass through a dead zone
+                can be routed over a safe Z height.
+            </p>
+
+            <div class="settings-panel">
+                <h3>Add / Edit Dead Zone</h3>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Name:</label>
+                        <input type="text" id="deadZoneName" placeholder="e.g., Vice, Fixture">
+                    </div>
+                    <div class="setting-item">
+                        <label>Min X (mm):</label>
+                        <input type="text" id="deadZoneMinX" value="0">
+                    </div>
+                    <div class="setting-item">
+                        <label>Max X (mm):</label>
+                        <input type="text" id="deadZoneMaxX" value="100">
+                    </div>
+                    <div class="setting-item">
+                        <label>Min Y (mm):</label>
+                        <input type="text" id="deadZoneMinY" value="-50">
+                    </div>
+                    <div class="setting-item">
+                        <label>Max Y (mm):</label>
+                        <input type="text" id="deadZoneMaxY" value="50">
+                    </div>
+                    <div class="setting-item">
+                        <label>Min Z (mm):</label>
+                        <input type="text" id="deadZoneMinZ" value="0">
+                    </div>
+                    <div class="setting-item">
+                        <label>Max Z (mm):</label>
+                        <input type="text" id="deadZoneMaxZ" value="150">
+                    </div>
+                    <div class="setting-item">
+                        <label>Safe Z Height (mm):</label>
+                        <input type="text" id="deadZoneSafeZ" value="300">
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-major" id="addDeadZoneButton">Add / Update Dead Zone</button>
+            </div>
+
+            <div class="settings-panel">
+                <h3>Defined Dead Zones</h3>
+                <p class="info-text">Enabled dead zones will be checked when planning XYZ moves.</p>
+                <div id="deadZonesList" class="deadzone-list">
+                    <!-- Populated by app.js -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Visual Programming (Blockly) Tab -->
+        <div id="blockly-tab" class="tab-content">
+            <h2>Visual Programming</h2>
+            <p class="info-text">
+                Drag and drop blocks to create control programs for your robot arm. 
+                Click "Run Program" to execute your program.
+            </p>
+            
+            <div id="blockly-loading" class="blockly-loading">
+                <p>Loading Blockly library...</p>
+            </div>
+            
+            <div class="blockly-controls" id="blocklyControls" style="display: none;">
+                <div class="control-row control-row-primary">
+                    <button class="btn btn-primary btn-motion" id="runBlocklyButton" onclick="runBlocklyProgram()">Run Program</button>
+                    <button class="btn btn-warning btn-motion" id="pauseBlocklyButton" onclick="toggleBlocklyPauseResume()" disabled>Pause</button>
+                    <button class="btn btn-danger btn-motion" id="stopBlocklyButton" onclick="stopBlocklyProgram()" disabled>Stop</button>
+                    <button class="btn btn-secondary btn-major" id="blocklyMoreButton" onclick="toggleControlDrawer('blocklyMoreActions', this)" aria-expanded="false">More actions</button>
+                </div>
+                <div class="control-drawer" id="blocklyMoreActions" hidden>
+                    <div class="control-row">
+                        <button class="btn btn-secondary" onclick="clearBlocklyWorkspace()">Clear</button>
+                        <button class="btn btn-secondary" onclick="loadBlocklyExample()">Load Example</button>
+                        <button class="btn btn-secondary" onclick="saveBlocklyProgram()">Save Program</button>
+                        <button class="btn btn-secondary" onclick="loadBlocklyProgram()">Load Program</button>
+                        <button class="btn btn-secondary" onclick="setAllJointAccelerations()">Set All Accelerations</button>
+                    </div>
+                    <div class="control-row control-row-divider">
+                        <span class="control-row-label">Convert to</span>
+                        <button class="btn btn-primary" onclick="convertBlocklyToGCodeAndOpen()">G-Code</button>
+                        <button class="btn btn-primary" onclick="convertBlocklyToRapidAndOpen()">RAPID</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="blockly-workspace" class="blockly-workspace"></div>
+            
+            <div class="blockly-status">
+                <div>Status: <span id="blocklyStatus">Initializing...</span></div>
+                <div>Program Output:</div>
+                <div id="blocklyOutput" class="blockly-output"></div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <!-- Camera Tab -->
+        <div id="camera-tab" class="tab-content">
+            <h2>USB Camera</h2>
+            <div class="camera-panel">
+                <div class="camera-toolbar camera-toolbar-hidden">
+                    <button type="button" id="cameraStartButton" class="btn btn-primary">Start camera</button>
+                    <button type="button" id="cameraStopButton" class="btn btn-secondary">Stop</button>
+                    <button type="button" id="cameraRefreshButton" class="btn btn-secondary">Refresh</button>
+                </div>
+                <p id="cameraStreamStatus" class="camera-stream-status">Open this tab to start the camera.</p>
+                <div class="camera-content">
+                    <div id="cameraStreamFrame" class="camera-stream-frame">
+                        <img id="cameraStreamImage" alt="USB camera stream" class="camera-stream-image">
+                        <p class="camera-stream-placeholder">Press Start camera to view the USB camera.</p>
+                    </div>
+                    <div class="camera-detections-panel">
+                        <h3 class="camera-detections-title">Detected blocks</h3>
+                        <table class="camera-detections-table">
+                            <thead>
+                                <tr><th>Index</th><th>Colour</th><th>X (mm)</th><th>Y (mm)</th><th>Rotation</th></tr>
+                            </thead>
+                            <tbody id="cameraDetectionsTableBody">
+                                <tr><td colspan="5" class="camera-detections-empty">No blocks detected</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <p class="info-text camera-help-text">
+                    Point the camera at the workspace. ArUco markers will be detected automatically
+                    and coloured blocks will be highlighted. The four corner markers define the workspace
+                    coordinate frame: each marker's corner is taken from where it sits in the picture, and
+                    the top-left marker is the origin. Keep only the four corner markers in view.
+                </p>
+            </div>
+        </div>
+
+        <div id="settings-tab" class="tab-content">
+            <h2>Settings</h2>
+            
+            <!-- Movement Mode (PTP / Linear Cartesian) lives on the Pendant Control tab -->
+
+            <div class="settings-panel">
+                <h3>Connection Settings</h3>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Number of Joints (servos):</label>
+                        <input type="number" id="numJoints" value="6" min="1" max="6" onchange="updateJointUI()">
+                        <p class="info-text">Coordinate 7 is the fixed tool mounting point from the URDF (no servo angle).</p>
+                    </div>
+                    <div class="setting-item">
+                        <label>Fallback status poll (ms):</label>
+                        <input type="number" id="updateInterval" value="200" min="100" max="250">
+                        <p class="info-text">The Pi pushes live status automatically. This setting is only used if push mode is unavailable (100–250 ms).</p>
+                    </div>
+                    <div class="setting-item">
+                        <label>Default Step Size (degrees):</label>
+                        <input type="text" id="defaultStepSize" value="1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kinematics Configuration Panel -->
+            <div class="settings-panel">
+                <h3>Joint Kinematics Configuration</h3>
+                <div class="kinematics-controls">
+                    <button class="btn btn-primary" onclick="loadJointConfigs()">Load from Robot</button>
+                    <button class="btn btn-primary" onclick="loadDemoConfig()">Load Demo Configuration</button>
+                    <button class="btn btn-secondary" onclick="applyKinematicsConfig()">Apply to Kinematics</button>
+                    <span id="kinematicsStatus" class="status-text"></span>
+                </div>
+                
+                <div id="kinematicsConfigDisplay" class="kinematics-display">
+                    <!-- Joint configurations will be displayed here -->
+                    <p class="info-text">
+                        Click "Load from Robot" to read joint configurations from PIC controllers, 
+                        or "Load Demo Configuration" to load the 6-joint arm URDF (with tool mount) for testing.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Forward/Inverse Kinematics Test Panel -->
+            <div class="settings-panel">
+                <h3>Kinematics Testing</h3>
+                <div class="kinematics-test">
+                    <div class="test-section">
+                        <h4>Forward Kinematics</h4>
+                        <p>Calculate end effector position from joint angles:</p>
+                        <div class="test-inputs">
+                            <label>Joint Angles (degrees, comma-separated):</label>
+                            <input type="text" id="fkAngles" placeholder="0, 90, 45, 0" style="width: 300px;">
+                            <button class="btn btn-small" onclick="testForwardKinematics()">Calculate</button>
+                        </div>
+                        <div id="fkResult" class="test-result"></div>
+                    </div>
+                    
+                    <div class="test-section">
+                        <h4>Inverse Kinematics</h4>
+                        <p>Calculate joint angles from end effector position:</p>
+                        <div class="test-inputs">
+                            <label>Target Position (mm):</label>
+                            <input type="text" id="ikX" placeholder="X" style="width: 80px;">,
+                            <input type="text" id="ikY" placeholder="Y" style="width: 80px;">,
+                            <input type="text" id="ikZ" placeholder="Z" style="width: 80px;">
+                            <button class="btn btn-small" onclick="testInverseKinematics()">Calculate</button>
+                        </div>
+                        <div id="ikResult" class="test-result"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AS5600 Sensor Calibration Panel -->
+            <div class="settings-panel">
+                <h3>AS5600 Sensor Calibration</h3>
+                <p class="info-text">
+                    Calibrate the AS5600 sensor for a joint. The calibration routine will:
+                    <br>1. Move forward until hitting the mechanical end stop
+                    <br>2. Move backward until hitting the other mechanical end stop
+                    <br>3. Move to the middle position
+                    <br>4. Reset the AS5600 absolute angle to 0° at the center position
+                </p>
+                <div class="calibration-controls">
+                    <div class="calibration-input">
+                        <label>Joint Number:</label>
+                        <input type="number" id="calibrationJoint" value="1" min="1" max="6" style="width: 80px;">
+                    </div>
+                    <button class="btn btn-primary btn-motion" id="startCalibrationButton" onclick="startCalibration()">Start Calibration</button>
+                    <button class="btn btn-danger btn-motion" id="stopCalibrationButton" onclick="stopCalibration()" style="display: none;">Stop Calibration</button>
+                </div>
+                <div id="calibrationStatus" class="calibration-status"></div>
+                <div id="calibrationProgress" class="calibration-progress"></div>
+            </div>
+
+            <!-- Local Controller Panel (only shown when running on the controller) -->
+            <div class="settings-panel" id="localPiSettingsPanel" style="display: none;">
+                <h3>Local Controller</h3>
+                <p class="info-text">
+                    This section appears when the app is running directly on the robot arm controller.
+                </p>
+                <div class="settings-grid">
+                    <div class="setting-item" style="grid-column: 1 / -1;">
+                        <label>Local server status:</label>
+                        <div>
+                            <span id="localPiServerStatusText">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label>Hostname:</label>
+                        <div><span id="localPiHostname">-</span></div>
+                    </div>
+                    <div class="setting-item">
+                        <label>IP address:</label>
+                        <div><span id="localPiIp">-</span></div>
+                    </div>
+                    <div class="setting-item">
+                        <label>MAC address:</label>
+                        <div><span id="localPiMac">-</span></div>
+                    </div>
+                    <div class="setting-item">
+                        <label>Gateway:</label>
+                        <div><span id="localPiGateway">-</span></div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-secondary" onclick="checkLocalPiServer()">Re-check Local Server</button>
+                    <button class="btn btn-primary" onclick="useLocalPiConnectionSettings()">Use Localhost Connection</button>
+                </div>
+                <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <h4>Update from GitHub</h4>
+                    <p class="info-text">
+                        Update the software on the robot arm controller to the latest version.
+                    </p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
+                        <button class="btn btn-small btn-secondary" onclick="updateElectronAppFromGit()">Update Electron App</button>
+                        <button class="btn btn-small btn-secondary" onclick="updateSt3215FromGit()">Update ST3215 Server</button>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span id="localPiUpdateStatus" class="status-text"></span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <h4>Ethernet Settings</h4>
+                    <p class="info-text">
+                        Configure the network connection for the robot arm controller.
+                        Choose DHCP or Static IP and click Apply.
+                    </p>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label>Mode:</label>
+                            <select id="localPiEthernetMode" onchange="toggleLocalPiEthernetModeFields()">
+                                <option value="dhcp">DHCP (Automatic)</option>
+                                <option value="static">Static IP</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label>Connection:</label>
+                            <div><span id="localPiEthernetConnection">-</span></div>
+                        </div>
+                        <div class="setting-item">
+                            <label>IP Address:</label>
+                            <input type="text" id="localPiEthernetIp" placeholder="192.168.1.50">
+                        </div>
+                        <div class="setting-item">
+                            <label>Subnet Mask:</label>
+                            <input type="text" id="localPiEthernetMask" placeholder="255.255.255.0">
+                        </div>
+                        <div class="setting-item">
+                            <label>Gateway:</label>
+                            <input type="text" id="localPiEthernetGateway" placeholder="192.168.1.1">
+                        </div>
+                        <div class="setting-item">
+                            <label>DNS:</label>
+                            <input type="text" id="localPiEthernetDns" placeholder="1.1.1.1,8.8.8.8">
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button class="btn btn-secondary" onclick="refreshLocalPiEthernetSettings()">Refresh Ethernet Settings</button>
+                        <button class="btn btn-primary" onclick="applyLocalPiEthernetSettings()">Apply Ethernet Settings</button>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <span id="localPiEthernetStatus" class="status-text"></span>
+                    </div>
+                </div>
+            </div>
+                
+            <button class="btn btn-primary btn-major" onclick="saveSettings()">Save Settings</button>
+        </div> <!-- end settings-tab -->
+
+        <!-- Curriculum Tab -->
+        <div id="curriculum-tab" class="tab-content curriculum-tab-content">
+            <iframe id="curriculum-iframe" src="Curriculum/index.html" style="width:100%;height:100%;border:none;display:block;"></iframe>
+        </div>
+
+            </div> <!-- end tab-content-container -->
+
+        <!-- In-app dialog. Replaces window.confirm/prompt, whose buttons are
+             drawn by the OS and cannot be made touch-sized. -->
+        <div id="appDialogBackdrop" class="app-dialog-backdrop" hidden>
+            <div class="app-dialog" role="dialog" aria-modal="true" aria-labelledby="appDialogMessage">
+                <p class="app-dialog-message" id="appDialogMessage"></p>
+                <input type="text" class="app-dialog-input" id="appDialogInput" hidden>
+                <div class="app-dialog-buttons">
+                    <button type="button" class="btn btn-secondary btn-major" id="appDialogCancel">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-major" id="appDialogConfirm">OK</button>
+                </div>
+            </div>
+        </div>
+        </div> <!-- end main-layout -->
+
+    </div>
+
+    <!-- Scripts -->
+    <!-- 
+        External Libraries - Loaded from local libs/ directory for offline functionality
+        These libraries are bundled with the application and don't require internet connection.
+        
+        Setup: Run "npm install" and "npm run setup-libs" to copy libraries to libs/ directory.
+        The setup script runs automatically after npm install.
+    -->
+    
+    <!-- Three.js and URDFLoader: static tags so they always load in the right order
+         with no async race conditions. Both files are always present on this server. -->
+    <script src="./libs/three.min.js"></script>
+    <script src="./libs/URDFLoader.js"></script>
+    
+    <!-- Blockly library for visual programming -->
+    <!-- Loads from local libs/ directory first, falls back to CDN if not available -->
+    <script>
+        (function() {
+            const blocklyScript = document.createElement('script');
+            // Try local libs/ directory first (offline mode)
+            blocklyScript.src = './libs/blockly.min.js';
+            blocklyScript.onload = function() {
+                // Load XML module first (needed for save/load functionality)
+                const xmlScript = document.createElement('script');
+                xmlScript.src = './libs/xml_compressed.js';
+                xmlScript.onload = function() {
+                    console.log('Blockly XML module loaded from local files');
+                    // Load JavaScript generator after XML module loads
+                    const jsGen = document.createElement('script');
+                    jsGen.src = './libs/javascript_compressed.js';
+                    jsGen.onload = function() {
+                        console.log('Blockly loaded successfully from local files (offline mode)');
+                        // Verify XML module is available
+                        if (typeof Blockly !== 'undefined' && typeof Blockly.Xml !== 'undefined') {
+                            console.log('Blockly.Xml is available:', typeof Blockly.Xml.textToDom);
+                        } else {
+                            console.warn('Blockly.Xml is not available after loading');
+                        }
+                    };
+                    jsGen.onerror = function() {
+                        // Fallback to CDN for JavaScript generator
+                        console.warn('Blockly JS generator not found locally, trying CDN...');
+                        const cdnJsGen = document.createElement('script');
+                        cdnJsGen.src = 'https://unpkg.com/blockly@9.3.3/javascript_compressed.js';
+                        cdnJsGen.onerror = function() {
+                            console.error('Failed to load Blockly JavaScript generator. Run "npm run setup-libs" for offline use.');
+                        };
+                        document.head.appendChild(cdnJsGen);
+                    };
+                    document.head.appendChild(jsGen);
+                };
+                xmlScript.onerror = function() {
+                    // Fallback to CDN for XML module
+                    console.warn('Blockly XML module not found locally, trying CDN...');
+                    const cdnXmlScript = document.createElement('script');
+                        cdnXmlScript.src = 'https://unpkg.com/blockly@9.3.3/xml_compressed.js';
+                    cdnXmlScript.onload = function() {
+                        console.log('Blockly XML module loaded from CDN');
+                        // Load JavaScript generator after XML module loads
+                        const jsGen = document.createElement('script');
+                        jsGen.src = './libs/javascript_compressed.js';
+                        jsGen.onload = function() {
+                            console.log('Blockly loaded successfully');
+                        };
+                        jsGen.onerror = function() {
+                            const cdnJsGen = document.createElement('script');
+                            cdnJsGen.src = 'https://unpkg.com/blockly@9.3.3/javascript_compressed.js';
+                            document.head.appendChild(cdnJsGen);
+                        };
+                        document.head.appendChild(jsGen);
+                    };
+                    cdnXmlScript.onerror = function() {
+                        console.error('Failed to load Blockly XML module from CDN. Save/load functionality will not work.');
+                    };
+                    document.head.appendChild(cdnXmlScript);
+                };
+                document.head.appendChild(xmlScript);
+            };
+            blocklyScript.onerror = function() {
+                // Fallback to CDN if local file not found (requires internet)
+                console.warn('Blockly not found locally, trying CDN...');
+                const cdnScript = document.createElement('script');
+                cdnScript.src = 'https://unpkg.com/blockly@9.3.3/blockly.min.js';
+                cdnScript.onload = function() {
+                    // Load XML module first
+                    const xmlScript = document.createElement('script');
+                    xmlScript.src = 'https://unpkg.com/blockly@9.3.3/xml_compressed.js';
+                    xmlScript.onload = function() {
+                        console.log('Blockly XML module loaded from CDN (main fallback)');
+                        // Load JavaScript generator after XML module loads
+                        const jsGen = document.createElement('script');
+                        jsGen.src = 'https://unpkg.com/blockly@9.3.3/javascript_compressed.js';
+                        jsGen.onload = function() {
+                            console.log('Blockly loaded successfully from CDN');
+                            // Verify XML module is available
+                            if (typeof Blockly !== 'undefined' && typeof Blockly.Xml !== 'undefined') {
+                                console.log('Blockly.Xml is available:', typeof Blockly.Xml.textToDom);
+                            } else {
+                                console.warn('Blockly.Xml is not available after loading');
+                            }
+                        };
+                        jsGen.onerror = function() {
+                            console.error('Failed to load Blockly JS generator from CDN');
+                        };
+                        document.head.appendChild(jsGen);
+                    };
+                    xmlScript.onerror = function() {
+                        console.error('Failed to load Blockly XML module from CDN. Save/load functionality will not work.');
+                    };
+                    document.head.appendChild(xmlScript);
+                };
+                cdnScript.onerror = function() {
+                    console.error('Failed to load Blockly from CDN. Run "npm run setup-libs" for offline use.');
+                    if (document.getElementById('blockly-loading')) {
+                        document.getElementById('blockly-loading').innerHTML = 
+                            '<p style="color:red;font-weight:bold;">Error: Could not load Blockly library.</p>' +
+                            '<p>For offline use, run "npm install" and "npm run setup-libs" to copy libraries locally.</p>';
+                    }
+                };
+                document.head.appendChild(cdnScript);
+            };
+            document.head.appendChild(blocklyScript);
+        })();
+    </script>
+    
+    <!-- Application Scripts - Loaded in order -->
+    <!-- Robot Arm Client: Handles WebSocket communication with Raspberry Pi -->
+    <script src="robotArmClient.js?v=20260925b"></script>
+    <!-- G-Code Processor: Parses and executes G-code commands -->
+    <script src="gcodeProcessor.js"></script>
+    <!-- RAPID Processor: variables, loops and conditionals for the RAPID subset -->
+    <script src="rapidProcessor.js"></script>
+    <!-- Kinematics: Forward and inverse kinematics calculations -->
+    <script src="urdfParser.js"></script>
+    <script src="kinematics.js"></script>
+    <!-- 3D Visualization: Three.js-based 3D robot arm visualization -->
+    <script src="robotArm3D.js"></script>
+    <!-- Blockly Integration: Visual programming interface for robot control -->
+    <script src="blocklyRobotArm.js"></script>
+    <!-- Positions Manager: Manages stored preset positions (0-99) -->
+    <script src="positionsManager.js"></script>
+    <!-- STS3215 EEPROM Memory Table: register definitions for the Calibration tab -->
+    <script src="stsMemoryTable.js"></script>
+    <script src="endToolMemoryTable.js"></script>
+    <!-- Calibration Page: reads and displays a servo's full EEPROM against the memory table -->
+    <script src="calibrationPage.js"></script>
+    <script src="cameraView.js?v=20260616"></script>
+    <!-- Main Application: UI logic and event handlers -->
+    <script src="app.js?v=20260925a"></script>
+    <!-- On-Screen Keyboard: touch keyboard for kiosk mode (no system OSK in Chromium kiosk) -->
+    <script src="keyboard.js?v=20260930"></script>
+
+    <!-- Check if Blockly loaded after page load -->
+    <!-- This verifies that Blockly loaded successfully and hides the loading message -->
+    <script>
+        // Function to check if Blockly is loaded and trigger generator registration
+        function checkBlocklyLoaded() {
+            if (typeof Blockly !== 'undefined' && typeof Blockly.JavaScript !== 'undefined') {
+                console.log('Blockly library loaded successfully');
+                const loadingDiv = document.getElementById('blockly-loading');
+                if (loadingDiv) {
+                    loadingDiv.style.display = 'none';
+                }
+                // Trigger generator registration if function exists
+                if (typeof registerBlocklyGenerators === 'function') {
+                    registerBlocklyGenerators();
+                }
+                return true;
+            }
+            return false;
+        }
+        
+        window.addEventListener('load', function() {
+            // Check immediately
+            if (checkBlocklyLoaded()) {
+                return;
+            }
+            
+            // Wait a bit for async scripts to load, check multiple times
+            let attempts = 0;
+            const maxAttempts = 20; // Check for up to 4 seconds (20 * 200ms)
+            const checkInterval = setInterval(function() {
+                attempts++;
+                if (checkBlocklyLoaded()) {
+                    clearInterval(checkInterval);
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    console.error('Blockly failed to load after multiple attempts');
+                    const loadingDiv = document.getElementById('blockly-loading');
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = 
+                            '<p style="color: red; font-weight: bold;">Error: Blockly library failed to load.</p>' +
+                            '<p>For offline use, run "npm install" and "npm run setup-libs" to copy libraries locally.</p>' +
+                            '<p>Otherwise, an internet connection is required to load from CDN.</p>';
+                    }
+                }
+            }, 200); // Check every 200ms
+        });
+    </script>
+</body>
+</html>
+

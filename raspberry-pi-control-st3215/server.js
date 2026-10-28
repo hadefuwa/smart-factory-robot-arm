@@ -1,1065 +1,1186 @@
+'use strict';
 /**
  * Robot Arm WebSocket Server (ST3215 Version)
- * 
- * This server runs on the Raspberry Pi and connects the Electron desktop app
- * to the ST3215 serial bus servo motors. It receives commands from the Electron app
- * and translates them to serial commands for the ST3215 servos.
- * 
- * Usage:
- *   node server.js
- * 
- * This server listens on port 8080 by default and communicates with:
- * - Electron desktop app (via WebSocket)
- * - ST3215 servos (via Serial/UART)
+ *
+ * Main thread: WebSocket server, control-session management, instant commands, kinematics.
+ * Servo bus: delegated entirely to servoWorker.js (child_process.fork).
+ *
+ * Usage:  node server.js
+ * Env:    SERIAL_PORT, STATUS_POLL_INTERVAL_MS, BUS_DIAGNOSTICS_LOG_INTERVAL_MS,
+ *         ROBOT_ARM_DEBUG_LOG
  */
 
-const WebSocket = require('ws');
-const os = require('os');
-const fs = require('fs');
-const { exec } = require('child_process');
-const RobotArm = require('./robotArmST3215');
+const WebSocket   = require('ws');
+const os          = require('os');
+const fs          = require('fs');
+const path        = require('path');
+const crypto      = require('crypto');
+const { exec, execFile, fork } = require('child_process');
+const { promisify } = require('util');
+const { robotKinematics } = require('./kinematicsService');
+const ledController = require('./ledController');
+const execFileAsync = promisify(execFile);
 
-// Configuration
-const PORT = 8080;
-const JOINT_COUNT = 6; // Number of robot arm joints (ST3215 servos)
-const SERIAL_PORT = '/dev/ttyACM0'; // ST3215 driver board (CDC-ACM device — Waveshare SC-B1 or similar)
-const SERIAL_BAUDRATE = 1000000; // ST3215 bus baud rate for this setup
+// ===== Configuration =====
+const PORT             = 8080;
+const SERVER_BUILD_ID  = '2026-06-05-worker-thread';
+const DEBUG_LOG_FILE   = process.env.ROBOT_ARM_DEBUG_LOG || '';
 
-// Debug flag - set to true to enable verbose debug messages
-const DEBUG = false;
-// Simple performance logging flag (set to true to see timing info)
-const PERF_DEBUG = false;
-let runtimeDebug = DEBUG;
-const recentLogs = [];
-const MAX_RECENT_LOGS = 200;
+// Commands that do not touch the servo bus — handled instantly in main thread.
+const INSTANT_SERVER_COMMANDS = {
+    getStatus: true,
+    getJointConfigs: true,
+    getServerDiagnostics: true,
+    getControlStatus: true,
+    takeControl: true,
+    releaseControl: true,
+    lockControl: true,
+    unlockControl: true,
+    verifyPassword: true,
+    getPiNetworkInfo: true,
+    getPiEthernetSettings: true,
+    setPiEthernetSettings: true,
+    updatePiServerFromGit: true,
+    kinematicsLoadURDF: true,
+    getEndTool: true, refreshEndTool: true,
+    kinematicsForwardKinematics: true,
+    kinematicsForwardKinematicsSteps: true,
+    kinematicsForwardKinematicsBatch: true,
+    kinematicsInverseKinematics: true,
+    kinematicsRefineOrientationWithAccuracy: true,
+    kinematicsApplyToolSpin: true,
+    kinematicsGetInfo: true,
+    executeLinearMove: true,
+    abortLinearPath: true
+};
 
-function pushLog(level, msg) {
-    const entry = { t: Date.now(), level, msg };
-    recentLogs.push(entry);
-    if (recentLogs.length > MAX_RECENT_LOGS) {
-        recentLogs.shift();
+// Bus commands that require an active control session.
+const BUS_WRITE_COMMANDS = {
+    moveJoint: true, stopJoint: true, stopAll: true, stopAllJoints: true,
+    setServo: true, setServoAngle: true, setSpeed: true, setSpeedAll: true,
+    setTorqueAll: true, setAcceleration: true, rescanServos: true,
+    readServoEeprom: true, readServoEepromRaw: true, writeServoEeprom: true, writeServoEepromRaw: true,
+    // Calibration page's raw register access to the ESP32 end tool (ID 64)
+    readEndToolRegisters: true, writeEndToolRegister: true,
+    // Trainee zero trims: control session only, deliberately no password -
+    // software-only and always undoable (see servoWorker.js)
+    setJointZeroTrim: true, resetJointZeroTrim: true,
+    toolPing: true, toolSetPwm: true, toolSetServoEnabled: true,
+    toolSetServoPosition: true, toolSetServoAngle: true,
+    toolSetServoEnabledAndAngle: true, toolSetServoSlewRate: true, toolSetServoCurrentLimit: true,
+    toolGetServoSlewStatus: true,
+    toolSetWatchdog: true, toolClearFaults: true, toolReset: true
+};
+
+// Bus commands that write servo EEPROM: these also need the control password.
+// writeEndToolRegister sits behind the same gate: the Calibration page's one
+// "Enable Editing" password covers the end tool's registers too.
+const EEPROM_WRITE_COMMANDS = { writeServoEeprom: true, writeServoEepromRaw: true, writeEndToolRegister: true };
+
+// Moves/stops bypass the write queue and run on the bus immediately.
+const IMMEDIATE_BUS_COMMANDS = {
+    moveJoint: true, stopJoint: true, stopAll: true, stopAllJoints: true
+};
+
+const CONTROL_IDLE_TIMEOUT_MS       = 5 * 60 * 1000;
+const CONTROL_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
+
+// "Lock control" — holds the control session exclusively (no other client can
+// take/force-take it, and the idle timeout is suspended) until released or
+// the lock duration expires. Requires the control password to set.
+//
+// The control password also gates servo EEPROM writes (Calibration tab). It is
+// kept in a file on the Pi, never in the repo, so students who can read the
+// source cannot find it. Set or change it with set-control-password.sh. Read
+// on every check, so a change takes effect without restarting the server.
+// If the file is missing, every password check fails (locked out, not open).
+const CONTROL_PASSWORD_FILE    = process.env.ROBOT_ARM_CONTROL_PASSWORD_FILE || '/etc/robot-arm-st3215/control-password';
+const CONTROL_LOCK_DEFAULT_MS  = 15 * 60 * 1000;
+const CONTROL_LOCK_MAX_MS      = 60 * 60 * 1000;
+
+let controlPasswordMissingLogged = false;
+
+// True if `supplied` matches the control password file. False if it doesn't,
+// or if no password has been set up on this Pi.
+function controlPasswordMatches(supplied) {
+    if (typeof supplied !== 'string' || supplied === '') return false;
+    let expected;
+    try {
+        expected = fs.readFileSync(CONTROL_PASSWORD_FILE, 'utf8').replace(/[\r\n]+$/, '');
+        controlPasswordMissingLogged = false;
+    } catch (e) {
+        if (!controlPasswordMissingLogged) {
+            debugLog('Control password file ' + CONTROL_PASSWORD_FILE + ' cannot be read (' + e.code + ') - '
+                + 'password-protected features are disabled. Run: sudo bash set-control-password.sh');
+            controlPasswordMissingLogged = true;
+        }
+        return false;
     }
-    if (runtimeDebug) {
-        console.log(`[${level.toUpperCase()}] ${msg}`);
-    }
-    return entry;
+    if (expected === '') return false;
+    const a = Buffer.from(supplied, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Array to store servo controllers
-const servos = [];
+// Linear path execution state — only one path runs at a time.
+let linearPathRunning = false;
+let linearPathClientWs = null;
+
+// LED state tracking
+let ledIsBooting       = true;   // true until the worker first signals ready
+let ledIsRecovering    = false;  // true while worker has crashed and is restarting
+let ledThermalFaultUntil = 0;   // epoch ms — thermal flash active until this time
+
+function computeLedState() {
+    if (ledIsRecovering)                          return 'recovering';
+    if (ledThermalFaultUntil > Date.now())        return 'thermal';
+    if (ledIsBooting)                             return 'booting';
+
+    const liveJoints = lastKnownStatusJoints.filter(j => j && !j.readStale);
+    if (liveJoints.length > 0 && liveJoints.every(j => !j.torqueEnabled)) return 'torque_off';
+
+    if (linearPathRunning)                        return 'linear_path';
+    if (lastKnownStatusJoints.some(j => j && j.isMoving)) return 'moving';
+
+    if (controlSession.ws && controlSession.ws.readyState === WebSocket.OPEN) return 'connected';
+
+    // Purple if the arm is only partially connected (some servos missing).
+    if (lastKnownJointConfigs.count < lastKnownJointConfigs.total &&
+        lastKnownJointConfigs.total > 0)          return 'partial';
+
+    return 'online';
+}
+
+function updateLed() {
+    ledController.setState(computeLedState());
+}
+
+// ===== Logging =====
+function debugLog(message, isError) {
+    const text = String(message);
+    const line = '[' + new Date().toISOString() + '] ' + (isError ? '[ERROR] ' : '') + text;
+    if (isError) { console.error(text); } else { console.log(text); }
+    if (!DEBUG_LOG_FILE) return;
+    try {
+        const dir = path.dirname(DEBUG_LOG_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.appendFileSync(DEBUG_LOG_FILE, line + '\n');
+    } catch (e) { console.error('Could not write debug log:', e.message); }
+}
+
+debugLog('Server process starting (pid ' + process.pid + ', build ' + SERVER_BUILD_ID + ')');
+if (DEBUG_LOG_FILE) debugLog('Debug log file: ' + DEBUG_LOG_FILE);
+
+process.on('unhandledRejection', (reason) => {
+    const msg = reason && reason.stack ? reason.stack : String(reason);
+    debugLog('Unhandled promise rejection: ' + msg, true);
+});
+process.on('uncaughtException', (error) => {
+    debugLog('Uncaught exception: ' + (error.stack || error), true);
+    process.exit(1);
+});
+process.on('exit', (code) => { debugLog('Process exit, code=' + code); });
+
+// ===== URDF: load at startup so kinematics are ready before any client connects =====
+
+// ===== End Tool Kinematics =====
+// The ESP32 end tool reports what it is in register 3 (servo ID 64). That ID
+// selects one of the <end_tool> entries in kinematics.urdf, which is what
+// makes the reported TCP and the IK target the real working point of whatever
+// is fitted. Register 3 is the only source of truth: nothing here guesses.
+const END_TOOL_PROBE_CLIENT_ID = '__server_end_tool__';
+const END_TOOL_PROBE_INTERVAL_MS = 15000;
+// A single bus read timeout used to drop a fitted tool straight to "bare
+// mount" until the next probe 15 s later. In that window the TCP is the mount
+// face, ~120 mm above the real tip, so a move could drive the tool into the
+// table. Before believing a tool has gone, re-check it a few times quickly;
+// only an unbroken run of failures counts as removed.
+const END_TOOL_LOST_RETRIES = 3;
+const END_TOOL_RETRY_DELAY_MS = 250;
+let endToolLostRetryCount = 0;
+
+let endToolState = {
+    present: false,          // did the tool answer the last probe?
+    toolTypeId: null,        // register 3, or null if it did not answer
+    known: false,            // does the URDF describe that ID?
+    tool: null,              // the resolved tool definition
+    lastProbeAt: null,
+    lastError: null
+};
+let endToolProbeTimer = null;
 
 /**
- * Shared serial port instance (all servos use the same port)
+ * Asks the end tool what it is. The reply comes back through
+ * handleWorkerMessage as a commandResponse carrying our internal client ID.
  */
-let sharedSerialPort = null;
-
-/**
- * Array to store all servo controllers for data routing
- * This is used by the shared serial port data handler
- */
-let allServoControllers = [];
-
-/**
- * Write queue for serializing writes to the shared serial port
- * This ensures only one write happens at a time
- */
-let writeQueue = [];
-let isWriting = false;
-
-/**
- * Global command queue for serializing ALL commands across all clients and servos
- * This ensures only one command is processed at a time, preventing conflicts
- */
-let commandQueue = [];
-let isProcessingCommand = false;
-const MAX_COMMAND_QUEUE_SIZE = 100; // Maximum queue size (status polls + moves)
-
-/**
- * Queue a write operation to the shared serial port
- * @param {Function} writeFn - Function that performs the write
- * @returns {Promise} Promise that resolves when write completes
- */
-async function queueWrite(writeFn) {
-    return new Promise((resolve, reject) => {
-        writeQueue.push({ writeFn, resolve, reject });
-        processWriteQueue();
+function probeEndTool() {
+    if (!servoWorker) return;
+    servoWorker.send({
+        type: 'busCommand',
+        clientId: END_TOOL_PROBE_CLIENT_ID,
+        command: 'toolGetIdentity'
     });
 }
 
 /**
- * Process the write queue (one write at a time)
+ * Applies a tool type ID to the kinematics and tells clients, but only when
+ * something actually changed.
+ * @param {number|null} toolTypeId - Register 3 value, or null if unreachable
+ * @param {string|null} errorMessage - Why it was unreachable, if it was
  */
-async function processWriteQueue() {
-    if (isWriting || writeQueue.length === 0) {
+function applyEndToolTypeId(toolTypeId, errorMessage) {
+    const previousId = endToolState.toolTypeId;
+    const previousPresent = endToolState.present;
+
+    const present = toolTypeId !== null && toolTypeId !== undefined;
+    let resolved = null;
+    try {
+        // With no tool answering, fall back to the bare mount (ID 0) so the
+        // TCP stays at the mount face rather than keeping a stale tool length.
+        resolved = robotKinematics.setActiveEndTool(present ? toolTypeId : 0);
+    } catch (e) {
+        debugLog('End tool: could not apply tool type to kinematics: ' + e.message, true);
+    }
+
+    endToolState = {
+        present: present,
+        toolTypeId: present ? toolTypeId : null,
+        // "known" means the URDF describes the ID the tool reported. With no
+        // tool answering there is no ID to know, whatever we fall back to.
+        known: present && !!resolved,
+        tool: resolved,
+        lastProbeAt: Date.now(),
+        lastError: errorMessage || null
+    };
+
+    if (previousId !== endToolState.toolTypeId || previousPresent !== present) {
+        if (present && resolved) {
+            debugLog('End tool: type ' + toolTypeId + ' ("' + resolved.label + '", ' +
+                     resolved.lengthMm.toFixed(1) + ' mm) — kinematics updated');
+            if (resolved.provisional) {
+                debugLog('End tool: "' + resolved.label + '" has an unmeasured length ' +
+                         '(' + resolved.lengthMm.toFixed(1) + ' mm is a placeholder). ' +
+                         'Positions to its tip will be wrong until kinematics.urdf is corrected.', true);
+            }
+        } else if (present) {
+            debugLog('End tool: type ' + toolTypeId + ' is not described in kinematics.urdf — ' +
+                     'using the bare mount. Add an <end_tool id="' + toolTypeId + '"/> joint.', true);
+        } else {
+            debugLog('End tool: not responding — using the bare mount' +
+                     (errorMessage ? ' (' + errorMessage + ')' : ''));
+        }
+        broadcastEndTool();
+    }
+}
+
+/**
+ * @returns {Object} The end tool payload sent to clients
+ */
+function buildEndToolPayload() {
+    return {
+        type: 'endTool',
+        present: endToolState.present,
+        toolTypeId: endToolState.toolTypeId,
+        known: endToolState.known,
+        tool: endToolState.tool,
+        tools: robotKinematics.isConfigured() ? robotKinematics.getEndTools() : [],
+        lastProbeAt: endToolState.lastProbeAt,
+        lastError: endToolState.lastError
+    };
+}
+
+function broadcastEndTool() {
+    const payload = JSON.stringify(buildEndToolPayload());
+    connectedClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    });
+}
+
+function startEndToolProbing() {
+    if (endToolProbeTimer) return;
+    probeEndTool();
+    endToolProbeTimer = setInterval(probeEndTool, END_TOOL_PROBE_INTERVAL_MS);
+}
+
+const URDF_PATH = path.join(__dirname, 'kinematics.urdf');
+let serverUrdfText = null;
+try {
+    serverUrdfText = fs.readFileSync(URDF_PATH, 'utf8');
+    const info = robotKinematics.loadURDF(serverUrdfText);
+    debugLog('Loaded URDF from ' + URDF_PATH + ' — ' + info.jointCount + ' joints, maxReach=' + (info.maxReachMm || '?') + ' mm');
+} catch (e) {
+    debugLog('WARNING: Could not load URDF from ' + URDF_PATH + ': ' + e.message + ' — kinematics will be unavailable until a client uploads one', true);
+}
+
+// ===== Shared State =====
+let wss                   = null;
+let servoWorker           = null;
+let serverShuttingDown    = false;
+let shutdownInProgress    = false;
+const serverStartedAt     = Date.now();
+
+const connectedClients    = new Set();
+let nextClientId          = 1;
+const clientMap           = new Map(); // clientId → WebSocket
+
+// Caches populated by the worker; served to clients without touching the bus.
+let lastKnownStatusJoints  = [];
+let lastKnownCacheAgeMs    = null;
+let lastKnownJointConfigs  = { count: 0, total: 6, joints: [] };
+let lastWorkerDiagnostics  = {};
+
+// Control session (one app at a time can move the arm).
+const controlSession = { ws: null, label: '', hostname: null, clientIp: null, since: null, lastMoveAt: null, locked: false, lockedUntil: null };
+
+// ===== Control Session =====
+function normalizeClientIp(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    if (raw.startsWith('::ffff:')) return raw.substring(7);
+    if (raw === '::1') return '127.0.0.1';
+    return raw;
+}
+function isLocalClientIp(ip) { return !ip || ip === '127.0.0.1'; }
+function getWsClientHostname(ws) {
+    if (ws && ws.clientHostname) return ws.clientHostname;
+    if (ws && ws.clientIp && isLocalClientIp(ws.clientIp)) {
+        try { return os.hostname(); } catch (e) { return null; }
+    }
+    return null;
+}
+function assignControlSession(ws, label) {
+    controlSession.ws        = ws;
+    controlSession.label     = (typeof label === 'string' && label) ? label : 'client';
+    controlSession.clientIp  = ws ? ws.clientIp : null;
+    controlSession.hostname  = ws ? getWsClientHostname(ws) : null;
+    controlSession.since     = Date.now();
+    controlSession.lastMoveAt = Date.now();
+}
+function touchControlMoveActivity(ws) {
+    if (controlSession.ws === ws) controlSession.lastMoveAt = Date.now();
+}
+function releaseControlSession(ws) {
+    if (controlSession.ws === ws) {
+        controlSession.ws = null; controlSession.label = '';
+        controlSession.hostname = null; controlSession.clientIp = null;
+        controlSession.since = null; controlSession.lastMoveAt = null;
+        controlSession.locked = false; controlSession.lockedUntil = null;
+    }
+}
+function isControlLocked() {
+    if (!controlSession.locked) return false;
+    if (controlSession.lockedUntil && Date.now() >= controlSession.lockedUntil) {
+        controlSession.locked = false;
+        controlSession.lockedUntil = null;
+        return false;
+    }
+    return true;
+}
+function checkControlLockExpiry() {
+    if (controlSession.locked && controlSession.lockedUntil && Date.now() >= controlSession.lockedUntil) {
+        controlSession.locked = false;
+        controlSession.lockedUntil = null;
+        broadcastControlStatus({ ws: controlSession.ws, data: { message: 'Arm control lock expired' } });
+        debugLog('Arm control lock expired');
+    }
+}
+function pruneStaleControlSession() {
+    if (controlSession.ws && controlSession.ws.readyState !== WebSocket.OPEN) {
+        debugLog('Releasing arm control from disconnected client');
+        releaseControlSession(controlSession.ws);
+    }
+}
+function requireControl(ws) {
+    pruneStaleControlSession();
+    if (!controlSession.ws) { assignControlSession(ws, 'auto'); return { ok: true }; }
+    if (controlSession.ws !== ws) {
+        const who = formatControlHolder(controlSession) || 'another client';
+        return { ok: false, message: 'Arm control is held by ' + who + '. Only one app can move the arm at a time.' };
+    }
+    return { ok: true };
+}
+function requireControlForCommand(ws, command) {
+    if (!BUS_WRITE_COMMANDS[command]) return { ok: true };
+    return requireControl(ws);
+}
+function formatControlHolder(info) {
+    if (!info || !info.ws) return null;
+    const hostname = info.hostname || getWsClientHostname(info.ws);
+    const ip       = info.clientIp || (info.ws ? info.ws.clientIp : null);
+    const label    = info.label;
+    if (hostname && ip && !isLocalClientIp(ip)) return hostname + ' (' + ip + ')';
+    if (hostname) return isLocalClientIp(ip) ? hostname + ' (this Pi)' : hostname;
+    if (ip && !isLocalClientIp(ip)) return ip;
+    if (ip && isLocalClientIp(ip)) { try { return os.hostname() + ' (this Pi)'; } catch (e) { return 'this Pi'; } }
+    if (label && label !== 'auto' && label !== 'client' && label !== 'electron') return label;
+    return 'another app';
+}
+function getControlStatusPayload(ws, extra) {
+    const locked = isControlLocked();
+    const payload = {
+        type: 'controlStatus',
+        hasControl:      controlSession.ws === ws,
+        youHaveControl:  controlSession.ws === ws,
+        hasHolder:       !!controlSession.ws,
+        holder:          controlSession.ws ? formatControlHolder(controlSession) : null,
+        holderHostname:  controlSession.hostname || null,
+        holderIp:        controlSession.clientIp || null,
+        holderLabel:     controlSession.label || null,
+        locked:          locked,
+        lockedUntil:     locked ? controlSession.lockedUntil : null
+    };
+    if (extra) Object.assign(payload, extra);
+    return payload;
+}
+function broadcastControlStatus(extraForClient) {
+    connectedClients.forEach((clientWs) => {
+        if (clientWs.readyState !== WebSocket.OPEN) return;
+        const payload = getControlStatusPayload(clientWs);
+        if (extraForClient && extraForClient.ws === clientWs) Object.assign(payload, extraForClient.data);
+        clientWs.send(JSON.stringify(payload));
+    });
+    updateLed();
+}
+function releaseControlForIdle() {
+    if (!controlSession.ws || !controlSession.lastMoveAt) return;
+    if (isControlLocked()) return; // locked sessions are exempt from the idle timeout
+    if (Date.now() - controlSession.lastMoveAt < CONTROL_IDLE_TIMEOUT_MS) return;
+    const idleWs = controlSession.ws;
+    releaseControlSession(idleWs);
+    broadcastControlStatus({ ws: idleWs, data: { message: 'Arm control released automatically after 5 minutes with no movement' } });
+    debugLog('Arm control released due to idle timeout');
+}
+
+// ===== Worker Status Broadcast =====
+function broadcastStatusToClients() {
+    if (connectedClients.size === 0) return;
+    const payload = JSON.stringify({ type: 'status', joints: lastKnownStatusJoints, cacheAgeMs: lastKnownCacheAgeMs, pushed: true });
+    connectedClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    });
+}
+function broadcastJointConfigs() {
+    if (connectedClients.size === 0) return;
+    const payload = JSON.stringify({ type: 'jointConfigs', count: lastKnownJointConfigs.count, total: lastKnownJointConfigs.total, joints: lastKnownJointConfigs.joints });
+    connectedClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    });
+}
+
+// ===== Worker Message Routing =====
+function handleWorkerMessage(msg) {
+    if (!msg || !msg.type) return;
+
+    if (msg.type === 'status') {
+        lastKnownStatusJoints = msg.joints || [];
+        lastKnownCacheAgeMs   = msg.cacheAgeMs;
+        if (msg.diagnostics)  lastWorkerDiagnostics = msg.diagnostics;
+        broadcastStatusToClients();
+        updateLed();
         return;
     }
-    
-    isWriting = true;
-    const { writeFn, resolve, reject } = writeQueue.shift();
-    
-    try {
-        await writeFn();
-        resolve();
-    } catch (error) {
-        reject(error);
-    } finally {
-        isWriting = false;
-        // Process next item in queue
-        processWriteQueue();
-    }
-}
 
-/**
- * Queue a command to be processed (ensures only one command at a time across all clients)
- * @param {Function} commandFn - Function that executes the command
- * @returns {Promise} Promise that resolves when command completes
- */
-async function queueCommand(commandFn) {
-    return new Promise((resolve, reject) => {
-        // Prevent queue from growing too large (could indicate a problem)
-        if (commandQueue.length >= MAX_COMMAND_QUEUE_SIZE) {
-            console.warn(`Command queue full (${commandQueue.length} items), rejecting new command`);
-            reject(new Error('Command queue is full, server may be overloaded'));
-            return;
-        }
-        commandQueue.push({ commandFn, resolve, reject });
-        processCommandQueue();
-    });
-}
-
-/**
- * Process the command queue (one command at a time)
- */
-async function processCommandQueue() {
-    if (isProcessingCommand || commandQueue.length === 0) {
+    if (msg.type === 'ready') {
+        if (msg.jointConfigs) lastKnownJointConfigs = msg.jointConfigs;
+        debugLog('Servo worker ready — starting WebSocket server');
+        const firstBoot = ledIsBooting;
+        ledIsBooting    = false;
+        ledIsRecovering = false;
+        updateLed();
+        if (firstBoot) startServer();
+        // Ask the end tool what it is, and keep asking so a tool change is
+        // picked up without restarting anything.
+        startEndToolProbing();
         return;
     }
-    
-    isProcessingCommand = true;
-    const { commandFn, resolve, reject } = commandQueue.shift();
-    
-    try {
-        const result = await commandFn();
-        // Reduced delay after command completes - only 5ms instead of 10ms
-        // This helps prevent response conflicts while reducing accumulated lag
-        await new Promise(resolve => setTimeout(resolve, 5));
-        resolve(result);
-    } catch (error) {
-        reject(error);
-    } finally {
-        isProcessingCommand = false;
-        // Process next command in queue
-        processCommandQueue();
-    }
-}
 
-/**
- * Initialize all servo controllers
- */
-async function initializeServos() {
-    console.log('Initializing ST3215 servo controllers...');
-    
-    // ST3215 servo IDs (1-6 for 6 servos)
-    // Each servo must have a unique ID configured
-    const servoIds = [1, 2, 3, 4, 5, 6];
-    
-    if (servoIds.length < JOINT_COUNT) {
-        console.error(`Error: Need ${JOINT_COUNT} servo IDs but only ${servoIds.length} provided`);
-        console.error('Please configure more servo IDs in the servoIds array');
+    if (msg.type === 'jointConfigs') {
+        lastKnownJointConfigs = { count: msg.count, total: msg.total, joints: msg.joints };
+        broadcastJointConfigs();
+        updateLed();
+        return;
+    }
+
+    if (msg.type === 'commandResponse' && msg.clientId === END_TOOL_PROBE_CLIENT_ID) {
+        const payload = msg.payload || {};
+        if (payload.type === 'toolIdentity' && Number.isFinite(payload.toolTypeId)) {
+            endToolLostRetryCount = 0;
+            applyEndToolTypeId(payload.toolTypeId, null);
+        } else if (endToolState.present && endToolLostRetryCount < END_TOOL_LOST_RETRIES) {
+            // Sanity check: a tool was there a moment ago. Re-probe before
+            // dropping it, so one lost frame cannot shorten the kinematics.
+            endToolLostRetryCount++;
+            debugLog('End tool: probe failed (' + (payload.message || 'no response') + ') — ' +
+                     're-checking ' + endToolLostRetryCount + '/' + END_TOOL_LOST_RETRIES +
+                     ' before declaring it removed');
+            setTimeout(probeEndTool, END_TOOL_RETRY_DELAY_MS);
+        } else {
+            endToolLostRetryCount = 0;
+            applyEndToolTypeId(null, payload.message || 'end tool did not respond');
+        }
+        return;
+    }
+
+    if (msg.type === 'commandResponse') {
+        const ws = clientMap.get(msg.clientId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg.payload));
+        }
+        return;
+    }
+
+    if (msg.type === 'initError') {
+        debugLog('Servo worker failed to initialize: ' + msg.message, true);
+        ledIsRecovering = true;
+        updateLed();
         process.exit(1);
     }
-    
-    // Create a single shared serial port for all servos (they're daisy-chained)
-    const { SerialPort } = require('serialport');
-    
-    try {
-        console.log('Opening shared serial port...');
-        sharedSerialPort = new SerialPort({
-            path: SERIAL_PORT,
-            baudRate: SERIAL_BAUDRATE,
-            dataBits: 8,
-            parity: 'none',
-            stopBits: 1,
-            autoOpen: false
-        });
-        
-        // Open the shared port
-        await new Promise((resolve, reject) => {
-            sharedSerialPort.open((error) => {
-                if (error) {
-                    console.error('Failed to open shared serial port:', error.message);
-                    reject(error);
-                } else {
-                    console.log('✓ Shared serial port opened successfully');
-                    resolve();
-                }
-            });
-        });
-        
-        // Handle incoming data from all servos
-        // We'll set up a single data handler that routes to all servo controllers
-        sharedSerialPort.on('data', (data) => {
-            // Route data to all servo controllers - they'll filter by ID
-            allServoControllers.forEach(servo => {
-                if (servo && servo.handleIncomingData) {
-                    servo.handleIncomingData(data);
-                }
-            });
-        });
-        
-        sharedSerialPort.on('error', (error) => {
-            console.error('Shared serial port error:', error.message);
-        });
-        
-        // Attach write queue function to shared port for servo controllers to use
-        sharedSerialPort._writeQueue = queueWrite;
-        
-    } catch (error) {
-        console.error('Failed to initialize shared serial port:', error.message);
-        process.exit(1);
+
+    if (msg.type === 'servoThermalFault') {
+        const warning = JSON.stringify({ type: 'servoThermalFault', joint: msg.joint, message: msg.message });
+        connectedClients.forEach((ws) => { if (ws.readyState === WebSocket.OPEN) ws.send(warning); });
+        debugLog('[THERMAL] ' + msg.message, true);
+        ledThermalFaultUntil = Date.now() + 30000;
+        updateLed();
+        setTimeout(updateLed, 30000); // re-evaluate once fault window expires
+        return;
     }
-    
-    // Create servo controllers, all sharing the same serial port
-    for (let i = 0; i < JOINT_COUNT; i++) {
-        // Pass the shared SerialPort instance instead of the path
-        const servo = new RobotArm.ServoController(i + 1, sharedSerialPort, servoIds[i], SERIAL_BAUDRATE);
-        
-        try {
-            // This will set up the data handler but won't try to open the port
-            await servo.open();
-            
-            // Add servo to the list for data routing
-            allServoControllers.push(servo);
-            
-            // Add a delay between servo initializations to avoid simultaneous writes
-            if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 150));
-            }
-            
-            // First, try to ping the servo to verify communication
-            console.log(`Pinging servo ${i + 1} (ST3215 ID: ${servoIds[i]})...`);
-            const pingResult = await servo.ping();
-            if (!pingResult) {
-                console.log(`⚠️  Servo ${i + 1} (ID: ${servoIds[i]}) did not respond to ping - skipping`);
-                servos.push(null);
-                continue;
-            }
-            console.log(`✓ Servo ${i + 1} (ID: ${servoIds[i]}) responded to ping`);
-            
-            // Small delay after ping
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            // Enable torque (start servo)
-            await servo.startServo();
-            
-            servos.push(servo);
-            console.log(`Servo ${i + 1} initialized (ST3215 ID: ${servoIds[i]})`);
-        } catch (error) {
-            console.error(`Failed to initialize servo ${i + 1} (ST3215 ID: ${servoIds[i]}):`, error.message);
-            // Create a placeholder so the array stays aligned
-            servos.push(null);
-        }
+
+    if (msg.type === 'workerFault') {
+        debugLog('[WORKER FAULT] ' + msg.message, true);
+        return;
     }
-    
-    console.log(`Initialized ${servos.filter(s => s !== null).length} of ${JOINT_COUNT} servos`);
 }
 
-/**
- * Get status from all servos
- * 
- * IMPORTANT: Read servos one-by-one on the shared serial bus.
- * This is simpler and more reliable than doing all reads in parallel.
- */
-async function getAllServoStatus() {
-    const statuses = [];
-    const startAll = Date.now();
+// ===== Child Process Setup =====
 
-    for (let i = 0; i < servos.length; i++) {
-        const servo = servos[i];
+// Exponential-backoff restart counter for the servo worker.
+let workerRestartCount   = 0;
+let workerLastStartedAt  = 0;
 
-        if (servo === null) {
-            // Servo not available - push default status
-            statuses.push({
-                joint: i + 1,
-                available: false,
-                isMoving: false,
-                angleDegrees: 0,
-                position: 0,
-                stepPosition: 0,
-                speed: 0,
-                load: 0,
-                voltage: 0,
-                temperature: 0,
-                torqueEnabled: false
-            });
-            continue;
-        }
+function startServoWorker() {
+    workerLastStartedAt = Date.now();
+    // TEMPORARY: --heapsnapshot-signal lets `kill -USR2 <servoWorker pid>`
+    // write a .heapsnapshot on demand, to chase a confirmed ~15-17MB/hour
+    // leak that two targeted Buffer-copy fixes didn't resolve. Written to
+    // /tmp (world-writable) rather than this process's default cwd —
+    // this service runs as root but with a CapabilityBoundingSet stripped
+    // down to just CAP_SYS_RAWIO, which drops root's usual CAP_DAC_OVERRIDE
+    // file-permission bypass, so it can't write into the (mxadmin-owned)
+    // app directory. Remove once the leak is found and fixed.
+    servoWorker = fork(path.join(__dirname, 'servoWorker.js'), [], { execArgv: ['--heapsnapshot-signal=SIGUSR2'], cwd: '/tmp' });
+    servoWorker.on('message', handleWorkerMessage);
+    servoWorker.on('error', (err) => {
+        debugLog('Servo worker error: ' + (err.message || err), true);
+    });
+    servoWorker.on('exit', (code) => {
+        if (serverShuttingDown) return;
 
-        const startServo = Date.now();
-        try {
-            // Fast path: one bulk read per servo (angle, speed, load, voltage, temp, moving, torque)
-            const status = await servo.readQuickStatus();
-            statuses.push({
-                joint: i + 1,
-                available: true,
-                ...status,
-                stepPosition: status.position
-            });
-        } catch (error) {
-            console.error(`Error reading status from servo ${i + 1}:`, error.message);
-            statuses.push({
-                joint: i + 1,
-                available: false,
-                isMoving: false,
-                angleDegrees: 0,
-                position: 0,
-                stepPosition: 0,
-                speed: 0,
-                load: 0,
-                voltage: 0,
-                temperature: 0,
-                torqueEnabled: false,
-                error: error.message
-            });
-        }
+        debugLog(`Servo worker exited unexpectedly with code ${code} — scheduling restart`, true);
 
-        const servoDuration = Date.now() - startServo;
-        if (PERF_DEBUG && servoDuration > 50) {
-            console.log(`PERF: readStatus for servo ${i + 1} took ${servoDuration} ms`);
-        }
-    }
+        ledIsRecovering = true;
+        updateLed();
 
-    const totalDuration = Date.now() - startAll;
-    if (PERF_DEBUG) {
-        console.log(`PERF: getAllServoStatus for ${servos.length} servos took ${totalDuration} ms`);
-    }
+        // Broadcast a warning so any connected UI can display it.
+        const crashMsg = JSON.stringify({ type: 'servoWorkerCrashed', code: code });
+        connectedClients.forEach((ws) => { if (ws.readyState === WebSocket.OPEN) ws.send(crashMsg); });
 
-    // Already in joint order
-    return statuses;
-}
+        // Exponential backoff: 2s → 4s → 8s … capped at 30s.
+        // Reset the counter if the worker ran for > 30s (a healthy-ish run).
+        const uptime = Date.now() - workerLastStartedAt;
+        if (uptime > 30000) workerRestartCount = 0;
 
-/**
- * Start the WebSocket server
- */
-function startServer() {
-    console.log(`Starting WebSocket server on port ${PORT}...`);
-    
-    // Create WebSocket server
-    const wss = new WebSocket.Server({ port: PORT });
-    
-    console.log(`Server listening on port ${PORT}`);
-    console.log('Waiting for clients to connect...');
-    
-    // Handle new client connections
-    wss.on('connection', function connection(ws, req) {
-        const clientIp = req.socket.remoteAddress;
-        console.log(`Client connected from ${clientIp}`);
-        
-        // Send welcome message
-        ws.send(JSON.stringify({
-            type: 'connected',
-            message: 'Connected to Robot Arm Server (ST3215)'
-        }));
-        
-        // Handle incoming messages from client
-        ws.on('message', async function incoming(message) {
-            try {
-                const data = JSON.parse(message);
-                // Queue the command to ensure only one command is processed at a time
-                await queueCommand(async () => {
-                    await handleCommand(ws, data);
-                });
-            } catch (error) {
-                console.error('Error handling message:', error);
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: error.message
-                }));
+        const delayMs = Math.min(2000 * Math.pow(2, workerRestartCount), 30000);
+        workerRestartCount++;
+        debugLog(`Restarting servo worker in ${delayMs} ms (attempt ${workerRestartCount})`, true);
+
+        setTimeout(() => {
+            if (!serverShuttingDown) {
+                debugLog('Restarting servo worker now…', true);
+                startServoWorker();
             }
-        });
-        
-        // Handle client disconnect
-        ws.on('close', function() {
-            console.log(`Client disconnected from ${clientIp}`);
-        });
-        
-        // Handle errors
-        ws.on('error', function(error) {
-            console.error('WebSocket error:', error);
-        });
+        }, delayMs);
     });
 }
 
-/**
- * Handle commands from the Electron app
- */
+// ===== Ethernet / Network Helpers =====
+function subnetMaskToPrefix(mask) {
+    if (typeof mask !== 'string') return null;
+    const parts = mask.trim().split('.');
+    if (parts.length !== 4) return null;
+    let prefix = 0;
+    for (let i = 0; i < 4; i++) {
+        const num = parseInt(parts[i], 10);
+        if (isNaN(num) || num < 0 || num > 255) return null;
+        let bits = num.toString(2);
+        while (bits.length < 8) bits = '0' + bits;
+        for (const b of bits) { if (b === '1') prefix++; }
+    }
+    return prefix;
+}
+function prefixToSubnetMask(prefix) {
+    const p = parseInt(prefix, 10);
+    if (isNaN(p) || p < 0 || p > 32) return null;
+    let bits = '';
+    for (let i = 0; i < 32; i++) bits += i < p ? '1' : '0';
+    const parts = [];
+    for (let i = 0; i < 4; i++) parts.push(parseInt(bits.slice(i * 8, i * 8 + 8), 2));
+    return parts.join('.');
+}
+async function runNmcli(args) {
+    const result = await execFileAsync('nmcli', args, { timeout: 5000 });
+    return (result.stdout || '').trim();
+}
+async function getEthernetSettings() {
+    const runningText = await runNmcli(['-t', '-f', 'RUNNING', 'general', 'status']);
+    if (runningText.toLowerCase() !== 'running') throw new Error('NetworkManager is not running');
+    const statusText = await runNmcli(['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device', 'status']);
+    const lines = statusText.split('\n').filter(l => l.trim().length > 0);
+    let selected = null;
+    for (const line of lines) {
+        const parts = line.split(':');
+        if (parts.length < 4) continue;
+        const [device, type, state] = parts;
+        const connectionName = parts.slice(3).join(':');
+        if (type === 'ethernet') { selected = { device, type, state, connectionName }; if (device === 'eth0') break; }
+    }
+    if (!selected || !selected.connectionName || selected.connectionName === '--') throw new Error('No ethernet NetworkManager connection found');
+    const conn = selected.connectionName;
+    const connDataText = await runNmcli(['-g', 'ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns', 'connection', 'show', conn]);
+    const connLines = connDataText.split('\n');
+    const ipv4Method    = (connLines[0] || '').trim();
+    const ipv4Addresses = (connLines[1] || '').trim();
+    const ipv4Gateway   = (connLines[2] || '').trim();
+    const ipv4Dns       = (connLines[3] || '').trim();
+    let ipAddress = '', prefix = '', subnetMask = '';
+    if (ipv4Addresses) {
+        const first = ipv4Addresses.split(',')[0].trim();
+        const ap = first.split('/');
+        ipAddress = (ap[0] || '').trim();
+        prefix    = (ap[1] || '').trim();
+        subnetMask = prefixToSubnetMask(prefix) || '';
+    }
+    return { connectionName: conn, device: selected.device, state: selected.state, method: ipv4Method || 'auto', ipAddress, subnetMask, prefix, gateway: ipv4Gateway, dns: ipv4Dns };
+}
+async function setEthernetSettings(input) {
+    const current = await getEthernetSettings();
+    const conn = current.connectionName;
+    const mode = (input && typeof input.mode === 'string') ? input.mode.trim().toLowerCase() : '';
+    if (mode !== 'dhcp' && mode !== 'static') throw new Error('Mode must be "dhcp" or "static"');
+    if (mode === 'dhcp') {
+        await runNmcli(['connection', 'modify', conn, 'ipv4.method', 'auto', 'ipv4.addresses', '', 'ipv4.gateway', '', 'ipv4.dns', '']);
+        await runNmcli(['connection', 'up', conn]);
+        return await getEthernetSettings();
+    }
+    const ipAddress  = (input && typeof input.ipAddress  === 'string') ? input.ipAddress.trim()  : '';
+    const subnetMask = (input && typeof input.subnetMask === 'string') ? input.subnetMask.trim() : '';
+    const gateway    = (input && typeof input.gateway    === 'string') ? input.gateway.trim()    : '';
+    const dns        = (input && typeof input.dns        === 'string') ? input.dns.trim()        : '';
+    if (!ipAddress)  throw new Error('IP address is required for static mode');
+    if (!subnetMask) throw new Error('Subnet mask is required for static mode');
+    if (!gateway)    throw new Error('Gateway is required for static mode');
+    const prefix = subnetMaskToPrefix(subnetMask);
+    if (prefix === null) throw new Error('Invalid subnet mask');
+    const args = ['connection', 'modify', conn, 'ipv4.method', 'manual', 'ipv4.addresses', `${ipAddress}/${prefix}`, 'ipv4.gateway', gateway];
+    if (dns) args.push('ipv4.dns', dns); else args.push('ipv4.dns', '');
+    await runNmcli(args);
+    await runNmcli(['connection', 'up', conn]);
+    return await getEthernetSettings();
+}
+
+// ===== Instant Command Handler =====
 async function handleCommand(ws, data) {
-    const command = data.command;
-    pushLog('info', `command=${command}`);
-    
-    // Handle different commands
+    const command   = data.command;
+    const requestId = data.requestId;
+    const sendResponse = (payload) => {
+        if (requestId !== undefined) payload.requestId = requestId;
+        ws.send(JSON.stringify(payload));
+    };
+
     switch (command) {
-        case 'echo':
-            ws.send(JSON.stringify({
-                type: 'echo',
-                ok: true,
-                received: data,
-                now: new Date().toISOString()
-            }));
-            break;
 
-        case 'getPortInfo':
-            ws.send(JSON.stringify({
-                type: 'portInfo',
-                path: sharedSerialPort?.path || SERIAL_PORT,
-                isOpen: !!sharedSerialPort?.isOpen,
-                baudRate: sharedSerialPort?.settings?.baudRate || SERIAL_BAUDRATE,
-                configuredBaudRate: SERIAL_BAUDRATE,
-                jointCount: JOINT_COUNT
-            }));
+        case 'getStatus': {
+            sendResponse({ type: 'status', joints: lastKnownStatusJoints, cacheAgeMs: lastKnownCacheAgeMs });
             break;
+        }
 
-        case 'getLogs':
-            ws.send(JSON.stringify({
-                type: 'logs',
-                entries: recentLogs.slice(-Math.max(1, Math.min(Number(data.count) || 50, MAX_RECENT_LOGS)))
-            }));
+        case 'getJointConfigs': {
+            sendResponse({ type: 'jointConfigs', count: lastKnownJointConfigs.count, total: lastKnownJointConfigs.total, joints: lastKnownJointConfigs.joints });
             break;
+        }
 
-        case 'setDebug':
-            runtimeDebug = data.enabled !== false;
-            pushLog('info', `runtimeDebug=${runtimeDebug}`);
-            ws.send(JSON.stringify({
-                type: 'debugState',
-                enabled: runtimeDebug
-            }));
+        case 'getServerDiagnostics': {
+            sendResponse({ type: 'serverDiagnostics', diagnostics: { ...lastWorkerDiagnostics, wsClients: connectedClients.size, uptimeMs: Date.now() - serverStartedAt, serverBuildId: SERVER_BUILD_ID } });
             break;
+        }
+
+        case 'takeControl': {
+            pruneStaleControlSession();
+            const forceTake        = data.force === true;
+            const suppliedPassword = typeof data.password === 'string' ? data.password : null;
+            const locked           = isControlLocked();
+            const heldByOther      = !!(controlSession.ws && controlSession.ws !== ws);
+            const previousWs       = controlSession.ws;
+            const previousHolder   = controlSession.ws ? formatControlHolder(controlSession) : null;
+
+            if (typeof data.hostname === 'string' && data.hostname.trim()) ws.clientHostname = data.hostname.trim();
+
+            if (heldByOther && locked && !controlPasswordMatches(suppliedPassword)) {
+                const until = controlSession.lockedUntil ? new Date(controlSession.lockedUntil).toLocaleTimeString() : null;
+                sendResponse(getControlStatusPayload(ws, {
+                    message: 'Arm control is locked by ' + (previousHolder || 'another client') + (until ? (' until ' + until) : '') + '.'
+                }));
+                return;
+            }
+            if (heldByOther && !locked && !forceTake) { sendResponse(getControlStatusPayload(ws)); return; }
+
+            const label = (typeof data.label === 'string' && data.label) ? data.label : 'client';
+            assignControlSession(ws, label);
+            controlSession.locked = false;
+            controlSession.lockedUntil = null;
+            if (previousWs && previousWs !== ws) {
+                try { previousWs.send(JSON.stringify(getControlStatusPayload(previousWs, { message: 'Another app took arm control' }))); } catch (e) { /* disconnected */ }
+            }
+            sendResponse(getControlStatusPayload(ws, { takenFrom: (previousWs && previousWs !== ws) ? previousHolder : null }));
+            break;
+        }
+
+        case 'releaseControl': {
+            if (controlSession.ws === ws) releaseControlSession(ws);
+            sendResponse(getControlStatusPayload(ws));
+            break;
+        }
+
+        case 'lockControl': {
+            const suppliedPassword = typeof data.password === 'string' ? data.password : null;
+            if (!controlPasswordMatches(suppliedPassword)) {
+                sendResponse({ type: 'lockControlResult', ok: false, message: 'Incorrect lock password' });
+                return;
+            }
+            pruneStaleControlSession();
+            if (controlSession.ws && controlSession.ws !== ws) {
+                sendResponse({ type: 'lockControlResult', ok: false, message: 'Arm control is held by ' + (formatControlHolder(controlSession) || 'another client') + ' — take control first.' });
+                return;
+            }
+            if (!controlSession.ws) {
+                if (typeof data.hostname === 'string' && data.hostname.trim()) ws.clientHostname = data.hostname.trim();
+                const label = (typeof data.label === 'string' && data.label) ? data.label : 'client';
+                assignControlSession(ws, label);
+            }
+            let durationMs = Number(data.durationMs);
+            if (!Number.isFinite(durationMs) || durationMs <= 0) durationMs = CONTROL_LOCK_DEFAULT_MS;
+            durationMs = Math.min(durationMs, CONTROL_LOCK_MAX_MS);
+            controlSession.locked = true;
+            controlSession.lockedUntil = Date.now() + durationMs;
+            broadcastControlStatus();
+            sendResponse(getControlStatusPayload(ws, { ok: true }));
+            break;
+        }
+
+        case 'unlockControl': {
+            const suppliedPassword = typeof data.password === 'string' ? data.password : null;
+            const isHolder = controlSession.ws === ws;
+            if (!isHolder && !controlPasswordMatches(suppliedPassword)) {
+                sendResponse({ type: 'unlockControlResult', ok: false, message: 'Incorrect password' });
+                return;
+            }
+            controlSession.locked = false;
+            controlSession.lockedUntil = null;
+            broadcastControlStatus();
+            sendResponse(getControlStatusPayload(ws, { ok: true }));
+            break;
+        }
+
+        case 'getControlStatus': {
+            sendResponse(getControlStatusPayload(ws));
+            break;
+        }
+
+        case 'verifyPassword': {
+            // Side-effect-free check of the control-lock password, so a UI can
+            // gate its edit controls on the real password rather than on the
+            // field merely being non-empty. Does not take or lock control.
+            const ok = controlPasswordMatches(data.password);
+            const message = ok ? 'Password accepted'
+                : (fs.existsSync(CONTROL_PASSWORD_FILE) ? 'Incorrect password'
+                    : 'No control password has been set up on the Pi yet - run set-control-password.sh on the Pi');
+            sendResponse({ type: 'verifyPasswordResult', ok: ok, message: message });
+            break;
+        }
 
         case 'getPiNetworkInfo': {
-            // Return basic network information for display in the Electron app
             try {
-                const hostname = os.hostname();
+                const hostname   = os.hostname();
                 const interfaces = os.networkInterfaces() || {};
-
-                // Collect a simple list of IPv4 addresses with MACs
                 const ifaceSummaries = [];
                 Object.keys(interfaces).forEach((name) => {
                     (interfaces[name] || []).forEach((info) => {
-                        if (info && info.family === 'IPv4' && !info.internal) {
-                            ifaceSummaries.push({
-                                name: name,
-                                address: info.address,
-                                mac: info.mac || null
-                            });
-                        }
+                        if (info && info.family === 'IPv4' && !info.internal) ifaceSummaries.push({ name, address: info.address, mac: info.mac || null });
                     });
                 });
-
-                // Try to read default gateway from /proc/net/route (Linux-specific)
                 let gateway = null;
                 try {
                     const routeText = fs.readFileSync('/proc/net/route', 'utf8');
-                    const lines = routeText.trim().split('\n');
-                    // Skip header line
-                    for (let i = 1; i < lines.length; i++) {
-                        const parts = lines[i].trim().split(/\s+/);
-                        if (parts.length >= 3) {
-                            const dest = parts[1];
-                            const gwHex = parts[2];
-                            const flags = parseInt(parts[3] || '0', 16);
-                            // Destination 00000000 and flag 0x2 means default route
-                            if (dest === '00000000' && (flags & 0x2)) {
-                                const gwNum = parseInt(gwHex, 16);
-                                const b1 = gwNum & 0xFF;
-                                const b2 = (gwNum >> 8) & 0xFF;
-                                const b3 = (gwNum >> 16) & 0xFF;
-                                const b4 = (gwNum >> 24) & 0xFF;
-                                gateway = `${b1}.${b2}.${b3}.${b4}`;
-                                break;
-                            }
+                    for (const line of routeText.trim().split('\n').slice(1)) {
+                        const parts = line.trim().split(/\s+/);
+                        if (parts.length >= 3 && parts[1] === '00000000' && (parseInt(parts[3] || '0', 16) & 0x2)) {
+                            const n = parseInt(parts[2], 16);
+                            gateway = `${n & 0xFF}.${(n >> 8) & 0xFF}.${(n >> 16) & 0xFF}.${(n >> 24) & 0xFF}`;
+                            break;
                         }
                     }
-                } catch (e) {
-                    // If we cannot read the route table, just leave gateway as null
-                    if (DEBUG) {
-                        console.warn('getPiNetworkInfo: could not read /proc/net/route:', e.message || e);
-                    }
-                }
-
-                ws.send(JSON.stringify({
-                    type: 'networkInfo',
-                    hostname: hostname,
-                    interfaces: ifaceSummaries,
-                    gateway: gateway
-                }));
+                } catch (e) { /* not Linux or no route file */ }
+                sendResponse({ type: 'networkInfo', hostname, interfaces: ifaceSummaries, gateway });
             } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: 'Failed to read network info: ' + (error.message || error)
-                }));
+                sendResponse({ type: 'error', message: 'Failed to read network info: ' + (error.message || error) });
+            }
+            break;
+        }
+
+        case 'getPiEthernetSettings': {
+            try {
+                sendResponse({ type: 'ethernetSettings', ethernet: await getEthernetSettings() });
+            } catch (error) {
+                sendResponse({ type: 'error', message: 'Failed to get ethernet settings: ' + (error.message || error) });
+            }
+            break;
+        }
+
+        case 'setPiEthernetSettings': {
+            try {
+                sendResponse({ type: 'ethernetSettingsUpdated', ethernet: await setEthernetSettings(data || {}), message: 'Ethernet settings updated' });
+            } catch (error) {
+                sendResponse({ type: 'error', message: 'Failed to set ethernet settings: ' + (error.message || error) });
             }
             break;
         }
 
         case 'updatePiServerFromGit': {
-            // Run "git pull --ff-only" in this folder (raspberry-pi-control-st3215)
             exec('git pull --ff-only', { cwd: __dirname }, (error, stdout, stderr) => {
                 if (error) {
-                    console.error('updatePiServerFromGit error:', error);
-                    ws.send(JSON.stringify({
-                        type: 'updateResult',
-                        ok: false,
-                        target: 'st3215',
-                        message: `git pull failed: ${stderr || error.message}`
-                    }));
+                    sendResponse({ type: 'updateResult', ok: false, target: 'st3215', message: 'git pull failed: ' + (stderr || error.message) });
                 } else {
-                    console.log('updatePiServerFromGit output:', stdout);
-                    ws.send(JSON.stringify({
-                        type: 'updateResult',
-                        ok: true,
-                        target: 'st3215',
-                        message: stdout.trim()
-                    }));
-
-                    // Restart Node.js so the updated code is loaded.
-                    // systemd is configured with Restart=always, so exiting here is enough.
-                    setTimeout(function () {
-                        try {
-                            process.exit(0);
-                        } catch (e) {
-                            // If exit fails for some reason, we just do nothing.
-                        }
-                    }, 500);
+                    sendResponse({ type: 'updateResult', ok: true, target: 'st3215', message: stdout.trim() });
+                    setTimeout(() => { try { process.exit(0); } catch (e) { /* ignore */ } }, 500);
                 }
             });
             break;
         }
-        case 'getJointConfigs':
-            // Return the number of servos discovered and their basic configuration
-            const discoveredServos = servos.filter(s => s !== null).length;
-            const jointConfigs = [];
-            
-            // Create config for each discovered servo
-            for (let i = 0; i < servos.length; i++) {
-                if (servos[i] !== null) {
-                    jointConfigs.push({
-                        jointNumber: i + 1,
-                        servoId: servos[i].servoIdNumber,
-                        available: true
-                    });
-                }
-            }
-            
-            ws.send(JSON.stringify({
-                type: 'jointConfigs',
-                count: discoveredServos,
-                total: servos.length,
-                joints: jointConfigs
-            }));
-            break;
-            
-        case 'getStatus':
-            // Send status of all servos
-            const statuses = await getAllServoStatus();
-            ws.send(JSON.stringify({
-                type: 'status',
-                joints: statuses
-            }));
-            break;
 
-        case 'rawPing': {
-            const id = Number(data.id);
-            if (!Number.isInteger(id) || id < 1 || id > 253) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid servo ID: ${data.id}`
-                }));
-                return;
-            }
-
-            const tempServo = new RobotArm.ServoController(id, sharedSerialPort, id, sharedSerialPort?.settings?.baudRate || SERIAL_BAUDRATE);
-            allServoControllers.push(tempServo);
+        case 'kinematicsLoadURDF': {
             try {
-                const responded = await tempServo.ping();
-                ws.send(JSON.stringify({
-                    type: 'rawPingResult',
-                    success: responded,
-                    id: id,
-                    baudRate: sharedSerialPort?.settings?.baudRate || SERIAL_BAUDRATE
-                }));
-            } finally {
-                const idx = allServoControllers.indexOf(tempServo);
-                if (idx >= 0) allServoControllers.splice(idx, 1);
+                const urdfXml = data.urdfXml;
+                if (typeof urdfXml !== 'string' || !urdfXml.trim()) throw new Error('URDF text is empty');
+                const info = robotKinematics.loadURDF(urdfXml);
+                serverUrdfText = urdfXml; // update in-memory copy so future connects get this
+                sendResponse({ type: 'kinematicsLoaded', configured: info.configured, jointCount: info.jointCount, joints: info.joints, urdfData: info.urdfData, maxReachMm: info.maxReachMm });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Failed to load URDF: ${error.message}` });
             }
             break;
         }
 
-        case 'readRegister': {
-            const id = Number(data.id);
-            const register = Number(data.register);
-            const length = Number(data.length);
-            if (!Number.isInteger(id) || id < 1 || id > 253) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid servo ID: ${data.id}`
-                }));
-                return;
-            }
-            if (!Number.isInteger(register) || register < 0 || register > 255) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid register: ${data.register}`
-                }));
-                return;
-            }
-            if (!Number.isInteger(length) || length < 1 || length > 64) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid length: ${data.length}`
-                }));
-                return;
-            }
-
-            const tempServo = new RobotArm.ServoController(id, sharedSerialPort, id, sharedSerialPort?.settings?.baudRate || SERIAL_BAUDRATE);
-            allServoControllers.push(tempServo);
+        case 'kinematicsForwardKinematics': {
             try {
-                const bytes = Array.from(await tempServo.readData(register, length));
-                ws.send(JSON.stringify({
-                    type: 'readRegisterResult',
-                    success: true,
-                    id,
-                    register,
-                    length,
-                    bytes
-                }));
+                sendResponse({ type: 'kinematicsForwardResult', result: robotKinematics.forwardKinematics(data.jointAngles) });
             } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'readRegisterResult',
-                    success: false,
-                    id,
-                    register,
-                    length,
-                    error: error.message
-                }));
-            } finally {
-                const idx = allServoControllers.indexOf(tempServo);
-                if (idx >= 0) allServoControllers.splice(idx, 1);
+                sendResponse({ type: 'error', message: `Forward kinematics failed: ${error.message}` });
             }
             break;
         }
-            
-        case 'moveJoint':
-            // Move a servo to a specific angle
-            const jointNumber = data.joint - 1; // Convert to 0-based index
-            const angle = data.angle;
-            // Ensure speed is a valid number (default to 1500 if not provided or invalid)
-            const moveSpeed = (typeof data.speed === 'number' && !isNaN(data.speed) && data.speed >= 0) ? data.speed : 1500;
-            
-            if (jointNumber < 0 || jointNumber >= servos.length) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid joint number: ${data.joint}`
-                }));
-                return;
-            }
-            
-            const servo = servos[jointNumber];
-            if (servo === null) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Servo ${data.joint} is not available`
-                }));
-                return;
-            }
-            
-            try {
-                await servo.moveToAngle(angle, moveSpeed);
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `Servo ${data.joint} moving to ${angle}° at ${moveSpeed} step/s`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to move servo ${data.joint}: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'stopJoint':
-            // Stop a specific servo
-            const stopJointNumber = data.joint - 1;
-            
-            if (stopJointNumber < 0 || stopJointNumber >= servos.length) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid joint number: ${data.joint}`
-                }));
-                return;
-            }
-            
-            const stopServo = servos[stopJointNumber];
-            if (stopServo === null) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Servo ${data.joint} is not available`
-                }));
-                return;
-            }
-            
-            try {
-                await stopServo.stopServo();
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `Servo ${data.joint} stopped`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to stop servo ${data.joint}: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'stopAll':
-        case 'stopAllJoints':
-            // Stop all servos
-            try {
-                for (let i = 0; i < servos.length; i++) {
-                    if (servos[i] !== null) {
-                        await servos[i].stopServo();
-                    }
-                }
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: 'All servos stopped'
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to stop all servos: ${error.message}`
-                }));
-            }
-            break;
 
-        case 'homeAll':
+        case 'kinematicsForwardKinematicsSteps': {
             try {
-                for (let i = 0; i < servos.length; i++) {
-                    if (servos[i] !== null) {
-                        await servos[i].moveToAngle(0);
-                    }
-                }
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: 'All servos moving to 0°'
-                }));
+                sendResponse({ type: 'kinematicsForwardStepsResult', result: robotKinematics.getForwardKinematicsSteps(data.jointAngles) });
             } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to home all servos: ${error.message}`
-                }));
+                sendResponse({ type: 'error', message: `Forward kinematics steps failed: ${error.message}` });
             }
             break;
-            
-        case 'setServoAngle':
-            // Set servo angle (for gripper or other servo-controlled joints)
-            const servoJointNumber = data.joint - 1;
-            const servoAngle = data.angle;
-            
-            if (servoJointNumber < 0 || servoJointNumber >= servos.length) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid joint number: ${data.joint}`
-                }));
-                return;
-            }
-            
-            const servoJoint = servos[servoJointNumber];
-            if (servoJoint === null) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Servo ${data.joint} is not available`
-                }));
-                return;
-            }
-            
-            try {
-                await servoJoint.moveToAngle(servoAngle);
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `Servo ${data.joint} set to ${servoAngle}°`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to set servo angle: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'setSpeed':
-            // Set servo speed
-            const speedJointNumber = data.joint - 1;
-            const speed = data.speed;
-            
-            if (speedJointNumber < 0 || speedJointNumber >= servos.length) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid joint number: ${data.joint}`
-                }));
-                return;
-            }
-            
-            const speedServo = servos[speedJointNumber];
-            if (speedServo === null) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Servo ${data.joint} is not available`
-                }));
-                return;
-            }
-            
-            try {
-                await speedServo.setSpeed(speed);
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `Servo ${data.joint} speed set to ${speed} step/s`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to set speed: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'setSpeedAll':
-            // Set servo speed for all joints
-            const speedAll = data.speed;
-            
-            try {
-                for (let i = 0; i < servos.length; i++) {
-                    if (servos[i] !== null) {
-                        await servos[i].setSpeed(speedAll);
-                    }
-                }
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `All servos speed set to ${speedAll} step/s`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to set servo speeds: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'setTorqueAll':
-            // Enable or disable torque for all joints
-            const torqueEnabled = data.enabled !== false; // Default to true if not specified
-            
-            try {
-                for (let i = 0; i < servos.length; i++) {
-                    if (servos[i] !== null) {
-                        if (torqueEnabled) {
-                            await servos[i].startServo();
-                        } else {
-                            await servos[i].stopServo();
-                        }
-                    }
-                }
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `All servos torque ${torqueEnabled ? 'enabled' : 'disabled'}`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to ${torqueEnabled ? 'enable' : 'disable'} torque: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'setAcceleration':
-            // Set servo acceleration
-            const accJointNumber = data.joint - 1;
-            const acc = data.acceleration;
-            
-            if (accJointNumber < 0 || accJointNumber >= servos.length) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Invalid joint number: ${data.joint}`
-                }));
-                return;
-            }
-            
-            const accServo = servos[accJointNumber];
-            if (accServo === null) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Servo ${data.joint} is not available`
-                }));
-                return;
-            }
-            
-            try {
-                await accServo.setAcceleration(acc);
-                ws.send(JSON.stringify({
-                    type: 'success',
-                    message: `Servo ${data.joint} acceleration set to ${acc}`
-                }));
-            } catch (error) {
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Failed to set acceleration: ${error.message}`
-                }));
-            }
-            break;
-            
-        case 'scanServos': {
-            // Sweep servo IDs to discover which ones are present on the bus.
-            // Optionally sweep baud rates too if nothing is found at the current rate.
-            const scanMaxId   = Math.min(data.maxId   || 20,  253);
-            const scanBauds   = data.baudRates || [SERIAL_BAUDRATE];
-            const scanTimeout = Math.min(data.timeout || 100, 500); // ms per ID
-            const scanResults = [];
+        }
 
-            for (const baud of scanBauds) {
-                // Re-open the port at this baud rate if it differs
-                if (baud !== sharedSerialPort.settings.baudRate) {
-                    console.log(`scanServos: reopening port at ${baud} baud`);
-                    await new Promise((res) => sharedSerialPort.update({ baudRate: baud }, res));
-                    await new Promise((res) => setTimeout(res, 50));
+        case 'kinematicsForwardKinematicsBatch': {
+            try {
+                if (!Array.isArray(data.jointAnglesList)) throw new Error('jointAnglesList must be an array');
+                const positions = data.jointAnglesList.map(a => robotKinematics.forwardKinematics(a).position);
+                sendResponse({ type: 'kinematicsForwardBatchResult', positions });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Forward kinematics batch failed: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'kinematicsInverseKinematics': {
+            try {
+                sendResponse({ type: 'kinematicsInverseResult', result: robotKinematics.inverseKinematics(data.targetPose, data.initialAngles) });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Inverse kinematics failed: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'kinematicsRefineOrientationWithAccuracy': {
+            try {
+                sendResponse({ type: 'kinematicsRefineOrientationResult', result: robotKinematics.refineOrientationWithAccuracy(data.targetPose, data.baseAngles, data.desiredOrientation, data.referenceAngles) });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Refine orientation failed: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'kinematicsApplyToolSpin': {
+            // Sets joint 6 on the given angles so the tool X axis matches
+            // orientation.rotation, leaving joints 1-5 untouched. Lets a client
+            // spin the tool in place without a lossy XYZ round trip.
+            try {
+                sendResponse({ type: 'kinematicsApplyToolSpinResult', result: robotKinematics.applyToolSpin(data.angles, data.orientation) });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Apply tool spin failed: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'getEndTool': {
+            sendResponse(buildEndToolPayload());
+            break;
+        }
+
+        case 'refreshEndTool': {
+            probeEndTool();
+            sendResponse({ type: 'success', message: 'End tool probe requested' });
+            break;
+        }
+
+        case 'kinematicsGetInfo': {
+            try {
+                const info = robotKinematics.getKinematicsInfo();
+                sendResponse({ type: 'kinematicsInfo', configured: info.configured, jointCount: info.jointCount, joints: info.joints, urdfData: info.urdfData, maxReachMm: info.maxReachMm });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Failed to get kinematics info: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'executeLinearMove': {
+            // Compute a Cartesian-linear path on the server and execute it with precise timing.
+            // Requires the caller to hold the control session.
+            if (!controlSession || controlSession.ws !== ws) {
+                sendResponse({ type: 'error', message: 'Control session required for linear move. Call takeControl first.' });
+                break;
+            }
+            if (linearPathRunning) {
+                sendResponse({ type: 'error', message: 'A linear path is already running. Abort it first.' });
+                break;
+            }
+            try {
+                const { startAngles, targetPose, desiredOrientation, stepMm, speedMmPerSec } = data;
+                const pathResult = robotKinematics.computeLinearPath(startAngles, targetPose, desiredOrientation || null, stepMm || 2.0);
+                const { steps, totalDistanceMm } = pathResult;
+
+                if (!steps || steps.length === 0) {
+                    sendResponse({ type: 'error', message: 'Linear path computation produced no waypoints' });
+                    break;
                 }
 
-                const foundIds = [];
-                for (let id = 1; id <= scanMaxId; id++) {
-                    // Reuse a temporary controller that points at the shared port
-                    const tempServo = new RobotArm.ServoController(id, sharedSerialPort, id, baud);
-                    allServoControllers.push(tempServo);
+                const speed     = (typeof speedMmPerSec === 'number' && speedMmPerSec > 0) ? speedMmPerSec : 50;
+                const stepDist  = (typeof stepMm === 'number' && stepMm > 0) ? stepMm : 2.0;
+                const intervalMs = Math.max(20, Math.round((stepDist / speed) * 1000));
 
-                    // Override ping timeout to scanTimeout
-                    const responded = await new Promise((resolve) => {
-                        tempServo.responseResolve = null;
-                        tempServo.pendingResponse = null;
-                        if (tempServo.responseTimeout) {
-                            clearTimeout(tempServo.responseTimeout);
-                            tempServo.responseTimeout = null;
-                        }
+                linearPathRunning  = true;
+                linearPathClientWs = ws;
+                updateLed();
 
-                        tempServo.responseResolve = (result) => {
-                            if (tempServo.responseTimeout) {
-                                clearTimeout(tempServo.responseTimeout);
-                                tempServo.responseTimeout = null;
+                // Acknowledge immediately — client can display progress
+                sendResponse({ type: 'linearPathStarted', totalSteps: steps.length, totalDistanceMm, intervalMs, requestId });
+
+                // Execute asynchronously so stop commands can be processed between steps
+                (async () => {
+                    let prevAngles = startAngles;
+                    const stepsPerDeg = 11.37; // ST3215 steps per degree
+
+                    for (let i = 0; i < steps.length; i++) {
+                        if (!linearPathRunning) break;
+
+                        const angles = steps[i];
+                        for (let j = 0; j < angles.length; j++) {
+                            const travel = Math.abs(angles[j] - (prevAngles[j] || 0));
+                            const spd = Math.max(50, Math.round(travel * stepsPerDeg / (intervalMs / 1000)));
+                            if (servoWorker) {
+                                servoWorker.send({
+                                    type: 'immediateBusCommand',
+                                    command: 'moveJoint',
+                                    joint: j + 1,
+                                    angle: angles[j],
+                                    speed: spd,
+                                    clientId: ws.clientId
+                                });
                             }
-                            const ok = result.id === id && result.error === 0;
-                            tempServo.responseResolve = null;
-                            tempServo.pendingResponse = null;
-                            resolve(ok);
-                        };
-                        tempServo.responseTimeout = setTimeout(() => {
-                            tempServo.responseResolve = null;
-                            tempServo.pendingResponse = null;
-                            resolve(false);
-                        }, scanTimeout);
-
-                        tempServo.sendPacket(1 /* INST_PING */, []).catch(() => resolve(false));
-                    });
-
-                    // Remove temp servo from routing
-                    const idx = allServoControllers.indexOf(tempServo);
-                    if (idx >= 0) allServoControllers.splice(idx, 1);
-
-                    if (responded) {
-                        foundIds.push(id);
-                        console.log(`scanServos: found servo ID ${id} at ${baud} baud`);
+                        }
+                        prevAngles = angles;
+                        await new Promise(resolve => setTimeout(resolve, intervalMs));
                     }
-                }
 
-                if (foundIds.length > 0) {
-                    scanResults.push({ baudRate: baud, ids: foundIds });
-                }
+                    linearPathRunning  = false;
+                    linearPathClientWs = null;
+                    updateLed();
+                    if (ws.readyState === 1 /* OPEN */) {
+                        ws.send(JSON.stringify({ type: 'linearPathComplete' }));
+                    }
+                })();
+
+            } catch (error) {
+                linearPathRunning  = false;
+                linearPathClientWs = null;
+                sendResponse({ type: 'error', message: `Linear move failed: ${error.message}` });
             }
+            break;
+        }
 
-            // Restore original baud rate if we changed it
-            if (sharedSerialPort.settings.baudRate !== SERIAL_BAUDRATE) {
-                await new Promise((res) => sharedSerialPort.update({ baudRate: SERIAL_BAUDRATE }, res));
-                console.log(`scanServos: restored baud rate to ${SERIAL_BAUDRATE}`);
-            }
-
-            ws.send(JSON.stringify({
-                type: 'scanResult',
-                results: scanResults,
-                scannedIds: scanMaxId,
-                baudRatesChecked: scanBauds,
-                summary: scanResults.length > 0
-                    ? scanResults.map(r => `IDs [${r.ids.join(',')}] at ${r.baudRate} baud`).join('; ')
-                    : `No servos found on IDs 1-${scanMaxId}`
-            }));
+        case 'abortLinearPath': {
+            linearPathRunning  = false;
+            linearPathClientWs = null;
+            updateLed();
+            sendResponse({ type: 'success', message: 'Linear path aborted' });
             break;
         }
 
         default:
-            ws.send(JSON.stringify({
-                type: 'error',
-                message: `Unknown command: ${command}`
-            }));
+            ws.send(JSON.stringify({ type: 'error', message: `Unknown command: ${command}` }));
     }
 }
 
-/**
- * Cleanup function - called on exit
- */
-async function cleanup() {
-    console.log('Shutting down...');
-    
-    // Stop all servos
-    for (let i = 0; i < servos.length; i++) {
-        if (servos[i] !== null) {
-            try {
-                await servos[i].stopServo();
-                await servos[i].close();
-            } catch (error) {
-                console.error(`Error closing servo ${i + 1}:`, error.message);
-            }
+// ===== WebSocket Server =====
+function startServer() {
+    debugLog('Starting WebSocket server on port ' + PORT + '...');
+    wss = new WebSocket.Server({ port: PORT });
+
+    wss.on('connection', function connection(ws, req) {
+        const clientIp = normalizeClientIp(req.socket.remoteAddress);
+        ws.clientIp       = clientIp;
+        ws.clientHostname = null;
+        ws.clientId       = nextClientId++;
+        connectedClients.add(ws);
+        clientMap.set(ws.clientId, ws);
+        debugLog('Client connected from ' + (clientIp || 'unknown') + ' (id=' + ws.clientId + ')');
+
+        // Welcome message
+        ws.send(JSON.stringify({ type: 'connected', message: 'Connected to Robot Arm Server (ST3215)', pushesStatus: true, statusIntervalMs: parseInt(process.env.STATUS_POLL_INTERVAL_MS || '20', 10), busTickIntervalMs: parseInt(process.env.STATUS_POLL_INTERVAL_MS || '20', 10), serverBuildId: SERVER_BUILD_ID }));
+
+        // Send cached state immediately (no bus hit)
+        ws.send(JSON.stringify({ type: 'status', joints: lastKnownStatusJoints, cacheAgeMs: lastKnownCacheAgeMs, pushed: true }));
+        ws.send(JSON.stringify(buildEndToolPayload()));
+        ws.send(JSON.stringify({ type: 'jointConfigs', count: lastKnownJointConfigs.count, total: lastKnownJointConfigs.total, joints: lastKnownJointConfigs.joints }));
+        ws.send(JSON.stringify(getControlStatusPayload(ws)));
+        // Push URDF so client can configure its local kinematics without uploading a file
+        if (serverUrdfText) {
+            ws.send(JSON.stringify({ type: 'urdfConfig', urdfText: serverUrdfText }));
         }
-    }
-    
-    // Close shared serial port
-    if (sharedSerialPort && sharedSerialPort.isOpen) {
-        await new Promise((resolve) => {
-            sharedSerialPort.close((error) => {
-                if (error) {
-                    console.error('Error closing shared serial port:', error.message);
-                } else {
-                    console.log('Shared serial port closed');
+
+        ws.on('message', async function incoming(message) {
+            try {
+                const data = JSON.parse(message);
+                if (!data || typeof data.command !== 'string') return;
+
+                // Instant commands are handled entirely in this thread.
+                if (INSTANT_SERVER_COMMANDS[data.command]) {
+                    await handleCommand(ws, data);
+                    return;
                 }
-                resolve();
-            });
+
+                // Control check before forwarding any bus-write command.
+                if (BUS_WRITE_COMMANDS[data.command]) {
+                    const controlCheck = requireControlForCommand(ws, data.command);
+                    if (!controlCheck.ok) {
+                        const errPayload = { type: 'error', message: controlCheck.message, controlRequired: true };
+                        if (data.requestId !== undefined) errPayload.requestId = data.requestId;
+                        ws.send(JSON.stringify(errPayload));
+                        return;
+                    }
+                    if (data.command === 'moveJoint' || data.command === 'setServo' || data.command === 'setServoAngle' || data.command === 'setAcceleration') {
+                        touchControlMoveActivity(ws);
+                    }
+                }
+
+                // Servo EEPROM writes additionally require the control password, on
+                // top of holding the control session — they change the servo itself
+                // (PID, limits, zero point) for every future user of the arm, so they
+                // get their own explicit gate. Students calibrate with the
+                // password-free trainee zero trim instead (setJointZeroTrim).
+                if (EEPROM_WRITE_COMMANDS[data.command] && !controlPasswordMatches(data.password)) {
+                    const errPayload = { type: 'error', message: 'Incorrect password' };
+                    if (data.requestId !== undefined) errPayload.requestId = data.requestId;
+                    ws.send(JSON.stringify(errPayload));
+                    return;
+                }
+
+                if (!servoWorker) {
+                    const errPayload = { type: 'error', message: 'Servo worker not ready' };
+                    if (data.requestId !== undefined) errPayload.requestId = data.requestId;
+                    ws.send(JSON.stringify(errPayload));
+                    return;
+                }
+
+                // A stop command also aborts any in-progress linear path.
+                if (data.command === 'stopAll' || data.command === 'stopAllJoints') {
+                    linearPathRunning  = false;
+                    linearPathClientWs = null;
+                }
+
+                // Moves and stops bypass the bus write queue.
+                const msgType = IMMEDIATE_BUS_COMMANDS[data.command] ? 'immediateBusCommand' : 'busCommand';
+                servoWorker.send({ type: msgType, clientId: ws.clientId, ...data });
+
+            } catch (error) {
+                ws.send(JSON.stringify({ type: 'error', message: error.message }));
+            }
         });
-    }
-    
-    process.exit(0);
+
+        ws.on('close', () => {
+            connectedClients.delete(ws);
+            clientMap.delete(ws.clientId);
+            releaseControlSession(ws);
+            updateLed();
+            debugLog('Client disconnected from ' + clientIp + ' (id=' + ws.clientId + ')');
+        });
+
+        ws.on('error', (error) => {
+            console.error('WebSocket error:', error.message || error);
+        });
+    });
+
+    setInterval(releaseControlForIdle, CONTROL_IDLE_CHECK_INTERVAL_MS);
+    setInterval(checkControlLockExpiry, CONTROL_IDLE_CHECK_INTERVAL_MS);
+    debugLog('WebSocket server listening on port ' + PORT);
 }
 
-// Handle process termination
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
+// ===== Shutdown =====
+async function cleanup(signalName) {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    serverShuttingDown = true;
+    debugLog('Shutting down... (signal: ' + (signalName || 'unknown') + ')');
 
-// Start the server
-async function main() {
+    const forceExitTimer = setTimeout(() => {
+        debugLog('Shutdown timeout — forcing exit', true);
+        process.exit(0);
+    }, 8000);
+
     try {
-        // Initialize servos
-        await initializeServos();
-        
-        // Start WebSocket server
-        startServer();
+        ledController.shutdown();
+        if (servoWorker) {
+            servoWorker.send({ type: 'shutdown' });
+            await new Promise(resolve => servoWorker.once('exit', resolve));
+        }
+        if (wss) { try { wss.close(); } catch (e) { /* ignore */ } }
     } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
+        debugLog('Shutdown error: ' + (error.message || error), true);
+    } finally {
+        clearTimeout(forceExitTimer);
+        process.exit(0);
     }
 }
 
-// Run the main function
-main();
+process.on('SIGINT',  () => cleanup('SIGINT'));
+process.on('SIGTERM', () => cleanup('SIGTERM'));
+
+// ===== Main =====
+startServoWorker();
+// WebSocket server starts once the worker signals 'ready'.

@@ -1,0 +1,92 @@
+<svg viewBox="0 0 520 460" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <rect width="520" height="460" fill="#f8fafc" rx="8"/>
+  <text x="260" y="26" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">Risk Assessment Matrix</text>
+  <text x="260" y="42" text-anchor="middle" font-size="11" fill="#64748b">Likelihood × Severity = Risk score</text>
+
+  <!-- Grid: columns x 110..450 (68 wide), rows y 96..386 (58 high) -->
+  <!-- Column headers (severity) -->
+  <text x="144" y="72" text-anchor="middle" font-size="10" fill="#475569">Negligible</text>
+  <text x="144" y="84" text-anchor="middle" font-size="9" fill="#64748b">(1)</text>
+  <text x="212" y="72" text-anchor="middle" font-size="10" fill="#475569">Minor</text>
+  <text x="212" y="84" text-anchor="middle" font-size="9" fill="#64748b">(2)</text>
+  <text x="280" y="72" text-anchor="middle" font-size="10" fill="#475569">Moderate</text>
+  <text x="280" y="84" text-anchor="middle" font-size="9" fill="#64748b">(3)</text>
+  <text x="348" y="72" text-anchor="middle" font-size="10" fill="#475569">Major</text>
+  <text x="348" y="84" text-anchor="middle" font-size="9" fill="#64748b">(4)</text>
+  <text x="416" y="72" text-anchor="middle" font-size="10" fill="#475569">Catastrophic</text>
+  <text x="416" y="84" text-anchor="middle" font-size="9" fill="#64748b">(5)</text>
+  <!-- Row headers (likelihood), centred on each row -->
+  <text x="102" y="122.5" text-anchor="end" font-size="10" fill="#475569">Almost</text>
+  <text x="102" y="134.5" text-anchor="end" font-size="10" fill="#475569">Certain (5)</text>
+  <text x="102" y="186.5" text-anchor="end" font-size="10" fill="#475569">Likely (4)</text>
+  <text x="102" y="244.5" text-anchor="end" font-size="10" fill="#475569">Possible (3)</text>
+  <text x="102" y="302.5" text-anchor="end" font-size="10" fill="#475569">Unlikely (2)</text>
+  <text x="102" y="360.5" text-anchor="end" font-size="10" fill="#475569">Rare (1)</text>
+  <!-- Cells: score = likelihood × severity, coloured by band -->
+  <rect x="110" y="96" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="144" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">5</text>
+  <rect x="178" y="96" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="212" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">10</text>
+  <rect x="246" y="96" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="280" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">15</text>
+  <rect x="314" y="96" width="68" height="58" fill="#dc2626" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="348" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">20</text>
+  <rect x="382" y="96" width="68" height="58" fill="#dc2626" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="416" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">25</text>
+  <rect x="110" y="154" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="144" y="188" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">4</text>
+  <rect x="178" y="154" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="212" y="188" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">8</text>
+  <rect x="246" y="154" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="280" y="188" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">12</text>
+  <rect x="314" y="154" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="348" y="188" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">16</text>
+  <rect x="382" y="154" width="68" height="58" fill="#dc2626" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="416" y="188" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">20</text>
+  <rect x="110" y="212" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="144" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">3</text>
+  <rect x="178" y="212" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="212" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">6</text>
+  <rect x="246" y="212" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="280" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">9</text>
+  <rect x="314" y="212" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="348" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">12</text>
+  <rect x="382" y="212" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="416" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">15</text>
+  <rect x="110" y="270" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="144" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">2</text>
+  <rect x="178" y="270" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="212" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">4</text>
+  <rect x="246" y="270" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="280" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">6</text>
+  <rect x="314" y="270" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="348" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">8</text>
+  <rect x="382" y="270" width="68" height="58" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="416" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">10</text>
+  <rect x="110" y="328" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="144" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">1</text>
+  <rect x="178" y="328" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="212" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">2</text>
+  <rect x="246" y="328" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="280" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">3</text>
+  <rect x="314" y="328" width="68" height="58" fill="#dcfce7" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="348" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">4</text>
+  <rect x="382" y="328" width="68" height="58" fill="#fef08a" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="416" y="362" text-anchor="middle" font-size="14" font-weight="700" fill="#854d0e">5</text>
+  <rect x="110" y="96" width="340" height="290" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- Axis titles -->
+  <text x="24" y="241" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b" transform="rotate(-90,24,241)">LIKELIHOOD →</text>
+  <text x="280" y="408" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">SEVERITY →</text>
+
+  <!-- Key -->
+  <text x="40" y="440" font-size="10" font-weight="700" fill="#1e293b">Risk level:</text>
+  <rect x="110" y="429" width="14" height="14" rx="3" fill="#dcfce7" stroke="#94a3b8" stroke-width="0.75"/>
+  <text x="129" y="440" font-size="10" fill="#334155">1–4 Low</text>
+  <rect x="192" y="429" width="14" height="14" rx="3" fill="#fef08a" stroke="#94a3b8" stroke-width="0.75"/>
+  <text x="211" y="440" font-size="10" fill="#334155">5–9 Medium</text>
+  <rect x="290" y="429" width="14" height="14" rx="3" fill="#ea580c" stroke="#94a3b8" stroke-width="0.75"/>
+  <text x="309" y="440" font-size="10" fill="#334155">10–16 High</text>
+  <rect x="384" y="429" width="14" height="14" rx="3" fill="#dc2626" stroke="#94a3b8" stroke-width="0.75"/>
+  <text x="403" y="440" font-size="10" fill="#334155">20–25 Extreme</text>
+</svg>

@@ -1,0 +1,29 @@
+# DEPRECATED — do not use. System services cannot open Chromium on Pi OS Wayland
+# (MIT-MAGIC-COOKIE-1 / Missing X server). Use robot-arm-kiosk-user.service instead.
+# install-kiosk-service.sh installs the user unit and removes this from /etc/systemd/system/.
+
+[Unit]
+Description=Robot Arm Control UI (Chromium kiosk)
+After=graphical.target network-online.target st3215-server.service
+Wants=st3215-server.service network-online.target
+
+[Service]
+Type=simple
+User=SERVICE_USER
+Group=SERVICE_USER
+WorkingDirectory=INSTALL_DIR
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/SERVICE_USER/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/SERVICE_UID
+Environment=ROBOT_ARM_KIOSK_PORT=KIOSK_PORT
+Environment=ROBOT_ARM_KIOSK_SCREENS=KIOSK_SCREENS
+# Wait for desktop session / Wayland socket after boot
+ExecStartPre=/bin/sleep 20
+ExecStart=INSTALL_DIR/start-kiosk.sh
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

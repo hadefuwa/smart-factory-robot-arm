@@ -1,0 +1,35 @@
+# Systemd unit for the Robot Arm ST3215 WebSocket server.
+# install-service.sh copies this to /etc/systemd/system/ and fills in paths.
+
+[Unit]
+Description=Robot Arm ST3215 WebSocket Server (port 8080)
+After=network-online.target
+Wants=network-online.target
+# If the server crashes 10 times in 5 minutes, stop trying until manual restart
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=SERVICE_USER
+Group=SERVICE_USER
+WorkingDirectory=INSTALL_DIR
+ExecStart=NODE_PATH server.js
+Environment=ROBOT_ARM_DEBUG_LOG=LOG_DIR/server-debug.log
+Environment=NODE_ENV=production
+# 1 ms between joint reads gives a ~25 ms status cycle (40 Hz); 0 reaches ~21 ms but
+# showed occasional UART overruns on a loaded Pi. 4 was the old hard-coded value (~40 ms).
+Environment=JOINT_POLL_GAP_MS=1
+# Restart whenever the process stops (crash, exit, or serial error during startup)
+Restart=always
+RestartSec=5
+# Do not wait indefinitely if serial shutdown is slow
+TimeoutStopSec=15
+# Allow access to /dev/serial0 and USB serial adapters
+SupplementaryGroups=dialout
+# Also capture stdout/stderr in a second log file
+StandardOutput=append:LOG_DIR/server.log
+StandardError=append:LOG_DIR/server.log
+
+[Install]
+WantedBy=multi-user.target

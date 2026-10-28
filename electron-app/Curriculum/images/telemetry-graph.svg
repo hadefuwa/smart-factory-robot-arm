@@ -1,0 +1,89 @@
+<svg viewBox="0 0 580 380" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrR" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrB" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#3b82f6"/>
+    </marker>
+  </defs>
+  <rect width="580" height="380" fill="#f8fafc" rx="8"/>
+  <text x="290" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">Servo Telemetry - Example Data Log</text>
+  <text x="290" y="40" text-anchor="middle" font-size="11" fill="#64748b">Temperature and Load % vs time during a 30-minute continuous run</text>
+
+  <!-- Legend (above the chart) -->
+  <rect x="80" y="56" width="14" height="4" rx="2" fill="#ef4444"/>
+  <text x="100" y="62" font-size="10" fill="#dc2626">Temperature (°C)</text>
+  <rect x="210" y="56" width="14" height="4" rx="2" fill="#3b82f6"/>
+  <text x="230" y="62" font-size="10" fill="#2563eb">Load % (J2)</text>
+  <line x1="320" y1="58" x2="334" y2="58" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,2"/>
+  <text x="340" y="62" font-size="10" fill="#b45309">70°C warning threshold</text>
+
+  <!-- Chart area: x 70..500 (0..30 min), y 295..103 (0..80°C / 0..100%) -->
+  <rect x="70" y="75" width="430" height="220" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <!-- Grid lines (horizontal): 20°C/25% steps -->
+  <line x1="70" y1="103" x2="500" y2="103" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="70" y1="151" x2="500" y2="151" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="70" y1="199" x2="500" y2="199" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="70" y1="247" x2="500" y2="247" stroke="#f1f5f9" stroke-width="1"/>
+
+  <!-- Grid lines (vertical): every 5 min -->
+  <line x1="141.7" y1="75" x2="141.7" y2="295" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="213.3" y1="75" x2="213.3" y2="295" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="285"   y1="75" x2="285"   y2="295" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="356.7" y1="75" x2="356.7" y2="295" stroke="#f1f5f9" stroke-width="1"/>
+  <line x1="428.3" y1="75" x2="428.3" y2="295" stroke="#f1f5f9" stroke-width="1"/>
+
+  <!-- Y axis left (Temperature) -->
+  <line x1="70" y1="295" x2="70" y2="78" stroke="#ef4444" stroke-width="2" marker-end="url(#arrR)"/>
+  <text x="62" y="106.5" text-anchor="end" font-size="10" fill="#dc2626">80°C</text>
+  <text x="62" y="154.5" text-anchor="end" font-size="10" fill="#dc2626">60°C</text>
+  <text x="62" y="202.5" text-anchor="end" font-size="10" fill="#dc2626">40°C</text>
+  <text x="62" y="250.5" text-anchor="end" font-size="10" fill="#dc2626">20°C</text>
+  <text x="62" y="298.5" text-anchor="end" font-size="10" fill="#dc2626">0°C</text>
+  <text x="20" y="185" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700" transform="rotate(-90,20,185)">Temperature (°C)</text>
+
+  <!-- Y axis right (Load %) -->
+  <line x1="500" y1="295" x2="500" y2="78" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="508" y="106.5" font-size="10" fill="#2563eb">100%</text>
+  <text x="508" y="154.5" font-size="10" fill="#2563eb">75%</text>
+  <text x="508" y="202.5" font-size="10" fill="#2563eb">50%</text>
+  <text x="508" y="250.5" font-size="10" fill="#2563eb">25%</text>
+  <text x="508" y="298.5" font-size="10" fill="#2563eb">0%</text>
+  <text x="560" y="185" text-anchor="middle" font-size="11" fill="#2563eb" font-weight="700" transform="rotate(90,560,185)">Load %</text>
+
+  <!-- X axis (time) -->
+  <line x1="70" y1="295" x2="500" y2="295" stroke="#475569" stroke-width="2"/>
+  <text x="70"    y="310" text-anchor="middle" font-size="10" fill="#64748b">0</text>
+  <text x="141.7" y="310" text-anchor="middle" font-size="10" fill="#64748b">5 min</text>
+  <text x="213.3" y="310" text-anchor="middle" font-size="10" fill="#64748b">10 min</text>
+  <text x="285"   y="310" text-anchor="middle" font-size="10" fill="#64748b">15 min</text>
+  <text x="356.7" y="310" text-anchor="middle" font-size="10" fill="#64748b">20 min</text>
+  <text x="428.3" y="310" text-anchor="middle" font-size="10" fill="#64748b">25 min</text>
+  <text x="500"   y="310" text-anchor="middle" font-size="10" fill="#64748b">30 min</text>
+  <text x="285" y="328" text-anchor="middle" font-size="11" fill="#64748b">Time</text>
+
+  <!-- Warning line at 70°C (y = 295 - 70 × 2.4 = 127) -->
+  <line x1="70" y1="127" x2="500" y2="127" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="494" y="122" text-anchor="end" font-size="9" font-weight="700" fill="#b45309">⚠ 70°C limit</text>
+
+  <!-- Temperature line: y = 295 - 2.4 × °C; x = 70 + 14.33 × min -->
+  <!-- 0:25 2.5:28 5:32 7.5:37 10:43 12.5:48 15:52 17.5:57 20:61 22.5:63.5 25:65 30:66 -->
+  <polyline points="70,235 105.8,227.8 141.7,218.2 177.5,206.2 213.3,191.8 249.2,179.8 285,170.2 320.8,158.2 356.7,148.6 392.5,142.6 428.3,139 500,136.6"
+    stroke="#ef4444" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+
+  <!-- Load % line: y = 295 - 1.92 × % -->
+  <!-- 0:20 2:55 3.5:35 5.5:60 7.5:45 10:65 12.5:45 15:70 17.5:50 20:72 22.5:50 25:60 30:45 -->
+  <polyline points="70,256.6 98.7,189.4 120.2,227.8 148.8,179.8 177.5,208.6 213.3,170.2 249.2,208.6 285,160.6 320.8,199 356.7,156.8 392.5,199 428.3,179.8 500,208.6"
+    stroke="#3b82f6" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+
+  <!-- Annotation -->
+  <text x="404" y="158" font-size="9" fill="#dc2626">Approaching</text>
+  <text x="404" y="169" font-size="9" fill="#dc2626">warning temp</text>
+
+  <text x="290" y="352" text-anchor="middle" font-size="10" fill="#64748b">Above ~70°C the ST3215 servo begins current-limiting to protect itself - plan duty cycles accordingly</text>
+</svg>

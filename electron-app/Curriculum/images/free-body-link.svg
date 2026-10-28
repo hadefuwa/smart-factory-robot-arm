@@ -1,0 +1,72 @@
+<svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 Z" fill="#dc2626"/></marker>
+    <marker id="arr-o" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 Z" fill="#ea580c"/></marker>
+    <marker id="arr-b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 Z" fill="#3b82f6"/></marker>
+    <marker id="arr-p" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 Z" fill="#7c3aed"/></marker>
+  </defs>
+  <rect width="480" height="320" fill="#f8fafc" rx="8"/>
+  <text x="240" y="22" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">Free Body Diagram - Single Link</text>
+  <text x="240" y="38" text-anchor="middle" font-size="10" fill="#64748b">All forces and moments acting on one arm link in static equilibrium</text>
+
+  <!-- Geometry: pivot (130,150); link 130..328 along y=150 -->
+
+  <!-- Support hatching under the pivot -->
+  <line x1="108" y1="162" x2="152" y2="162" stroke="#475569" stroke-width="2"/>
+  <g stroke="#475569" stroke-width="1.5">
+    <line x1="112" y1="162" x2="107" y2="168"/><line x1="120" y1="162" x2="115" y2="168"/><line x1="128" y1="162" x2="123" y2="168"/>
+    <line x1="136" y1="162" x2="131" y2="168"/><line x1="144" y1="162" x2="139" y2="168"/><line x1="152" y1="162" x2="147" y2="168"/>
+  </g>
+
+  <!-- Link -->
+  <rect x="130" y="140" width="198" height="20" rx="6" fill="#bfdbfe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="252" y="131" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">Link - mass m, length L</text>
+
+  <!-- Pivot -->
+  <circle cx="130" cy="150" r="8" fill="#ffffff" stroke="#475569" stroke-width="2.5"/>
+  <text x="130" y="184" text-anchor="middle" font-size="10" fill="#475569">Pivot / Joint J</text>
+
+  <!-- Reaction forces at the joint -->
+  <line x1="130" y1="141" x2="130" y2="76" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr-b)"/>
+  <text x="122" y="88" text-anchor="end" font-size="11" font-weight="700" fill="#1d4ed8">R_y</text>
+  <line x1="121" y1="150" x2="66" y2="150" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr-b)"/>
+  <text x="90" y="143" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">R_x</text>
+  <text x="20" y="80" font-size="9" fill="#2563eb">Reaction</text>
+  <text x="20" y="92" font-size="9" fill="#2563eb">forces at</text>
+  <text x="20" y="104" font-size="9" fill="#2563eb">joint</text>
+
+  <!-- Motor torque (anticlockwise, holding the link up) -->
+  <path d="M 160.8,135.6 A 34,34 0 0,0 135.9,116.5" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr-p)"/>
+  <text x="142" y="106" font-size="10" font-weight="700" fill="#6d28d9">M_J</text>
+  <text x="164" y="106" font-size="9" fill="#6d28d9">(motor torque)</text>
+
+  <!-- Weight at the centre of gravity -->
+  <circle cx="229" cy="150" r="4" fill="#dc2626"/>
+  <line x1="229" y1="154" x2="229" y2="202" stroke="#dc2626" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="238" y="186" font-size="11" font-weight="700" fill="#b91c1c">W = mg</text>
+  <text x="229" y="222" text-anchor="middle" font-size="9" fill="#64748b">Acts at centre</text>
+  <text x="229" y="233" text-anchor="middle" font-size="9" fill="#64748b">of gravity (L/2)</text>
+
+  <!-- Load at the end -->
+  <circle cx="328" cy="150" r="4" fill="#ea580c"/>
+  <line x1="328" y1="154" x2="328" y2="220" stroke="#ea580c" stroke-width="2.5" marker-end="url(#arr-o)"/>
+  <text x="340" y="195" font-size="11" font-weight="700" fill="#c2410c">F_load</text>
+  <text x="340" y="208" font-size="9" fill="#64748b">(end-effector</text>
+  <text x="340" y="220" font-size="9" fill="#64748b">payload)</text>
+
+  <!-- Link length -->
+  <line x1="130" y1="246" x2="328" y2="246" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="130" y1="240" x2="130" y2="252" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="328" y1="240" x2="328" y2="252" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="229" y="262" text-anchor="middle" font-size="11" font-weight="700" fill="#475569">L (link length)</text>
+
+  <!-- Equation boxes -->
+  <rect x="8" y="270" width="185" height="44" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="100" y="283" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">Equilibrium conditions:</text>
+  <text x="22" y="297" font-size="9" fill="#475569">ΣF_x = 0 → R_x = 0</text>
+  <text x="22" y="309" font-size="9" fill="#475569">ΣF_y = 0 → R_y = W + F_load</text>
+  <rect x="280" y="270" width="192" height="44" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="376" y="283" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">Moment about pivot:</text>
+  <text x="294" y="297" font-size="9" fill="#475569">ΣM_J = 0</text>
+  <text x="294" y="309" font-size="9" fill="#475569">M_J = W·(L/2) + F_load·L</text>
+</svg>

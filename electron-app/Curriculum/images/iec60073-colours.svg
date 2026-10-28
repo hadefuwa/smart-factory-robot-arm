@@ -1,0 +1,73 @@
+<svg viewBox="0 0 520 378" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <rect width="520" height="378" fill="#f8fafc" rx="8"/>
+  <text x="260" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">IEC 60073 - Indicator Colour Standards</text>
+  <text x="260" y="40" text-anchor="middle" font-size="11" fill="#64748b">Colours used on HMI panels, buttons and indicator lights have standardised meanings</text>
+
+  <!-- Table: columns at x 20, 100, 228, 386, 500; header 52..82; rows 56 high -->
+  <rect x="20" y="52" width="480" height="30" fill="#334155"/>
+  <text x="60" y="71.5" text-anchor="middle" font-size="11" font-weight="700" fill="white">Colour</text>
+  <text x="164" y="71.5" text-anchor="middle" font-size="11" font-weight="700" fill="white">Meaning</text>
+  <text x="307" y="71.5" text-anchor="middle" font-size="11" font-weight="700" fill="white">HMI Example</text>
+  <text x="443" y="71.5" text-anchor="middle" font-size="11" font-weight="700" fill="white">Robot arm use</text>
+
+  <!-- RED -->
+  <rect x="20" y="82" width="480" height="56" fill="#ffffff"/>
+  <circle cx="60" cy="110" r="21" fill="#dc2626" stroke="#991b1b" stroke-width="2"/>
+  <text x="60" y="113.5" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">RED</text>
+  <text x="164" y="107" text-anchor="middle" font-size="11" font-weight="600" fill="#b91c1c">Danger / Fault</text>
+  <text x="164" y="122" text-anchor="middle" font-size="10" fill="#64748b">Abnormal condition</text>
+  <text x="307" y="113.5" text-anchor="middle" font-size="10" fill="#1e293b">Emergency stop button</text>
+  <text x="443" y="113.5" text-anchor="middle" font-size="10" fill="#475569">Fault indicator light</text>
+
+  <!-- AMBER -->
+  <rect x="20" y="138" width="480" height="56" fill="#f8fafc"/>
+  <circle cx="60" cy="166" r="21" fill="#f59e0b" stroke="#d97706" stroke-width="2"/>
+  <text x="60" y="169.5" text-anchor="middle" font-size="9" font-weight="700" fill="#451a03">AMBER</text>
+  <text x="164" y="163" text-anchor="middle" font-size="11" font-weight="600" fill="#b45309">Warning</text>
+  <text x="164" y="178" text-anchor="middle" font-size="10" fill="#64748b">Caution needed</text>
+  <text x="307" y="169.5" text-anchor="middle" font-size="10" fill="#1e293b">Low battery / high temp light</text>
+  <text x="443" y="169.5" text-anchor="middle" font-size="10" fill="#475569">Load % warning</text>
+
+  <!-- GREEN -->
+  <rect x="20" y="194" width="480" height="56" fill="#ffffff"/>
+  <circle cx="60" cy="222" r="21" fill="#16a34a" stroke="#15803d" stroke-width="2"/>
+  <text x="60" y="225.5" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">GREEN</text>
+  <text x="164" y="219" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">Safe / Normal</text>
+  <text x="164" y="234" text-anchor="middle" font-size="10" fill="#64748b">System ready, OK</text>
+  <text x="307" y="225.5" text-anchor="middle" font-size="10" fill="#1e293b">Start / Run button</text>
+  <text x="443" y="225.5" text-anchor="middle" font-size="10" fill="#475569">Connected indicator</text>
+
+  <!-- BLUE -->
+  <rect x="20" y="250" width="480" height="56" fill="#f8fafc"/>
+  <circle cx="60" cy="278" r="21" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="60" y="281.5" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">BLUE</text>
+  <text x="164" y="275" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">Mandatory / Info</text>
+  <text x="164" y="290" text-anchor="middle" font-size="10" fill="#64748b">Action required</text>
+  <text x="307" y="281.5" text-anchor="middle" font-size="10" fill="#1e293b">Reset button, mode indicator</text>
+  <text x="443" y="281.5" text-anchor="middle" font-size="10" fill="#475569">Manual mode active</text>
+
+  <!-- WHITE / GREY -->
+  <rect x="20" y="306" width="480" height="56" fill="#ffffff"/>
+  <circle cx="60" cy="334" r="21" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+  <text x="60" y="333" text-anchor="middle" font-size="9" font-weight="700" fill="#334155">WHITE</text>
+  <text x="60" y="344" text-anchor="middle" font-size="8" fill="#334155">/ GREY</text>
+  <text x="164" y="331" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">General / Neutral</text>
+  <text x="164" y="346" text-anchor="middle" font-size="10" fill="#64748b">No specific meaning</text>
+  <text x="307" y="337.5" text-anchor="middle" font-size="10" fill="#1e293b">General indicators, power on</text>
+  <text x="443" y="337.5" text-anchor="middle" font-size="10" fill="#475569">Status light (idle)</text>
+
+  <!-- Grid lines -->
+  <g stroke="#e2e8f0" stroke-width="1">
+    <line x1="20" y1="138" x2="500" y2="138"/>
+    <line x1="20" y1="194" x2="500" y2="194"/>
+    <line x1="20" y1="250" x2="500" y2="250"/>
+    <line x1="20" y1="306" x2="500" y2="306"/>
+    <line x1="100" y1="82" x2="100" y2="362"/>
+    <line x1="228" y1="82" x2="228" y2="362"/>
+    <line x1="386" y1="82" x2="386" y2="362"/>
+  </g>
+  <line x1="100" y1="52" x2="100" y2="82" stroke="#475569" stroke-width="1"/>
+  <line x1="228" y1="52" x2="228" y2="82" stroke="#475569" stroke-width="1"/>
+  <line x1="386" y1="52" x2="386" y2="82" stroke="#475569" stroke-width="1"/>
+  <rect x="20" y="52" width="480" height="310" fill="none" stroke="#cbd5e1" stroke-width="1.5" rx="2"/>
+</svg>

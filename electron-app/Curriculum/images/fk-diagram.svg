@@ -1,0 +1,75 @@
+<svg viewBox="0 0 560 420" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <defs>
+    <marker id="arr-r" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#ef4444"/>
+    </marker>
+    <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#16a34a"/>
+    </marker>
+  </defs>
+  <rect width="560" height="420" fill="#f8fafc" rx="8"/>
+  <text x="280" y="26" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">Forward Kinematics - 2-Link Planar Arm</text>
+
+  <!-- Geometry: O (80,360); L1 = 160 at θ1 = 40° → joint 2 (202.6,257.2); L2 = 130 at θ2 = 40° from link 1 (80° absolute) → end-effector (225.2,129.2) -->
+
+  <!-- Projections of the end-effector onto the axes -->
+  <line x1="225.2" y1="129.2" x2="225.2" y2="360" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="80" y1="129.2" x2="225.2" y2="129.2" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="225.2" y="377" text-anchor="middle" font-size="11" fill="#475569">x</text>
+  <text x="70" y="133" text-anchor="end" font-size="11" fill="#475569">y</text>
+
+  <!-- Axes -->
+  <line x1="80" y1="360" x2="170" y2="360" stroke="#ef4444" stroke-width="2" marker-end="url(#arr-r)"/>
+  <text x="178" y="364" font-size="12" fill="#ef4444" font-weight="700">X</text>
+  <line x1="80" y1="360" x2="80" y2="280" stroke="#16a34a" stroke-width="2" marker-end="url(#arr-g)"/>
+  <text x="72" y="282" text-anchor="end" font-size="12" fill="#16a34a" font-weight="700">Y</text>
+  <text x="70" y="376" text-anchor="end" font-size="11" fill="#475569">O</text>
+
+  <!-- Dashed extension of link 1 (reference for θ2) -->
+  <line x1="202.6" y1="257.2" x2="244.8" y2="221.8" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+  <!-- θ1: from the X-axis to link 1 -->
+  <path d="M 125,360 A 45,45 0 0,0 114.5,331.1" stroke="#3b82f6" stroke-width="2" fill="none"/>
+  <text x="134" y="345" font-size="13" fill="#2563eb" font-style="italic">θ₁</text>
+
+  <!-- θ2: from the extension of link 1 to link 2 -->
+  <path d="M 231.7,232.8 A 38,38 0 0,0 209.2,219.8" stroke="#7c3aed" stroke-width="2" fill="none"/>
+  <text x="233" y="214" font-size="13" fill="#7c3aed" font-style="italic">θ₂</text>
+
+  <!-- Link 1 -->
+  <line x1="80" y1="360" x2="202.6" y2="257.2" stroke="#3b82f6" stroke-width="8" stroke-linecap="round"/>
+  <line x1="80" y1="360" x2="202.6" y2="257.2" stroke="#93c5fd" stroke-width="4" stroke-linecap="round"/>
+  <text x="154" y="325" font-size="12" fill="#1d4ed8" font-weight="700">L₁</text>
+
+  <!-- Link 2 -->
+  <line x1="202.6" y1="257.2" x2="225.2" y2="129.2" stroke="#7c3aed" stroke-width="8" stroke-linecap="round"/>
+  <line x1="202.6" y1="257.2" x2="225.2" y2="129.2" stroke="#c4b5fd" stroke-width="4" stroke-linecap="round"/>
+  <text x="200" y="195" text-anchor="end" font-size="12" fill="#6d28d9" font-weight="700">L₂</text>
+
+  <!-- Joints -->
+  <circle cx="80" cy="360" r="6" fill="#1e293b"/>
+  <circle cx="202.6" cy="257.2" r="9" fill="#7c3aed" stroke="#6d28d9" stroke-width="2"/>
+  <circle cx="225.2" cy="129.2" r="9" fill="#ea580c" stroke="#c2410c" stroke-width="2"/>
+  <text x="240" y="126" font-size="11" fill="#c2410c" font-weight="600">End-Effector</text>
+  <text x="240" y="140" font-size="10" fill="#c2410c">(x, y)</text>
+
+  <!-- Formula box -->
+  <rect x="340" y="50" width="200" height="96" rx="8" fill="#0f172a"/>
+  <text x="440" y="70" text-anchor="middle" font-size="11" font-weight="700" fill="#7dd3fc">FK Equations</text>
+  <text x="350" y="92" font-size="10" fill="#bfdbfe" font-family="ui-monospace, Consolas, monospace">x = L₁cos(θ₁) + L₂cos(θ₁+θ₂)</text>
+  <text x="350" y="111" font-size="10" fill="#bfdbfe" font-family="ui-monospace, Consolas, monospace">y = L₁sin(θ₁) + L₂sin(θ₁+θ₂)</text>
+  <text x="350" y="134" font-size="9.5" fill="#94a3b8">θ₁ + θ₂ = angle of link 2 from X</text>
+
+  <!-- Key -->
+  <rect x="340" y="158" width="200" height="92" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="440" y="177" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">Variables</text>
+  <circle cx="354" cy="193" r="5" fill="#3b82f6"/>
+  <text x="364" y="197" font-size="10.5" fill="#1e293b">θ₁ = joint 1 angle (from X-axis)</text>
+  <circle cx="354" cy="213" r="5" fill="#7c3aed"/>
+  <text x="364" y="217" font-size="10.5" fill="#1e293b">θ₂ = joint 2 angle (from link 1)</text>
+  <rect x="349" y="230" width="10" height="5" rx="1" fill="#3b82f6"/>
+  <text x="364" y="237" font-size="10.5" fill="#1e293b">L₁, L₂ = link lengths (mm)</text>
+
+  <!-- Note -->
+  <text x="280" y="404" text-anchor="middle" font-size="10" fill="#64748b">θ₁ is measured CCW from the X-axis; θ₂ is measured CCW from link 1. Both positive = arm bends upward.</text>
+</svg>

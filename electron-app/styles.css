@@ -1,0 +1,4492 @@
+/**
+ * Robot Arm Control App Styles
+ * Simple, clean design for the control interface
+ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #ede9f0; /* Light purple */
+    color: #0e0d0d;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Footer */
+.app-footer {
+    background-color: #2c3e50;
+    color: white;
+    padding: 15px 20px;
+    text-align: center;
+    margin-top: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-footer p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.app-footer a {
+    color: #3498db;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.app-footer a:hover {
+    color: #5dade2;
+    text-decoration: underline;
+}
+
+.app-footer a:visited {
+    color: #3498db;
+}
+
+/* Header */
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.header-logo {
+    height: 80px;
+    width: auto;
+    max-width: 350px;
+    object-fit: contain;
+}
+
+header h1 {
+    font-size: 24px;
+    margin: 0;
+}
+
+.header-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.control-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.status-indicator.connected {
+    background-color: #27ae60;
+}
+
+.status-indicator.control-active {
+    background-color: #27ae60;
+}
+
+.status-indicator.control-readonly {
+    background-color: #e67e22;
+}
+
+.status-indicator.control-held-by-other {
+    background-color: #e74c3c;
+}
+
+.status-indicator.control-available {
+    background-color: #3498db;
+}
+
+.status-indicator.control-unknown {
+    background-color: #95a5a6;
+}
+
+#releaseControlButton {
+    margin-left: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* Connection Panel */
+.connection-panel {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.connection-panel h2 {
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.connection-form {
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.connection-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.connection-form input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.control-lock-title {
+    margin-top: 18px;
+    margin-bottom: 6px;
+    font-size: 15px;
+    color: #3a3f4b;
+}
+
+.commission-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px 16px;
+    margin: 12px 0;
+}
+
+.commission-fields-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #3a3f4b;
+}
+
+.commission-fields-grid input {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.control-lock-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.control-lock-password {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    min-width: 160px;
+}
+
+#controlLockStatus {
+    margin-top: 8px;
+}
+
+/* Simple toast message */
+.app-message {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    max-width: 320px;
+    background-color: rgba(44, 62, 80, 0.95);
+    color: #ecf0f1;
+    padding: 12px 16px;
+    border-radius: 6px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    z-index: 2000;
+    font-size: 14px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+.btn-secondary.active {
+    background-color: #3498db;
+    border-color: #3498db;
+    color: white;
+}
+
+.btn-secondary.active:hover {
+    background-color: #2980b9;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+.btn-warning {
+    background-color: #f39c12;
+    color: white;
+}
+
+.btn-warning:hover {
+    background-color: #d68910;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* End Tool Servo panel */
+.end-tool-servo-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.servo-enable-row,
+.servo-angle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.servo-enable-label {
+    min-width: 110px;
+    font-weight: 500;
+}
+
+.servo-state-text {
+    font-style: italic;
+    color: #7f8c8d;
+    margin-left: 4px;
+}
+
+#endToolServoSlider {
+    flex: 1;
+    min-width: 120px;
+}
+
+/* End Tool Pneumatic panel */
+.end-tool-pneumatic-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pneumatic-section-label {
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 2px;
+}
+
+.end-tool-current-row {
+    margin-top: 2px;
+}
+
+.end-tool-current-value {
+    font-family: monospace;
+    font-size: 0.95em;
+    min-width: 70px;
+    color: #2c3e50;
+}
+
+
+/* Main layout: sidebar on the left, pages on the right */
+.main-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 20px;
+    transition: gap 0.25s ease;
+}
+
+.main-layout.sidebar-collapsed {
+    gap: 0;
+}
+
+/* Sidebar toggle burger button */
+.sidebar-toggle-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+.sidebar-toggle-btn:hover {
+    opacity: 1;
+    background-color: rgba(255,255,255,0.15);
+}
+
+/* Sidebar Tabs */
+.tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 200px;
+    width: 220px;
+    border-right: 2px solid #ddd;
+    padding-right: 10px;
+    overflow: hidden;
+    transition: width 0.25s ease, min-width 0.25s ease, padding 0.25s ease,
+                opacity 0.25s ease, border-width 0.25s ease;
+}
+
+.tabs.collapsed {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border-right-width: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.tab-button {
+    padding: 10px 14px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    text-align: left;
+    border-radius: 4px;
+    border-right: 3px solid transparent;
+    transition: background-color 0.2s, color 0.2s, border-right-color 0.2s;
+}
+
+.tab-button:hover {
+    background-color: #ecf0f1;
+    color: #3498db;
+}
+
+.tab-button.active {
+    background-color: #ffffff;
+    color: #3498db;
+    font-weight: bold;
+    border-right-color: #3498db;
+}
+
+/* Tab Content */
+.tab-content-container {
+    flex: 1;
+    /* Flex items default to min-width:auto, which lets a wide table push the
+       page out past the window instead of scrolling inside its wrapper. */
+    min-width: 0;
+}
+
+.tab-content {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.tab-content {
+    display: none;
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.curriculum-tab-content {
+    padding: 0;
+    flex-direction: column;
+    height: calc(100vh - 60px);
+}
+
+.curriculum-tab-content.active {
+    display: flex;
+}
+
+.tab-content h2 {
+    margin-bottom: 20px;
+    font-size: 20px;
+}
+
+/* Pendant (touchscreen) layout */
+.pendant-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-top: 10px;
+}
+
+.pendant-panel {
+    background-color: #ecf0f1;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.pendant-panel h3 {
+    margin-bottom: 10px;
+}
+
+.pendant-position {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 16px;
+}
+
+.pendant-pos-line {
+    margin: 4px 0;
+}
+
+.pendant-xy-wheel {
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle at center, #3c4f63 0%, #1b2836 70%);
+    position: relative;
+    margin: 0 auto;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.pendant-xy-btn {
+    position: absolute;
+    min-width: 60px;
+}
+
+.pendant-xy-up {
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.pendant-xy-down {
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.pendant-xy-left {
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.pendant-xy-right {
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.pendant-xy-center {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.pendant-z-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.pendant-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pendant-step-settings {
+    margin-top: 10px;
+}
+
+.pendant-step-settings input {
+    margin-left: 5px;
+    width: 80px;
+}
+
+.pendant-btn {
+    font-size: 16px;
+    padding: 14px 18px;
+}
+
+.pendant-wide-btn {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px 18px;
+}
+
+.pendant-stored-pos {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pendant-stored-pos select {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+}
+
+/* ── New touchscreen pendant layout ── */
+.pendant2-page {
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0 0;
+}
+
+.pendant2-page.active {
+    display: flex;
+}
+
+.pendant2-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 12px 16px;
+    border-radius: 10px;
+    flex-wrap: wrap;
+}
+
+.pendant2-position-box {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    flex-wrap: wrap;
+}
+
+.pendant2-pos-line {
+    font-size: 22px;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pendant2-unit {
+    font-size: 14px;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.pendant2-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.pendant2-estop {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    padding: 12px 20px !important;
+    line-height: 1.3;
+    min-width: 130px;
+    text-align: center;
+    touch-action: manipulation;
+}
+
+.pendant2-home-btn {
+    font-size: 15px !important;
+    padding: 12px 16px !important;
+    line-height: 1.3;
+    min-width: 110px;
+    text-align: center;
+    touch-action: manipulation;
+}
+
+/* Main row: jog card + side panels */
+.pendant2-main {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+/* Jog card */
+.pendant2-jog-card {
+    background: #ecf0f1;
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pendant2-jog-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #7f8c8d;
+}
+
+.pendant2-jog-cluster {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* 3×3 D-pad grid */
+.pendant2-dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 88px);
+    grid-template-rows: repeat(3, 88px);
+    gap: 6px;
+}
+
+.pendant2-dpad-empty {
+    background: transparent;
+}
+
+.pendant2-dpad-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #d5dbdb;
+    font-size: 11px;
+    font-weight: 700;
+    color: #95a5a6;
+    letter-spacing: 1px;
+}
+
+/* Shared jog button base */
+.pendant2-jog-btn {
+    border-radius: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    padding: 0 !important;
+    border: none !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: transform 0.08s, opacity 0.08s;
+}
+
+.pendant2-jog-btn:active {
+    transform: scale(0.93);
+    opacity: 0.85;
+}
+
+.pendant2-jog-xy {
+    background: #2980b9 !important;
+    color: #fff !important;
+}
+
+.pendant2-jog-xy:hover {
+    background: #3498db !important;
+}
+
+/* Z column */
+.pendant2-z-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+}
+
+.pendant2-jog-z {
+    width: 80px;
+    height: 88px;
+    background: #27ae60 !important;
+    color: #fff !important;
+}
+
+.pendant2-jog-z:hover {
+    background: #2ecc71 !important;
+}
+
+.pendant2-z-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #7f8c8d;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+/* Step size row */
+.pendant2-step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pendant2-step-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
+}
+
+.pendant2-step-btn {
+    flex: 1;
+    min-width: 52px;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    padding: 10px 6px !important;
+    border-radius: 8px !important;
+    background: #bdc3c7 !important;
+    color: #2c3e50 !important;
+    border: none !important;
+    touch-action: manipulation;
+    transition: background 0.15s;
+}
+
+.pendant2-step-btn.active {
+    background: #2980b9 !important;
+    color: #fff !important;
+}
+
+/* Side panels */
+.pendant2-side-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-width: 200px;
+}
+
+/* Generic card */
+.pendant2-card {
+    background: #ecf0f1;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.pendant2-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #7f8c8d;
+    margin-bottom: 2px;
+}
+
+.pendant2-wide-btn {
+    width: 100% !important;
+    font-size: 14px !important;
+    padding: 11px 10px !important;
+    touch-action: manipulation;
+}
+
+.pendant2-orientation-info {
+    font-size: 11px;
+    color: #888;
+    font-style: italic;
+    margin-top: 2px;
+}
+
+.pendant2-select {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    border-radius: 6px;
+    border: 1px solid #bdc3c7;
+    background: #fff;
+}
+
+/* End tool button active-state colouring - ON=green, OFF=red */
+.end-tool-on-btn.active {
+    background-color: #27ae60 !important;
+    border-color: #27ae60 !important;
+    color: #fff !important;
+}
+
+.end-tool-on-btn.active:hover {
+    background-color: #2ecc71 !important;
+}
+
+.end-tool-off-btn.active {
+    background-color: #e74c3c !important;
+    border-color: #e74c3c !important;
+    color: #fff !important;
+}
+
+.end-tool-off-btn.active:hover {
+    background-color: #c0392b !important;
+}
+
+/* End tool row */
+.pendant2-end-tools-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.pendant2-end-tool-card {
+    flex: 1;
+    min-width: 200px;
+}
+
+.pendant2-end-tool-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.pendant2-end-tool-presets {
+    margin-top: 4px;
+}
+
+.pendant2-tool-btn {
+    flex: 1;
+    font-size: 14px !important;
+    padding: 12px 6px !important;
+    border-radius: 8px !important;
+    touch-action: manipulation;
+    text-align: center;
+}
+
+.pendant2-servo-btn {
+    background: #8e44ad !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+}
+
+.pendant2-servo-btn:hover {
+    background: #9b59b6 !important;
+}
+
+.pendant2-pump-on {
+    background: #e67e22 !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+}
+
+.pendant2-pump-on:hover {
+    background: #f39c12 !important;
+}
+
+.pendant2-angle-sub {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+/* Stack end-tool cards vertically on narrow screens */
+@media (max-width: 700px) {
+    .pendant2-end-tools-row {
+        flex-direction: column;
+    }
+    .pendant2-main {
+        flex-direction: column;
+    }
+    .pendant2-side-panels {
+        width: 100%;
+    }
+}
+
+/* Stack layout on very small screens */
+@media (max-width: 800px) {
+    .main-layout {
+        flex-direction: column;
+    }
+
+    .tabs {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: none;
+        border-bottom: 2px solid #ddd;
+        padding-right: 0;
+        padding-bottom: 10px;
+    }
+
+    .tab-button {
+        border-right: none;
+        border-bottom: 3px solid transparent;
+    }
+
+    .tab-button.active {
+        border-bottom-color: #3498db;
+    }
+}
+
+/* Joint Status Grid - 6 joints on one row on wide screens */
+.joint-status-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.joint-status-card {
+    background-color: #ecf0f1;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+}
+
+.joint-card-compact {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.joint-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.joint-card-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.joint-details-toggle {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    color: #2c3e50;
+}
+
+.joint-details-toggle:hover {
+    background: #f8f9fa;
+}
+
+.joint-status-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.joint-angle-line {
+    font-size: 12px;
+    color: #555;
+}
+
+.joint-angle-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #27ae60;
+}
+
+.joint-status-details {
+    font-size: 11px;
+    padding-top: 4px;
+    border-top: 1px dashed #bdc3c7;
+}
+
+.joint-status-details[hidden] {
+    display: none;
+}
+
+.joint-control-compact {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 6px;
+    align-items: end;
+}
+
+.joint-control-compact .joint-angle-field {
+    min-width: 0;
+}
+
+.joint-control-compact .joint-field-group.compact {
+    margin-top: 0;
+}
+
+.joint-control-compact .joint-field-group.compact label {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.joint-control-compact input {
+    padding: 4px 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.joint-control-compact .joint-go-button {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 0;
+    white-space: nowrap;
+    align-self: end;
+    margin-bottom: 1px;
+}
+
+.joint-field-group.compact {
+    min-width: 0;
+    margin-top: 4px;
+}
+
+.joint-field-group.compact label {
+    font-size: 11px;
+}
+
+.joint-field-group.compact input {
+    padding: 4px 6px;
+    font-size: 11px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.joint-status-card h3 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.status-value {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.status-value.compact {
+    margin: 0;
+    font-size: 11px;
+}
+
+.status-value span {
+    font-weight: bold;
+    color: #27ae60;
+}
+
+#jointControlsContainer:empty {
+    display: none;
+}
+
+@media (max-width: 1200px) {
+    .joint-status-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .joint-status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Control Panel */
+.control-panel {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.control-panel h3 {
+    margin-bottom: 15px;
+}
+
+.joint-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.joint-control {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+}
+
+.joint-control-header {
+    margin-bottom: 5px;
+}
+
+.joint-label {
+    font-weight: 600;
+    font-size: 16px;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.joint-control-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.joint-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 120px;
+}
+
+.joint-field-group label {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+}
+
+.joint-control input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.joint-control .btn-small {
+    align-self: flex-end;
+    min-width: 80px;
+    white-space: nowrap;
+}
+
+.control-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* XYZ Position Control */
+.xyz-status {
+    margin-bottom: 20px;
+}
+
+.xyz-status-display {
+    background-color: #e8f5e9;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #27ae60;
+}
+
+.xyz-status-display h4 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.xyz-values {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.xyz-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+}
+
+.xyz-value label {
+    font-weight: bold;
+    color: #555;
+    min-width: 20px;
+}
+
+.xyz-value span {
+    font-weight: bold;
+    color: #27ae60;
+    font-size: 18px;
+    min-width: 60px;
+    text-align: right;
+}
+
+.xyz-controls {
+    margin-top: 20px;
+}
+
+.xyz-controls h4 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.xyz-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.xyz-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.xyz-input-group label {
+    min-width: 50px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.xyz-input-group input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.xyz-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.xyz-step-size {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.xyz-step-size label {
+    font-size: 14px;
+}
+
+.xyz-step-size input {
+    width: 80px;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Joystick Area */
+.joystick-area {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.joystick-area h3 {
+    margin-bottom: 15px;
+}
+
+/* Joint jog buttons - blue for minus, green for plus */
+.joint-jog-minus {
+    background: #2980b9 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    padding: 14px 6px !important;
+    touch-action: manipulation;
+    transition: background 0.1s;
+}
+
+.joint-jog-minus:hover {
+    background: #3498db !important;
+}
+
+.joint-jog-plus {
+    background: #27ae60 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    padding: 14px 6px !important;
+    touch-action: manipulation;
+    transition: background 0.1s;
+}
+
+.joint-jog-plus:hover {
+    background: #2ecc71 !important;
+}
+
+.joint-jog-card {
+    gap: 12px;
+}
+
+.direction-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.direction-btn {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.direction-btn:hover {
+    background-color: #3498db;
+    color: white;
+    border-color: #3498db;
+}
+
+.step-size {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.step-size-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.step-preset-btn {
+    padding: 8px 16px;
+    border: 2px solid #bdc3c7;
+    border-radius: 4px;
+    background-color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 52px;
+}
+
+.step-preset-btn:hover {
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.step-preset-btn.active {
+    background-color: #3498db;
+    border-color: #3498db;
+    color: white;
+}
+
+/* File Panel */
+.file-panel {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.file-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.file-name {
+    color: #666;
+    font-style: italic;
+}
+
+/* G-Code Preview/Editor */
+.gcode-preview {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.gcode-preview h3 {
+    margin-bottom: 15px;
+}
+
+.gcode-editor-controls {
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+#gcodeContent {
+    width: 100%;
+    height: 300px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    resize: vertical;
+    background-color: white;
+}
+
+/* Highlight selected text in G-Code editor (for current line indication) */
+#gcodeContent::selection {
+    background-color: #3498db;
+    color: white;
+}
+
+#gcodeContent::-moz-selection {
+    background-color: #3498db;
+    color: white;
+}
+
+.gcode-info {
+    display: flex;
+    gap: 20px;
+    margin-top: 10px;
+    font-size: 14px;
+    color: #666;
+}
+
+/* G-Code Controls */
+.gcode-controls {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.execution-status {
+    display: flex;
+    gap: 30px;
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+.execution-status div {
+    font-weight: bold;
+}
+
+/* G-Code Log */
+.gcode-log {
+    background-color: #2c3e50;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.gcode-log h3 {
+    color: white;
+    margin-bottom: 15px;
+}
+
+.log-content {
+    background-color: #1a1a1a;
+    color: #00ff00;
+    padding: 15px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+.log-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-content::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+/* Settings Panel */
+.settings-panel {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.settings-panel h3 {
+    margin-bottom: 20px;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setting-item label {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.setting-item input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Calibration Panel */
+.calibration-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.calibration-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.calibration-input label {
+    font-weight: bold;
+}
+
+.calibration-status {
+    padding: 10px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-weight: bold;
+    min-height: 20px;
+}
+
+.calibration-progress {
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #666;
+    min-height: 20px;
+}
+
+/* Blockly Workspace */
+.blockly-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.blockly-workspace {
+    width: 100%;
+    height: 500px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    margin-bottom: 15px;
+}
+
+.blockly-status {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.blockly-status div {
+    margin-bottom: 10px;
+}
+
+.blockly-output {
+    background-color: #1a1a1a;
+    color: #00ff00;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    margin-top: 10px;
+}
+
+.blockly-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+.blockly-output::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.blockly-output::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.blockly-loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Stored Positions Tab Styles */
+.positions-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.positions-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: flex-end;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.position-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.position-input-group label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+}
+
+.positions-joints {
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.positions-joints h3 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.positions-joints-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.position-joint-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-joint-item label {
+    min-width: 60px;
+    font-weight: 500;
+}
+
+.position-joint-item input {
+    flex: 1;
+}
+
+.positions-list {
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.positions-list h3 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.positions-list-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.positions-list-content {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.positions-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.positions-list-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.positions-list-item:hover {
+    background: #e9ecef;
+}
+
+.position-item-number {
+    min-width: 40px;
+    font-weight: bold;
+    color: #3498db;
+    font-size: 18px;
+}
+
+.position-item-label {
+    flex: 1;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.position-item-type-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: #666;
+    background: #eee;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.position-item-angles {
+    font-size: 12px;
+    color: #666;
+    font-family: monospace;
+}
+
+.position-item-info {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.position-item-xyz {
+    font-size: 12px;
+    color: #2980b9;
+    font-family: monospace;
+}
+
+.positions-xyz {
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-top: 10px;
+}
+
+.positions-xyz h3 {
+    margin-bottom: 12px;
+    color: #2c3e50;
+}
+
+.positions-xyz-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.xyz-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.xyz-item label {
+    font-weight: 600;
+    min-width: 20px;
+}
+
+.positions-type-toggle {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin: 10px 0;
+}
+
+.positions-type-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.positions-type-toggle .info-text {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+.positions-joints input:disabled,
+.positions-xyz input:disabled {
+    background: #f0f0f0;
+    color: #666;
+    cursor: not-allowed;
+}
+
+/* ---- Calibration tab ---- */
+.calibration-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+}
+
+.calibration-controls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calibration-diff-toggle {
+    font-size: 13px;
+    color: #444;
+    cursor: pointer;
+}
+
+.calibration-write-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 4px 0 14px;
+    padding: 10px 14px;
+    background: #fff8ec;
+    border: 1px solid #f0d9a8;
+    border-radius: 6px;
+}
+
+.calibration-write-controls input[type="password"] {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.calibration-write-note {
+    flex-basis: 100%;
+    margin: 4px 0 0;
+}
+
+.calibration-section-heading {
+    margin: 24px 0 8px;
+    font-size: 15px;
+    color: #3a3f4b;
+}
+
+.calibration-table input.cal-edit-input {
+    width: 90px;
+    padding: 4px 6px;
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+.calibration-table .cal-locked {
+    color: #999;
+    font-size: 16px;
+    cursor: help;
+}
+
+.table-wrap {
+    overflow-x: auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.calibration-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.calibration-table th,
+.calibration-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+}
+
+.calibration-table th {
+    background: #f8f9fa;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #666;
+    position: sticky;
+    top: 0;
+}
+
+.calibration-table td.cal-name {
+    white-space: normal;
+    min-width: 160px;
+    font-weight: 500;
+    cursor: help;
+}
+
+/* Value / default / range are the long text columns - let them wrap rather
+   than forcing the whole table wider than the page */
+.calibration-table td.cal-default,
+.calibration-table td.cal-range,
+.calibration-table td.cal-meaning {
+    white-space: normal;
+    min-width: 110px;
+}
+
+.calibration-table input.cal-edit-input {
+    width: 80px;
+}
+
+.calibration-table td.cal-value {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+.calibration-table tr.cal-readonly td.cal-name { color: #888; font-style: italic; }
+
+.calibration-table tr.cal-changed {
+    background: #fff4e5;
+}
+.calibration-table tr.cal-changed td.cal-value {
+    color: #b8610f;
+    font-weight: 700;
+}
+.calibration-table tr.cal-changed td.cal-default::after {
+    content: " \26A0";
+    color: #b8610f;
+}
+
+.calibration-empty {
+    color: #666;
+    font-style: italic;
+    text-align: center !important;
+    padding: 20px !important;
+}
+
+.positions-xyz-status {
+    font-size: 12px;
+    min-height: 16px;
+}
+
+.positions-xyz-status-success { color: #27ae60; }
+.positions-xyz-status-error   { color: #e74c3c; }
+.positions-xyz-status-info    { color: #2980b9; }
+
+.positions-status {
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.positions-status-success {
+    color: #27ae60;
+}
+
+.positions-status-error {
+    color: #e74c3c;
+}
+
+.positions-status-info {
+    color: #3498db;
+}
+
+/* Auto-Detect Status */
+.auto-detect-status {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    font-size: 14px;
+    display: none;
+    min-height: 20px;
+}
+
+/* Auto-Detect Status */
+.auto-detect-status {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    font-size: 14px;
+    display: none;
+    min-height: 20px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+
+    .connection-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .joint-status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .joint-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .joint-control-fields {
+        flex-direction: column;
+    }
+    
+    .joint-field-group {
+        min-width: 100%;
+    }
+    
+    .joint-control .btn-small {
+        align-self: stretch;
+        width: 100%;
+    }
+
+    .direction-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Small Display Optimization (800x480 and similar) */
+@media (max-width: 800px), (max-height: 600px) {
+    body {
+        font-size: 12px;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 5px;
+    }
+
+    /* Compact Header */
+    header {
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .header-logo {
+        height: 50px;
+        max-width: 200px;
+    }
+
+    header h1 {
+        font-size: 16px;
+    }
+
+    .connection-status {
+        font-size: 11px;
+    }
+
+    /* Compact Connection Panel */
+    .connection-panel {
+        padding: 10px;
+        margin-bottom: 8px;
+    }
+
+    .connection-panel h2 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .connection-form {
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .connection-form label {
+        font-size: 11px;
+    }
+
+    .connection-form input {
+        padding: 4px 6px;
+        font-size: 11px;
+    }
+
+    /* Compact Tabs */
+    .tabs {
+        gap: 5px;
+        margin-bottom: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-button {
+        padding: 8px 12px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    /* Compact Tab Content */
+    .tab-content {
+        padding: 10px;
+    }
+
+    .tab-content h2 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+
+    /* Compact Joint Status */
+    .joint-status-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .joint-status-card {
+        padding: 8px;
+    }
+
+    .joint-status-card h3 {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .status-value {
+        font-size: 11px;
+        margin: 2px 0;
+    }
+
+    /* Compact Joint Controls */
+    .joint-control {
+        padding: 8px;
+    }
+
+    .joint-control-fields {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .joint-field-group {
+        min-width: 100%;
+    }
+
+    .joint-control .btn-small {
+        align-self: stretch;
+        width: 100%;
+        margin-top: 5px;
+    }
+
+    /* Compact Controls */
+    .control-panel {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .control-panel h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .joint-controls {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .joint-control {
+        gap: 5px;
+    }
+
+    .joint-control label {
+        font-size: 11px;
+    }
+
+    .joint-control input {
+        padding: 4px;
+        font-size: 11px;
+    }
+
+    .btn {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+
+    .btn-small {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    /* Compact Direction Grid */
+    .direction-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 5px;
+    }
+
+    .direction-btn {
+        padding: 8px;
+        font-size: 11px;
+    }
+
+    /* Compact 3D Visualization */
+    .visualization-panel {
+        padding: 10px;
+    }
+
+    .visualization-controls {
+        gap: 5px;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+    }
+
+    .visualization-info {
+        margin-bottom: 8px;
+    }
+
+    .visualization-info p {
+        font-size: 10px;
+    }
+
+    .robot-arm-3d-container {
+        height: 300px;
+        border-width: 1px;
+    }
+
+    .visualization-status {
+        gap: 10px;
+        margin-top: 8px;
+        font-size: 10px;
+        flex-wrap: wrap;
+    }
+
+    /* Compact Simulation Panel */
+    .simulation-panel {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .simulation-panel h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .simulation-toggle {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .simulated-angles-panel {
+        padding: 10px;
+        margin-top: 8px;
+    }
+
+    .simulated-angles-panel h4 {
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .simulated-angles-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .simulated-angle-control label {
+        font-size: 11px;
+    }
+
+    .simulated-angle-control input {
+        padding: 4px;
+        font-size: 11px;
+    }
+
+    /* Compact Settings */
+    .settings-panel {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .settings-panel h3 {
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .setting-item label {
+        font-size: 11px;
+    }
+
+    .setting-item input {
+        padding: 4px;
+        font-size: 11px;
+    }
+
+    /* Compact Kinematics */
+    .kinematics-controls {
+        gap: 5px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .kinematics-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .joint-kinematics-card {
+        padding: 10px;
+    }
+
+    .joint-kinematics-card h4 {
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .param-row {
+        gap: 5px;
+    }
+
+    .param-row label {
+        width: 70px;
+        font-size: 10px;
+    }
+
+    .param-row input {
+        padding: 4px;
+        font-size: 10px;
+    }
+
+    .param-row span {
+        width: 30px;
+        font-size: 10px;
+    }
+
+    /* Compact Testing */
+    .kinematics-test {
+        gap: 15px;
+    }
+
+    .test-section {
+        padding: 10px;
+    }
+
+    .test-section h4 {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .test-section p {
+        font-size: 10px;
+        margin-bottom: 8px;
+    }
+
+    .test-inputs {
+        gap: 5px;
+        margin-bottom: 8px;
+    }
+
+    .test-inputs label {
+        font-size: 10px;
+    }
+
+    .test-inputs input {
+        padding: 4px;
+        font-size: 10px;
+    }
+
+    .test-result {
+        padding: 8px;
+        font-size: 10px;
+        min-height: 30px;
+    }
+
+    /* Hide less critical info text on very small screens */
+    .info-text {
+        font-size: 9px;
+    }
+
+    /* Compact G-Code */
+    .file-panel {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .file-panel h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .file-controls {
+        gap: 8px;
+    }
+
+    #gcodeContent {
+        height: 150px;
+        font-size: 10px;
+        padding: 5px;
+    }
+
+    .gcode-info {
+        gap: 10px;
+        font-size: 10px;
+    }
+
+    .gcode-controls {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .gcode-controls h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .execution-status {
+        gap: 10px;
+        font-size: 10px;
+        flex-wrap: wrap;
+    }
+
+    .gcode-log {
+        padding: 10px;
+    }
+
+    .gcode-log h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .log-content {
+        padding: 8px;
+        font-size: 10px;
+        height: 100px;
+    }
+
+    /* Compact XYZ Controls */
+    .xyz-status-display {
+        padding: 10px;
+    }
+
+    .xyz-status-display h4 {
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .xyz-values {
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+    .xyz-value {
+        font-size: 12px;
+    }
+
+    .xyz-value label {
+        min-width: 15px;
+        font-size: 12px;
+    }
+
+    .xyz-value span {
+        font-size: 14px;
+        min-width: 50px;
+    }
+
+    .xyz-controls h4 {
+        font-size: 12px;
+        margin-bottom: 10px;
+    }
+
+    .xyz-inputs {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .xyz-input-group {
+        gap: 5px;
+    }
+
+    .xyz-input-group label {
+        min-width: 40px;
+        font-size: 11px;
+    }
+
+    .xyz-input-group input {
+        padding: 4px;
+        font-size: 11px;
+    }
+
+    .xyz-buttons {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .xyz-step-size {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .xyz-step-size label {
+        font-size: 11px;
+    }
+
+    .xyz-step-size input {
+        width: 60px;
+        padding: 4px;
+        font-size: 11px;
+    }
+
+    /* Compact Joystick Area */
+    .joystick-area {
+        padding: 10px;
+    }
+
+    .joystick-area h3 {
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .step-size {
+        gap: 5px;
+    }
+
+    .step-size input {
+        padding: 4px;
+        width: 60px;
+        font-size: 11px;
+    }
+
+    /* Compact Footer */
+    .app-footer {
+        padding: 10px 15px;
+        margin-top: 20px;
+    }
+
+    .app-footer p {
+        font-size: 12px;
+    }
+}
+
+/* 3D Visualization */
+.visualization-panel {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.visualization-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.view-buttons {
+    display: flex;
+    gap: 5px;
+    margin-left: auto;
+}
+
+.visualization-info {
+    margin-bottom: 15px;
+}
+
+.robot-arm-3d-container {
+    width: 100%;
+    height: 600px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    border: 2px solid #ddd;
+    overflow: hidden;
+    position: relative;
+}
+
+.visualization-status {
+    display: flex;
+    gap: 30px;
+    margin-top: 15px;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.visualization-status div {
+    font-weight: bold;
+}
+
+/* Kinematics Configuration */
+.kinematics-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.status-text {
+    color: #666;
+    font-style: italic;
+}
+
+.info-text {
+    color: #666;
+    font-style: italic;
+}
+
+.diagnostics-display {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #333;
+    background-color: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.kinematics-display {
+    margin-top: 20px;
+}
+
+.kinematics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.joint-kinematics-card {
+    background-color: white;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.joint-kinematics-card h4 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.kinematics-params {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.param-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.param-row label {
+    width: 100px;
+    font-size: 14px;
+}
+
+.param-row input {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.param-row span {
+    width: 40px;
+    font-size: 14px;
+    color: #666;
+}
+
+.error-text {
+    color: #e74c3c;
+}
+
+/* Kinematics Testing */
+.kinematics-test {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.test-section {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.test-section h4 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.test-section p {
+    margin-bottom: 15px;
+    color: #666;
+}
+
+.test-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.test-inputs label {
+    font-size: 14px;
+}
+
+.test-result {
+    background-color: #ecf0f1;
+    padding: 15px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    min-height: 50px;
+}
+
+/* Kinematics matrices display */
+.kinematics-matrices-display {
+    margin-top: 20px;
+}
+
+.kinematics-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.kinematics-step {
+    padding: 12px 14px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    background-color: #fdfdfd;
+}
+
+.kinematics-step h4 {
+    margin-bottom: 8px;
+    color: #2c3e50;
+}
+
+.kinematics-step-info {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.kinematics-step-info td {
+    padding: 2px 6px;
+}
+
+.kinematics-step-info td:first-child {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* Per-joint angle shown in each Kinematics step card */
+.kinematics-angle-live {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
+}
+
+.kinematics-angle-input {
+    width: 90px;
+    padding: 4px 6px;
+    font-size: 14px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+}
+
+body.touch-mode .kinematics-angle-input {
+    width: 110px;
+    padding: 8px;
+    font-size: 16px;
+}
+
+.kinematics-source-panel .simulation-buttons {
+    margin-top: 8px;
+}
+
+/* Tool card title: status + Re-check button inline */
+.kin-tool-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.kin-tool-title .end-tool-state {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* ---- Kinematics step cards: Origin × Rotation = T_i, then the running product ---- */
+.kin-matrix-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 4px;
+}
+
+.kin-running-row {
+    padding-top: 8px;
+    border-top: 1px dashed #ddd;
+}
+
+.kin-matrix-block {
+    display: inline-block;
+}
+
+.kin-matrix-caption {
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 3px;
+}
+
+.kin-op {
+    font-size: 20px;
+    font-weight: 700;
+    color: #555;
+    padding: 18px 2px 0;
+}
+
+.kin-running-label {
+    font-size: 14px;
+    padding-top: 18px;
+}
+
+/* Symbolic rotation matrix: how θ becomes the 9 entries */
+.kin-derivation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 4px;
+    padding: 6px 8px;
+    background: #fafafa;
+    border: 1px dashed #e0e0e0;
+    border-radius: 4px;
+}
+
+.kin-derivation-label {
+    font-size: 12px;
+    color: #555;
+    flex-basis: 100%;
+}
+
+.kin-symbolic td {
+    text-align: center;
+    min-width: 64px;
+    font-size: 12px;
+}
+
+.kin-derivation-values {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #333;
+}
+
+/* Colour key - what drives which entries */
+.kin-key {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 700;
+}
+
+.kin-colour-key {
+    font-size: 13px;
+    line-height: 2;
+}
+
+.kin-hl-origin        { background: #d6e9ff; color: #1f4f8a; }
+.kin-hl-origin-rot    { background: #ecf4ff; color: #1f4f8a; }
+.kin-hl-axis          { background: #d9f2d9; color: #1e6b2a; font-weight: 700; }
+.kin-hl-angle         { background: #ffe4c4; color: #8a4a0f; }
+.kin-hl-position      { background: #ead9ff; color: #4a2a80; font-weight: 700; }
+
+.kinematics-matrix {
+    border-collapse: collapse;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.kinematics-matrix td {
+    padding: 2px 6px;
+    text-align: right;
+    min-width: 58px;
+    border: 1px solid #ddd;
+}
+
+.kinematics-matrix td:last-child {
+    border-left-width: 2px;
+}
+
+.kinematics-matrix-legend {
+    margin: 10px 0 15px 0;
+}
+
+/* Simulation Panel */
+.simulation-panel {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 2px solid #3498db;
+}
+
+.simulation-panel h3 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.simulation-controls {
+    margin-bottom: 15px;
+}
+
+.simulation-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+
+.simulation-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.simulated-angles-panel {
+    background-color: white;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    margin-top: 15px;
+}
+
+.simulated-angles-panel h4 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.simulated-angles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.simulated-angle-control {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.simulated-angle-control label {
+    font-size: 14px;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.simulated-angle-control input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.simulation-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Kiosk loading screen (shown until index.html is fully loaded) */
+.kiosk-loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999999;
+    background-color: #ede9f0;
+    color: #2c3e50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    text-align: center;
+    padding: 20px;
+}
+
+.kiosk-loading-title {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+}
+
+.kiosk-loading-status {
+    font-size: 1rem;
+    color: #5c6370;
+}
+
+/* USB camera tab */
+.camera-panel {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.camera-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.camera-toolbar-hidden {
+    display: none;
+}
+
+.camera-stream-status {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.camera-content {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.camera-stream-frame {
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    padding: 4px;
+    min-height: 150px;
+    max-width: 640px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex: 1 1 60%;
+    min-width: 0;
+}
+
+.camera-stream-placeholder {
+    color: #aaa;
+    font-size: 14px;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+}
+
+.camera-stream-frame.camera-stream-active .camera-stream-placeholder {
+    display: none;
+}
+
+.camera-stream-image {
+    max-width: 100%;
+    max-height: 70vh;
+    width: auto;
+    height: auto;
+    display: none;
+}
+
+.camera-stream-frame.camera-stream-active .camera-stream-image {
+    display: block;
+}
+
+.camera-help-text {
+    margin-top: 12px;
+    font-size: 12px;
+}
+
+.camera-detections-panel {
+    flex: 1 1 240px;
+    min-width: 150px;
+    max-width: 320px;
+    overflow-x: auto;
+}
+
+.camera-detections-title {
+    font-size: 14px;
+    margin: 0 0 6px;
+    color: #3a3f4b;
+}
+
+.camera-detections-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.camera-detections-table th,
+.camera-detections-table td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid #e6e8eb;
+}
+
+.camera-detections-table th {
+    background-color: #eef0f3;
+    color: #5c6370;
+    font-weight: 600;
+}
+
+.camera-detections-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.camera-detections-empty {
+    color: #aaa;
+    text-align: center;
+}
+
+.camera-detections-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+body.kiosk-mode .camera-stream-image {
+    max-height: calc(100vh - 180px);
+}
+
+body.kiosk-mode .camera-toolbar .btn {
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.camera-toolbar .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ================================================================
+   Chromium kiosk mode on the Pi (?kiosk=1 in the URL)
+   Target screen: 800×480 touchscreen
+   ================================================================ */
+
+/* Base font override - undo small-display 12px, use readable 14px.
+   height + overflow:hidden pins the page to exactly the viewport, so the
+   only scrollbars are the ones deliberately added below (.tabs and
+   .tab-content-container) - without this, the outer page (sized by
+   min-height:100vh in the base body rule) could still grow taller than the
+   screen and pick up its own native scrollbar alongside the inner one,
+   showing two side-by-side on the touchscreen. */
+body.kiosk-mode {
+    font-size: 14px;
+    height: 100vh;
+    overflow: hidden;
+}
+
+body.kiosk-mode .app-footer {
+    display: none;
+}
+
+body.kiosk-mode .container {
+    max-width: none;
+    padding: 3px 5px;
+}
+
+/* Compact header - hide the long title text to save ~16 px of vertical space */
+body.kiosk-mode header {
+    padding: 3px 8px;
+    margin-bottom: 3px;
+}
+
+body.kiosk-mode .header-logo {
+    height: 42px;
+    max-width: 175px;
+}
+
+body.kiosk-mode header h1 {
+    display: none;
+}
+
+body.kiosk-mode .header-status {
+    gap: 8px;
+    align-items: center;
+}
+
+body.kiosk-mode #statusText,
+body.kiosk-mode #controlText {
+    font-size: 13px;
+}
+
+/* ---- Sidebar tabs ---- */
+body.kiosk-mode .main-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 5px;
+    margin-top: 3px;
+}
+
+body.kiosk-mode .tabs {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    min-width: 90px;
+    max-width: 100px;
+    width: auto;
+    border-right: 2px solid #ddd;
+    border-bottom: none;
+    padding-right: 4px;
+    padding-bottom: 0;
+    gap: 3px;
+    max-height: calc(100vh - 68px);
+    overflow-y: auto;
+}
+
+/* Sidebar collapse in kiosk mode - explicit overrides needed because
+   body.kiosk-mode .tabs (specificity 0,2,1) beats .tabs.collapsed (0,2,0),
+   so min-width/gap would not collapse without these higher-specificity rules. */
+body.kiosk-mode .tabs.collapsed {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    border-right-width: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.kiosk-mode .main-layout.sidebar-collapsed {
+    gap: 0;
+}
+
+
+/* Touch scrolling: disable text selection while the finger is moving so
+   dragging scrolls the page instead of highlighting text.
+   The .touch-scrolling class is added/removed by JS pointer events so a
+   plugged-in mouse still gets normal selection behaviour. */
+body.kiosk-mode.touch-scrolling,
+body.kiosk-mode.touch-scrolling * {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Allow text entry inside inputs/textareas even during touch */
+body.kiosk-mode.touch-scrolling input,
+body.kiosk-mode.touch-scrolling textarea,
+body.kiosk-mode.touch-scrolling [contenteditable] {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* Hint to the browser that vertical panning is the primary touch gesture
+   on the main scrollable areas, preventing the 300 ms selection delay */
+body.kiosk-mode .tab-content-container,
+body.kiosk-mode .tab-content {
+    touch-action: pan-y;
+}
+
+body.kiosk-mode .tab-button {
+    padding: 9px 5px;
+    font-size: 12px;
+    font-weight: 600;
+    border-right: 3px solid transparent;
+    border-bottom: none;
+    white-space: normal;
+    line-height: 1.2;
+    min-height: 44px;
+    text-align: center;
+}
+
+body.kiosk-mode .tab-button.active {
+    border-right-color: #3498db;
+    border-bottom-color: transparent;
+}
+
+body.kiosk-mode .tab-content-container {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    max-height: calc(100vh - 68px);
+}
+
+body.kiosk-mode .tab-content {
+    padding: 4px 6px;
+}
+
+body.kiosk-mode .tab-content > h2 {
+    font-size: 15px;
+    margin-bottom: 5px;
+}
+
+body.kiosk-mode .tab-content > h2 ~ p.info-text {
+    display: none;
+}
+
+/* ---- Joint Control tab ---- */
+
+/* The h2 "Joint Control" is redundant with the sidebar label - hide it */
+body.kiosk-mode #pendant-tab > h2 {
+    display: none;
+}
+
+/* Two-column layout: left = status grid + arm action buttons,
+   right = quick movement buttons + step size presets.
+   In non-kiosk mode these divs are plain block containers and are invisible
+   to the layout. */
+body.kiosk-mode .kiosk-joints-row {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+body.kiosk-mode .kiosk-joints-left {
+    flex: 0 0 43%;
+    width: 43%;
+}
+
+body.kiosk-mode .kiosk-joints-right {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Status grid: 3 columns across the left column */
+body.kiosk-mode .joint-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 5px;
+}
+
+body.kiosk-mode .joint-status-card {
+    padding: 5px 6px;
+}
+
+body.kiosk-mode .joint-card-header {
+    margin-bottom: 2px;
+}
+
+body.kiosk-mode .joint-card-title {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Shrink the expand toggle - it still works but takes minimal space */
+body.kiosk-mode .joint-details-toggle {
+    font-size: 11px;
+    padding: 1px 4px;
+    min-width: 0;
+    min-height: 0;
+    line-height: 1.2;
+}
+
+body.kiosk-mode .joint-angle-line {
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+body.kiosk-mode .joint-angle-value {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+body.kiosk-mode .status-value.compact {
+    font-size: 10px;
+    line-height: 1.3;
+    margin-bottom: 0;
+}
+
+/* Hide the per-card angle input + Go button - Quick Movement replaces them */
+body.kiosk-mode .joint-control-fields {
+    display: none;
+}
+
+/* Hide per-joint angle/speed/Go controls container */
+body.kiosk-mode #jointControlsContainer {
+    display: none;
+}
+
+body.kiosk-mode .control-panel {
+    padding: 6px 8px;
+    margin-bottom: 5px;
+}
+
+/* E-Stop / Home / Torque - stacked vertically in the left column */
+body.kiosk-mode .kiosk-joints-left .control-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+body.kiosk-mode .kiosk-joints-left .control-buttons .btn {
+    width: 100%;
+    padding: 10px 6px;
+    font-size: 13px;
+    min-height: 44px;
+}
+
+/* Quick Joint Movement area (right column) - flush, no card background */
+body.kiosk-mode .kiosk-joints-right .joystick-area {
+    padding: 0;
+    background: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body.kiosk-mode .kiosk-joints-right .joystick-area h3 {
+    font-size: 13px;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+body.kiosk-mode .direction-grid {
+    gap: 4px;
+}
+
+body.kiosk-mode #pendant-tab .direction-btn {
+    padding: 11px 4px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 46px;
+    line-height: 1.2;
+}
+
+body.kiosk-mode #pendant-tab .step-size {
+    margin-top: 5px;
+}
+
+body.kiosk-mode #pendant-tab .step-preset-btn {
+    padding: 9px 12px;
+    font-size: 14px;
+    min-width: 50px;
+    min-height: 44px;
+}
+
+/* End Tool Servo */
+body.kiosk-mode .end-tool-servo-controls {
+    gap: 6px;
+}
+
+body.kiosk-mode .servo-enable-row .btn,
+body.kiosk-mode .servo-angle-row .btn-small {
+    padding: 9px 12px;
+    font-size: 13px;
+}
+
+/* ---- Pendant Control tab ---- */
+body.kiosk-mode .pendant-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 0;
+}
+
+body.kiosk-mode .pendant-panel {
+    padding: 7px;
+}
+
+body.kiosk-mode .pendant-panel h3 {
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+body.kiosk-mode .pendant-position {
+    padding: 5px 8px;
+    font-size: 13px;
+}
+
+body.kiosk-mode .pendant-xy-wheel {
+    width: 150px;
+    height: 150px;
+}
+
+body.kiosk-mode .pendant-xy-btn {
+    min-width: 44px;
+    padding: 9px;
+    font-size: 13px;
+}
+
+body.kiosk-mode .pendant-btn,
+body.kiosk-mode .pendant-wide-btn {
+    font-size: 13px;
+    padding: 10px 10px;
+}
+
+/* ---- Camera tab ---- */
+body.kiosk-mode .camera-stream-image {
+    max-height: calc(100vh - 130px);
+}
+
+body.kiosk-mode .camera-toolbar .btn {
+    padding: 9px 12px;
+    font-size: 13px;
+}
+
+/* ---- Stored Positions tab ---- */
+body.kiosk-mode #positions-tab .btn {
+    padding: 10px 12px;
+    font-size: 13px;
+}
+
+body.kiosk-mode #positions-tab input[type="text"],
+body.kiosk-mode #positions-tab input[type="number"] {
+    font-size: 14px;
+    padding: 7px;
+}
+
+/* ---- Connection tab ---- */
+body.kiosk-mode #connection-tab .btn {
+    padding: 12px 14px;
+    font-size: 14px;
+    min-height: 48px;
+}
+
+body.kiosk-mode #connection-tab input[type="text"] {
+    font-size: 16px;
+    padding: 10px;
+    width: 100%;
+}
+
+/* Very narrow Pi displays - 2-col joint grid, single-col pendant */
+@media (max-width: 900px) {
+    body.kiosk-mode .joint-status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.kiosk-mode .pendant-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* On-screen keyboard (kiosk mode, touch-only, no system OSK available) */
+.osk-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background-color: #2c3e50;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+    transform: translateY(100%);
+    transition: transform 0.2s ease-out;
+}
+
+.osk-panel.osk-visible {
+    transform: translateY(0);
+}
+
+body.osk-open .container {
+    padding-bottom: 260px;
+}
+
+.osk-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+    justify-content: center;
+}
+
+.osk-key {
+    flex: 1;
+    min-width: 0;
+    max-width: 70px;
+    height: 46px;
+    border: none;
+    border-radius: 6px;
+    background-color: #ffffff;
+    color: #0e0d0d;
+    font-size: 16px;
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.25);
+}
+
+.osk-key:active {
+    background-color: #3498db;
+    color: #ffffff;
+}
+
+.osk-key-active {
+    background-color: #3498db;
+    color: #ffffff;
+}
+
+.osk-key-wide {
+    flex: 2;
+    max-width: none;
+}
+
+
+/* ================================================================
+   Touch baseline
+   ================================================================
+   Applies app-wide instead of tab by tab. Two layers:
+
+   1. Press feedback, tap-delay removal and focus rings - always on,
+      because they cost nothing with a mouse and a finger never
+      triggers :hover.
+   2. Minimum target sizes - only under body.touch-mode, which app.js
+      sets for a real touchscreen, a coarse pointer, ?kiosk=1, or the
+      manual override.
+
+   The hand-tuned per-tab rules earlier in this file (the kiosk layout,
+   pendant2) are more specific and deliberately still win, so the
+   800x480 layouts keep their measured geometry.
+   ================================================================ */
+
+:root {
+    --tap-min: 44px;        /* never smaller than this      */
+    --tap-comfort: 56px;    /* commits, saves, connects     */
+    --tap-primary: 72px;    /* starts or stops arm movement */
+}
+
+/* No 300 ms tap delay, and no text selection when a finger slides
+   across a button mid-press */
+.btn,
+.tab-button,
+button,
+select,
+.direction-btn,
+.step-preset-btn {
+    touch-action: manipulation;
+}
+
+.btn,
+.tab-button,
+button {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Press feedback. Without this most of the app gives no sign that a
+   tap registered, because :hover never fires on a touchscreen. */
+.btn,
+.tab-button,
+.direction-btn,
+.step-preset-btn {
+    transition: background-color 0.2s, transform 0.08s, opacity 0.08s;
+}
+
+.btn:active:not(.pendant2-jog-btn),
+.tab-button:active,
+.direction-btn:active,
+.step-preset-btn:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn,
+    .tab-button,
+    .direction-btn,
+    .step-preset-btn {
+        transition: background-color 0.2s;
+    }
+
+    .btn:active:not(.pendant2-jog-btn),
+    .tab-button:active,
+    .direction-btn:active,
+    .step-preset-btn:active {
+        transform: none;
+    }
+}
+
+/* Keyboard focus had no visible state anywhere in the app */
+.btn:focus-visible,
+.tab-button:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid #3498db;
+    outline-offset: 2px;
+}
+
+/* ---- Minimum target size ---- */
+
+/* Keep these selectors flat. Every :not() raises specificity, and a
+   branch like button:not(.foo) would then outrank .btn-motion below and
+   silently cap it at 44 px. Exceptions are written as their own rules
+   after this one instead. */
+body.touch-mode .btn,
+body.touch-mode .tab-button,
+body.touch-mode button,
+body.touch-mode select,
+body.touch-mode input[type="text"],
+body.touch-mode input[type="number"],
+body.touch-mode input[type="password"],
+body.touch-mode input[type="search"] {
+    min-height: var(--tap-min);
+    font-size: 15px;
+}
+
+/* The joint status cards are tuned to fit 800x480; their expand toggle
+   stays compact deliberately. */
+body.touch-mode .joint-details-toggle {
+    min-height: 24px;
+    height: 24px;
+    font-size: 16px;
+}
+
+/* btn-small stays visually quieter - it just stops being a smaller
+   target. This one rule lifts 41 buttons across the app. */
+body.touch-mode .btn-small {
+    padding: 6px 14px;
+    font-size: 13px;
+}
+
+/* Native checkboxes render at about 13 px. Six sit raw in the 3D
+   Visualisation panel and one in every dead zone row. */
+body.touch-mode input[type="checkbox"],
+body.touch-mode input[type="radio"] {
+    width: 24px;
+    height: 24px;
+    accent-color: #3498db;
+}
+
+body.touch-mode label > input[type="checkbox"],
+body.touch-mode label > input[type="radio"] {
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+/* The whole label becomes the target, not just the box */
+body.touch-mode .visualization-toggles label,
+body.touch-mode .simulation-toggle {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    cursor: pointer;
+}
+
+/* ---- Size by consequence ---- */
+
+/* Anything that starts or stops the arm moving */
+body.touch-mode .btn-motion {
+    min-height: var(--tap-primary);
+    padding-left: 24px;
+    padding-right: 24px;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+/* Commits, saves, connects, changes state */
+body.touch-mode .btn-major {
+    min-height: var(--tap-comfort);
+    padding-left: 20px;
+    padding-right: 20px;
+    font-size: 16px;
+}
+
+/* ---- Room to wrap ----
+   Taller buttons overflow a narrow screen unless their rows wrap.
+   These containers are already flex; only wrap and gap need setting. */
+body.touch-mode .control-buttons,
+body.touch-mode .gcode-editor-controls,
+body.touch-mode .positions-list-controls,
+body.touch-mode .file-controls,
+body.touch-mode .view-buttons,
+body.touch-mode .calibration-controls,
+body.touch-mode .simulation-buttons,
+body.touch-mode .positions-xyz-buttons {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* Destructive actions sit right beside the ones people mean to press */
+body.touch-mode .positions-list-item .btn-danger {
+    margin-left: 6px;
+}
+
+/* ================================================================
+   Touch components
+   ================================================================
+   The pieces that needed more than a size change: the in-app dialog,
+   switches, dead zone cards, position rows, steppers and the grouped
+   control rows. Sized from the same --tap-* tokens as the baseline.
+   ================================================================ */
+
+/* ---- In-app dialog ---- */
+.app-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 28, 38, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 3000;
+}
+
+.app-dialog-backdrop[hidden] {
+    display: none;
+}
+
+.app-dialog {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    padding: 24px;
+    width: min(460px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.app-dialog-message {
+    font-size: 17px;
+    line-height: 1.45;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.app-dialog-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 2px solid #bdc3c7;
+    border-radius: 6px;
+}
+
+.app-dialog-input[hidden] {
+    display: none;
+}
+
+.app-dialog-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.app-dialog-buttons .btn {
+    min-height: 56px;
+    min-width: 120px;
+    font-size: 16px;
+}
+
+/* ---- Switch ----
+   A checkbox is about 13 px of target. This keeps the input for state and
+   accessibility but draws it as something a finger can actually hit. */
+.switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--tap-min);
+    cursor: pointer;
+    user-select: none;
+}
+
+.switch input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch-track {
+    position: relative;
+    width: 56px;
+    height: 32px;
+    border-radius: 999px;
+    background: #bdc3c7;
+    transition: background 0.15s;
+    flex: none;
+}
+
+.switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s;
+}
+
+.switch input[type="checkbox"]:checked + .switch-track {
+    background: #27ae60;
+}
+
+.switch input[type="checkbox"]:checked + .switch-track .switch-thumb {
+    transform: translateX(24px);
+}
+
+.switch input[type="checkbox"]:focus-visible + .switch-track {
+    outline: 3px solid #3498db;
+    outline-offset: 2px;
+}
+
+.switch-text {
+    font-size: 14px;
+    color: #5a6878;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .switch-track,
+    .switch-thumb {
+        transition: none;
+    }
+}
+
+/* ---- Dead zone cards ----
+   Replaces a nine-column table that could not fit an 800 px screen. */
+.deadzone-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.deadzone-empty {
+    color: #888;
+    font-style: italic;
+    margin: 0;
+}
+
+.deadzone-card {
+    background: #fff;
+    border: 1px solid #dde3ea;
+    border-left: 4px solid #e74c3c;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.deadzone-card-off {
+    border-left-color: #bdc3c7;
+    opacity: 0.72;
+}
+
+.deadzone-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.deadzone-name {
+    font-weight: 700;
+    font-size: 16px;
+    color: #2c3e50;
+    word-break: break-word;
+}
+
+.deadzone-bounds {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.deadzone-axis {
+    display: flex;
+    gap: 10px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.deadzone-axis span {
+    color: #7f8c8d;
+    font-weight: 700;
+    min-width: 16px;
+}
+
+.deadzone-card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.deadzone-card-actions .btn {
+    flex: 1;
+}
+
+/* ---- Stored position rows ----
+   Was: a clickable row with two small buttons nested inside it, one of
+   them destructive. Now the row is one button and the actions are their
+   own group. */
+.positions-list-item {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 8px;
+    flex-wrap: wrap;
+}
+
+.positions-list-item:hover {
+    background: #e9ecef;
+}
+
+.position-item-select {
+    flex: 1;
+    min-width: 200px;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.position-item-select:hover {
+    border-color: #3498db;
+    background: #fff;
+}
+
+.position-item-select:active {
+    background: #eaf3fb;
+}
+
+.position-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.position-item-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* ---- Steppers ----
+   Number fields that can be changed without a keyboard. */
+.stepper {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.stepper input {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
+.stepper-btn {
+    flex: none;
+    width: var(--tap-min);
+    min-height: var(--tap-min);
+    border: 1px solid #bdc3c7;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 22px;
+    line-height: 1;
+    font-weight: 600;
+    color: #2c3e50;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.stepper-btn:hover {
+    background: #ecf0f1;
+    border-color: #3498db;
+}
+
+.stepper-btn:active {
+    background: #d5dbdb;
+}
+
+/* ---- Grouped control rows ----
+   Execution controls sit in their own row; everything else goes in a
+   drawer, so Run is not the same size as Load Example. */
+.control-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.control-row-primary {
+    margin-bottom: 10px;
+}
+
+.control-row-divider {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+}
+
+.control-row-label {
+    font-weight: 700;
+    color: #5a6878;
+    font-size: 14px;
+}
+
+.control-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    background: #f4f6f8;
+    border-radius: 8px;
+}
+
+.control-drawer[hidden] {
+    display: none;
+}
+
+/* ---- Touch-mode adjustments ---- */
+
+/* The joint card expand toggle was 24x24 in the corner. Under touch it
+   becomes a strip across the bottom of the card - same footprint, far
+   more target. Absolute positioning keeps the markup, and the desktop
+   layout, exactly as they were. */
+body.touch-mode .joint-card-compact {
+    position: relative;
+    padding-bottom: 46px;
+}
+
+body.touch-mode .joint-card-compact .joint-details-toggle {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 6px;
+    width: auto;
+    height: 34px;
+    min-height: 34px;
+    font-size: 15px;
+}
+
+/* Text fields want 16px so the browser does not zoom on focus */
+body.touch-mode input[type="text"],
+body.touch-mode input[type="number"],
+body.touch-mode input[type="password"],
+body.touch-mode textarea {
+    font-size: 16px;
+}
+
+/* Raw checkboxes elsewhere (3D Visualisation toggles) get drawn larger
+   rather than restyled, so their labels keep working */
+body.touch-mode .visualization-toggles label,
+body.touch-mode .simulation-toggle {
+    padding: 4px 0;
+}
+
+body.touch-mode .deadzone-card-actions .btn,
+body.touch-mode .position-item-actions .btn {
+    min-width: 96px;
+}
+
+/* A stepper inside a flex row must be allowed to shrink, or its content
+   width pushes the row past the viewport. */
+.position-joint-item .stepper,
+.xyz-item .stepper,
+.setting-item .stepper {
+    flex: 1;
+    min-width: 0;
+}
+
+.position-joint-item .stepper input,
+.xyz-item .stepper input {
+    width: auto;
+}
+
+/* The stored-position angle boxes sit in a grid whose columns can be as
+   narrow as 200 px. With a 60 px label and two tap-sized stepper buttons
+   that left the box ~30 px wide, so a value like -19.3 was clipped on both
+   sides (centred text) and read as a stray digit or nothing. Give the box
+   room for a signed one-decimal angle and let the columns grow to fit. */
+.position-joint-item .stepper input {
+    min-width: 72px;
+}
+
+body.touch-mode .positions-joints-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* Full-height strip on a normal screen; the kiosk keeps it shorter
+   because 480 px of height is the constraint there. */
+body.touch-mode .joint-card-compact {
+    padding-bottom: 52px;
+}
+
+body.touch-mode .joint-card-compact .joint-details-toggle {
+    height: 40px;
+    min-height: 40px;
+}
+
+body.touch-mode.kiosk-mode .joint-card-compact {
+    padding-bottom: 46px;
+}
+
+body.touch-mode.kiosk-mode .joint-card-compact .joint-details-toggle {
+    height: 34px;
+    min-height: 34px;
+    font-size: 14px;
+}
+
+/* The expand strip has to read as a button. At full card width, with the
+   app default white field styling, it looked like an empty text input. */
+body.touch-mode .joint-card-compact .joint-details-toggle {
+    background: #dfe6e9;
+    border: 1px solid #c3ccd1;
+    color: #4a5b66;
+    font-weight: 700;
+}
+
+body.touch-mode .joint-card-compact .joint-details-toggle:hover {
+    background: #d0dade;
+    border-color: #3498db;
+    color: #2c3e50;
+}
+
+body.touch-mode .joint-card-compact .joint-details-toggle:active {
+    background: #c3ccd1;
+}
+
+/* The RAPID editor never had a size of its own, so it rendered as a
+   two-row box. It gets the same treatment as the G-Code editor. */
+#rapidContent {
+    width: 100%;
+    height: 300px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    background-color: white;
+}
+
+@media (max-width: 800px), (max-height: 600px) {
+    #rapidContent {
+        height: 150px;
+        font-size: 12px;
+        padding: 5px;
+    }
+}
+
+body.touch-mode #rapidContent,
+body.touch-mode #gcodeContent {
+    font-size: 15px;
+    line-height: 1.55;
+}
+
+/* ---- End tool panel (Kinematics tab) ---- */
+.end-tool-panel .end-tool-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 10px 0;
+}
+
+.end-tool-state {
+    font-size: 18px;
+    font-weight: 700;
+    color: #7f8c8d;
+}
+
+.end-tool-state-known { color: #157f5b; }
+.end-tool-state-unknown { color: #a96a05; }
+.end-tool-state-absent { color: #7f8c8d; }
+
+.end-tool-detail {
+    font-size: 13px;
+    color: #5a6878;
+}
+
+.end-tool-table-wrap {
+    overflow-x: auto;
+    margin-top: 12px;
+}
+
+.end-tool-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+}
+
+.end-tool-table th {
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #7f8c8d;
+    padding: 8px 10px;
+    border-bottom: 1px solid #ddd;
+    white-space: nowrap;
+}
+
+.end-tool-table td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.end-tool-row-active {
+    background: #eaf6f1;
+    font-weight: 600;
+}
+
+.end-tool-id,
+.end-tool-offset {
+    font-family: 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.end-tool-badge {
+    display: inline-block;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: #157f5b;
+    color: #fff;
+    border-radius: 999px;
+    padding: 2px 7px;
+    margin-left: 6px;
+}
+
+.end-tool-empty {
+    color: #888;
+    font-style: italic;
+}
+
+/* End tool cards are shown only for the fitted tool's actual controls */
+[data-end-tool-control][hidden] {
+    display: none !important;
+}
+
+.end-tool-none-note {
+    width: 100%;
+    margin: 4px 2px;
+    font-size: 13px;
+    font-style: italic;
+    color: #7f8c8d;
+}
+
+.end-tool-badge-warn {
+    background: #a96a05;
+}

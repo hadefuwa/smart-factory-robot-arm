@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Electron build output
+dist/
+out/
+
+# Chromium kiosk profiles (created on the Pi — legacy paths)
+.kiosk-profile-*/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+
