@@ -23,7 +23,7 @@ The final production setup has **no Windows PC** — only Pi, PLC, arm, IO-Link,
 
 ```
 smart-factory-robot-arm/
-├── pwa-dobot-plc/
+├── app/
 │   ├── backend/
 │   │   ├── app.py                  # Flask entry point (HTTPS, port 8080).
 │   │   │                           # Owns the always-on YOLO detection loop +
@@ -89,7 +89,7 @@ smart-factory-robot-arm/
 
 ## Key config file
 
-`pwa-dobot-plc/backend/config.json` is the source-controlled defaults; `~/.sf2/config.local.json` (created at runtime by the `/api/config` POST handler) layers operator overrides on top. `load_config()` does the merge. Any slider change (per-class confidence, defect threshold, camera focus, v4l2 controls) lands in the local override so resets / git pulls don't lose tuning.
+`app/backend/config.json` is the source-controlled defaults; `~/.sf2/config.local.json` (created at runtime by the `/api/config` POST handler) layers operator overrides on top. `load_config()` does the merge. Any slider change (per-class confidence, defect threshold, camera focus, v4l2 controls) lands in the local override so resets / git pulls don't lose tuning.
 
 Important blocks:
 - `plc.ip` — PLC address
@@ -118,7 +118,7 @@ The Pi has no internet access. File transfers use SCP over the local network. Th
 
 ```bash
 # SCP a file to Pi
-scp pwa-dobot-plc/backend/config.json pi@192.168.7.5:/home/pi/sf2/pwa-dobot-plc/backend/config.json
+scp app/backend/config.json pi@192.168.7.5:/home/pi/sf2/app/backend/config.json
 
 # Restart services on Pi
 ssh pi@192.168.7.5 'sudo systemctl restart smart-factory'           # Flask backend
@@ -140,11 +140,11 @@ Two systemd units run on the Pi:
 
 ```
 smart-factory.service       (Flask backend + web UI, HTTPS port 8080)
-  Working dir:     /home/pi/sf2/pwa-dobot-plc/backend
-  Exec:            /home/pi/sf2/pwa-dobot-plc/backend/venv/bin/python app.py
+  Working dir:     /home/pi/sf2/app/backend
+  Exec:            /home/pi/sf2/app/backend/venv/bin/python app.py
 
 robotarmv3-pi.service       (Node bridge to ST3215 arm, WebSocket port 8090)
-  Working dir:     /home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service
+  Working dir:     /home/pi/sf2/app/robotarmv3-pi-service
   Exec:            node server.js
   Restart=always — so when /dev/ttyACM0 re-enumerates after a USB glitch
                    the process exits cleanly and systemd brings it back.
@@ -216,7 +216,7 @@ The colour-bit suppression means a defective cube produces ONLY `defect_detected
 
 Atomic single-bit writes (`plc_worker.queue_bit_write`) are used for `defect_detected` so the surrounding PLC-owned bits in byte 0 (`start`, `reject_command_from_plc`) survive the write. The colour-bit helper still writes a full byte but with the four Pi-owned bits set correctly.
 
-Full tag map: `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_READ_WRITE_MAP.md`. **Note the rename**: the DB124 bit previously named `white_cube_detected` is now `purple_cube_detected` in our Python/JS code — the byte/bit offset (0/7) is unchanged so the TIA project doesn't need updating.
+Full tag map: `app/DB123_MEMORY_MAP.md` and `app/PLC_PLC_READ_WRITE_MAP.md`. **Note the rename**: the DB124 bit previously named `white_cube_detected` is now `purple_cube_detected` in our Python/JS code — the byte/bit offset (0/7) is unchanged so the TIA project doesn't need updating.
 
 ### Raw I/O (PE / PA areas)
 
@@ -228,7 +228,7 @@ The 6-DOF Waveshare ST3215 arm is driven by a separate Node.js service on the Pi
 
 Flask talks to the bridge over WebSocket and translates `DB125.target_xyz` from the PLC into `moveToXYZ` commands.
 
-Key behaviours documented in `pwa-dobot-plc/robotarmv3-pi-service/README.md` (read this before touching the bridge):
+Key behaviours documented in `app/robotarmv3-pi-service/README.md` (read this before touching the bridge):
 
 - **Command queue**: single global queue serialises serial-bus access. `moveToXYZ` coalesces latest-wins. Safety commands (`stopAllJoints`, `homeAll`, `setTorqueAll`) are FIFO and never dropped.
 - **Dark-bus fast-fail** in `getAllServoStatus()`: after the first servo times out, the remaining servos in that poll are short-circuited to "unavailable" rather than each spending the full timeout. `ALL_FAIL_RECOVERY_THRESHOLD = 2` polls before close-reopen-reinit auto-recovery runs.
@@ -367,8 +367,8 @@ Local workflow in `cube-training/` — Windows-side, never on the Pi.
 3. **Add negative examples** — heavily impacts model quality on small datasets. ~20% of images should be empty-bench frames with empty `.txt` files. Without negatives, the model fires confidently on every plausible blob.
 4. **Organise** — `python organize_cube_dataset.py` splits 80/20 into `dataset/images/{train,val}` and `dataset/labels/{train,val}`. Re-runnable.
 5. **Train** — `python train_cube_detector.py`. CPU-only by default. YOLO11n base downloads on first run. Augmentation is cranked up (`mosaic=1.0`, `mixup`, `copy_paste`, `erasing`, wider `degrees`/`scale`/`translate`) — necessary because the dataset is small (<70 images). The script reads `results.save_dir` so it picks the actual Ultralytics-versioned output dir (cube_train, cube_train2, ...).
-6. **Rebuild defect envelopes** — `python pwa-dobot-plc/backend/compute_defect_references.py`. Reads the same `cube_labels/`, produces `defect_references.json`. Re-run after every retrain so the per-class HSV envelopes match the new dataset.
-7. **Deploy** — `scp cube-training/runs/detect/cube_train*/weights/cube_detector.pt pi@192.168.7.5:/home/pi/cube_detector.pt` and `scp pwa-dobot-plc/backend/defect_references.json pi@192.168.7.5:/home/pi/sf2/pwa-dobot-plc/backend/`. Then `sudo systemctl restart smart-factory`. `poe_vision_service.resolve_model_path()` searches `~/cube_detector.pt` first.
+6. **Rebuild defect envelopes** — `python app/backend/compute_defect_references.py`. Reads the same `cube_labels/`, produces `defect_references.json`. Re-run after every retrain so the per-class HSV envelopes match the new dataset.
+7. **Deploy** — `scp cube-training/runs/detect/cube_train*/weights/cube_detector.pt pi@192.168.7.5:/home/pi/cube_detector.pt` and `scp app/backend/defect_references.json pi@192.168.7.5:/home/pi/sf2/app/backend/`. Then `sudo systemctl restart smart-factory`. `poe_vision_service.resolve_model_path()` searches `~/cube_detector.pt` first.
 
 See `cube-training/Guides/CUBE_TRAINING_GUIDE.md` for the full procedure including CVAT setup.
 
@@ -395,7 +395,7 @@ $out = "$src\build\esp32.esp32.m5stack_poe_cam"
 
 ### Update backend config and restart
 ```bash
-scp pwa-dobot-plc/backend/config.json pi@192.168.7.5:/home/pi/sf2/pwa-dobot-plc/backend/config.json
+scp app/backend/config.json pi@192.168.7.5:/home/pi/sf2/app/backend/config.json
 ssh pi@192.168.7.5 'sudo systemctl restart smart-factory'
 ```
 
@@ -406,7 +406,7 @@ ssh pi@192.168.7.5 'curl -s http://192.168.7.6/status'
 
 ### Push frontend changes to Pi (no git pull available)
 ```bash
-scp pwa-dobot-plc/frontend/vision.html pi@192.168.7.5:/home/pi/sf2/pwa-dobot-plc/frontend/
+scp app/frontend/vision.html pi@192.168.7.5:/home/pi/sf2/app/frontend/
 ```
 
 ### Smoke-test the vision pipeline

@@ -81,7 +81,7 @@ else
     git pull
 fi
 
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 
 # Create virtual environment if it doesn't exist
 if [ ! -d venv ]; then
@@ -126,7 +126,7 @@ fi
 
 # Set up PM2 for auto-start
 log "Setting up PM2 for auto-start..."
-cd ~/rpi-dobot/pwa-dobot-plc/deploy
+cd ~/rpi-dobot/app/deploy
 
 # Stop any existing PM2 processes
 pm2 delete all 2>/dev/null || true

@@ -76,7 +76,7 @@ Your app has been transformed with a sleek, modern dark theme! The interface now
 - Touch targets optimized
 
 ## Files Modified
-- `pwa-dobot-plc/frontend/index.html` - Complete styling overhaul
+- `app/frontend/index.html` - Complete styling overhaul
 
 ## Color Palette
 
@@ -107,7 +107,7 @@ Just open the app in your browser and refresh - the changes are already applied!
 ```bash
 # On Windows
 cd C:\Users\Hamed\Documents\rpi-dobot
-git add pwa-dobot-plc/frontend/index.html docs/
+git add app/frontend/index.html docs/
 git commit -m "Apply dark modern theme to UI"
 git push origin main
 
@@ -120,7 +120,7 @@ git pull origin main
 **Option 2: Direct File Transfer**
 ```bash
 # From Windows
-scp pwa-dobot-plc/frontend/index.html pi@<pi-ip>:~/rpi-dobot/pwa-dobot-plc/frontend/
+scp app/frontend/index.html pi@<pi-ip>:~/rpi-dobot/app/frontend/
 ```
 
 ## Testing

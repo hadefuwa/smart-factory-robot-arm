@@ -34,7 +34,7 @@ fi
 # Step 5: Create Python virtual environment
 echo ""
 echo "🐍 Step 5: Setting up Python environment..."
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip setuptools wheel
@@ -50,7 +50,7 @@ mkdir -p ~/counter_images
 # Step 7: Setup PM2
 echo ""
 echo "⚙️ Step 7: Configuring PM2 auto-start..."
-cd ~/rpi-dobot/pwa-dobot-plc/deploy
+cd ~/rpi-dobot/app/deploy
 pm2 delete all 2>/dev/null || true
 pm2 start ecosystem.config.js
 pm2 save

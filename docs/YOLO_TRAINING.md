@@ -128,7 +128,7 @@ mkdir -p ~/rpi-dobot/models
 
 ## Step 6: Update Backend to Use Custom Model
 
-Edit `pwa-dobot-plc/backend/app.py` and add model loading on startup:
+Edit `app/backend/app.py` and add model loading on startup:
 
 ```python
 # Load YOLO model on startup

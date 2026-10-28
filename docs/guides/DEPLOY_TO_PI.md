@@ -29,7 +29,7 @@ sudo ldconfig
 ### 3️⃣ Set Up Python Virtual Environment
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 python3 -m venv venv
 source venv/bin/activate
 
@@ -69,7 +69,7 @@ You should see something like `/dev/ttyACM1` or `/dev/ttyACM0`.
 ### 6️⃣ Configure the .env File
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 nano .env
 ```
 
@@ -85,7 +85,7 @@ Save with `Ctrl+X`, then `Y`, then `Enter`.
 ### 7️⃣ Test the App
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 source venv/bin/activate
 python app.py
 ```
@@ -113,7 +113,7 @@ sudo lsof -ti:8080 | xargs -r sudo kill -9
 ### 9️⃣ Run with PM2 (Auto-Start on Boot)
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc
+cd ~/rpi-dobot/app
 pm2 start deploy/ecosystem.config.js
 
 # Save PM2 config
@@ -175,7 +175,7 @@ sudo lsof -ti:8080 | xargs -r sudo kill -9
 ping 192.168.1.150
 
 # Check PLC IP in .env
-nano ~/rpi-dobot/pwa-dobot-plc/backend/.env
+nano ~/rpi-dobot/app/backend/.env
 ```
 
 ### Flask Not Installed / Module Not Found
@@ -184,7 +184,7 @@ If you get `ModuleNotFoundError: No module named 'flask'`:
 
 ```bash
 # Make sure virtual environment is activated
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 source venv/bin/activate
 
 # Upgrade pip
@@ -212,7 +212,7 @@ sudo cp ../bin/arm_v7-linux/libsnap7.so /usr/lib/
 sudo ldconfig
 
 # Then reinstall python-snap7
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 source venv/bin/activate
 pip install --force-reinstall python-snap7
 ```

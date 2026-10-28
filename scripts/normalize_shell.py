@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-FRONTEND = Path(__file__).resolve().parent.parent / "pwa-dobot-plc" / "frontend"
+FRONTEND = Path(__file__).resolve().parent.parent / "app" / "frontend"
 
 CANONICAL_TOPBAR = '''<header class="sf-topbar sf-template-headerbar navbar bg-base-200 px-4 border-b border-base-300">
       <div class="sf-template-header-left flex-none flex items-center gap-2">

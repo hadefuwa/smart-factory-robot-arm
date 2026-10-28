@@ -86,9 +86,9 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service
+WorkingDirectory=/home/pi/sf2/app/robotarmv3-pi-service
 Environment=ROBOT_ARM_PORT=8090
-ExecStart=/usr/bin/node /home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service/server.js
+ExecStart=/usr/bin/node /home/pi/sf2/app/robotarmv3-pi-service/server.js
 Restart=always
 RestartSec=5
 
@@ -134,9 +134,9 @@ The arm supports Cartesian XYZ control via a numeric Jacobian-transpose IK solve
 
 | File | Purpose |
 |------|---------|
-| `pwa-dobot-plc/robotarmv3-pi-service/kinematics.js` | IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
-| `pwa-dobot-plc/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
-| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint limits, axis definitions). |
+| `app/robotarmv3-pi-service/kinematics.js` | IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
+| `app/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
+| `app/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint limits, axis definitions). |
 
 ### Arm Geometry (from URDF)
 
@@ -165,7 +165,7 @@ Numeric Jacobian-transpose iterative solver:
 
 ```bash
 # On the Pi, after pulling new code:
-cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install
+cd ~/sf2/app/robotarmv3-pi-service && npm install
 ```
 
 ---
@@ -174,14 +174,14 @@ cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install
 
 | File | Purpose |
 |------|---------|
-| `pwa-dobot-plc/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, FK/IK integration, and all command handlers. |
-| `pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js` | ST3215 servo driver. Packet encoding/decoding, ping, readData, writeData, readQuickStatus, `holdCurrentPosition()`. |
-| `pwa-dobot-plc/robotarmv3-pi-service/kinematics.js` | Numeric Jacobian-transpose IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
-| `pwa-dobot-plc/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
-| `pwa-dobot-plc/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint axes, limits). |
-| `pwa-dobot-plc/backend/app.py` | Flask app. Robot arm bridge state, `open_robot_arm_bridge()`, `send_robot_arm_command()`, all `/api/robot-arm/*` endpoints, auto-connect startup thread. |
-| `pwa-dobot-plc/frontend/robot-arm.html` | Browser UI — 4 tabs: Joint Control (includes XYZ section), Live Status, Settings, Debug. |
-| `pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js` | Frontend JS — status polling, joint card rendering, XYZ readout, PLC DB125 variable display, all button event handlers. |
+| `app/robotarmv3-pi-service/server.js` | Node.js WebSocket server. Owns the serial port, command queue, `maybeReopenPort()`, keep-alive, FK/IK integration, and all command handlers. |
+| `app/robotarmv3-pi-service/robotArmST3215.js` | ST3215 servo driver. Packet encoding/decoding, ping, readData, writeData, readQuickStatus, `holdCurrentPosition()`. |
+| `app/robotarmv3-pi-service/kinematics.js` | Numeric Jacobian-transpose IK solver (`RobotKinematics` class). Sourced from BenMatrixTSL/RobotArmv3. |
+| `app/robotarmv3-pi-service/urdfParser.js` | URDF XML parser. Sourced from BenMatrixTSL/RobotArmv3. |
+| `app/robotarmv3-pi-service/demo-kinematics.urdf` | Arm geometry (link lengths, joint axes, limits). |
+| `app/backend/app.py` | Flask app. Robot arm bridge state, `open_robot_arm_bridge()`, `send_robot_arm_command()`, all `/api/robot-arm/*` endpoints, auto-connect startup thread. |
+| `app/frontend/robot-arm.html` | Browser UI — 4 tabs: Joint Control (includes XYZ section), Live Status, Settings, Debug. |
+| `app/frontend/assets/js/robot-arm-v3-page.js` | Frontend JS — status polling, joint card rendering, XYZ readout, PLC DB125 variable display, all button event handlers. |
 
 ---
 
@@ -475,5 +475,5 @@ ssh pi@rpi "sudo systemctl restart robotarmv3-pi.service && sudo systemctl resta
 Node.js dependencies (only needed if `package.json` changes, e.g. when `@xmldom/xmldom` was added):
 
 ```bash
-ssh pi@rpi "cd ~/sf2/pwa-dobot-plc/robotarmv3-pi-service && npm install"
+ssh pi@rpi "cd ~/sf2/app/robotarmv3-pi-service && npm install"
 ```

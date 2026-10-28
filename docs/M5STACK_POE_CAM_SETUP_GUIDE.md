@@ -441,5 +441,5 @@ poe-camera-firmware/
 └── FIRMWARE_CHANGELOG.md           ← root cause analysis of v1.0.0 W5500 failure
 ```
 
-Backend integration: `pwa-dobot-plc/backend/camera_service.py`  
-Frontend use: `pwa-dobot-plc/frontend/vision-system-new.html`
+Backend integration: `app/backend/camera_service.py`  
+Frontend use: `app/frontend/vision-system-new.html`

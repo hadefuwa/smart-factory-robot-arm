@@ -26,7 +26,7 @@ A comprehensive smart factory automation system featuring Dobot Magician robot c
 ### Already set up — just restart
 
 ```bash
-cd ~/sf2/pwa-dobot-plc/backend
+cd ~/sf2/app/backend
 source venv/bin/activate
 python3 app.py
 ```
@@ -72,7 +72,7 @@ sudo ldconfig
 #### 4. Set up the Python venv and install packages
 
 ```bash
-cd ~/sf2/pwa-dobot-plc/backend
+cd ~/sf2/app/backend
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -119,8 +119,8 @@ After=network.target
 
 [Service]
 User=pi
-WorkingDirectory=/home/pi/sf2/pwa-dobot-plc/backend
-ExecStart=/home/pi/sf2/pwa-dobot-plc/backend/venv/bin/python app.py
+WorkingDirectory=/home/pi/sf2/app/backend
+ExecStart=/home/pi/sf2/app/backend/venv/bin/python app.py
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -141,7 +141,7 @@ sudo systemctl start smart-factory
 sudo systemctl status smart-factory
 ```
 
-If you also run the vision service separately, create a second service file at `/etc/systemd/system/vision-service.service` with the same structure but `ExecStart=/home/pi/sf2/pwa-dobot-plc/backend/venv/bin/python vision_service.py` and `Environment="VISION_PORT=5001"`.
+If you also run the vision service separately, create a second service file at `/etc/systemd/system/vision-service.service` with the same structure but `ExecStart=/home/pi/sf2/app/backend/venv/bin/python vision_service.py` and `Environment="VISION_PORT=5001"`.
 
 **Useful commands:**
 ```bash
@@ -158,7 +158,7 @@ Requires Node.js (`sudo apt-get install -y nodejs npm`).
 ```bash
 npm install -g pm2
 
-cd ~/sf2/pwa-dobot-plc
+cd ~/sf2/app
 pm2 start deploy/ecosystem.config.js
 
 # Save and enable on boot
@@ -176,7 +176,7 @@ Note: the `ecosystem.config.js` paths assume the repo is at `/home/pi/sf2`. Edit
 WinCC Unified requires HTTPS for embedded camera streams. Generate a self-signed certificate:
 
 ```bash
-cd ~/sf2/pwa-dobot-plc
+cd ~/sf2/app
 chmod +x deploy/generate_ssl_cert.sh
 ./deploy/generate_ssl_cert.sh 192.168.7.5   # use your Pi's IP
 pm2 restart pwa-dobot-plc   # or systemctl restart smart-factory
@@ -216,7 +216,7 @@ This project allows you to:
 
 ```
 smart-factory-robot-arm/
-├── pwa-dobot-plc/                  # Main application (robot, PLC, vision)
+├── app/                  # Main application (robot, PLC, vision)
 │   ├── backend/
 │   │   ├── app.py                  # Flask entry point (HTTPS, port 8080).
 │   │   │                           # Hosts the always-on YOLO detection loop +
@@ -296,7 +296,7 @@ sudo ldconfig
 #### 3. Set Up Python Virtual Environment
 
 ```bash
-cd ~/sf2/pwa-dobot-plc/backend
+cd ~/sf2/app/backend
 
 # Create virtual environment
 python3 -m venv venv
@@ -326,7 +326,7 @@ ls -la /dev/ttyACM*
 
 #### 5. Configure Settings
 
-Edit `pwa-dobot-plc/backend/config.json`:
+Edit `app/backend/config.json`:
 
 ```json
 {
@@ -372,7 +372,7 @@ INFO - Dobot client initialized
 ### Starting the Application
 
 ```bash
-cd ~/sf2/pwa-dobot-plc/backend
+cd ~/sf2/app/backend
 source venv/bin/activate
 python3 app.py
 ```
@@ -437,9 +437,9 @@ Tagged as `v5.1.0`. The arm now responds to a PLC HMI target change in well unde
 5. **Auto-move tick interval** dropped from 300 ms → 50 ms in `app.py` so the cache → bridge dispatch is bounded by `~one_tick + WS round-trip`, not by the operator-noticeable scan period.
 6. **Home-waypoint routing** is now a one-time decision per operator target (stateful `home_visited_for_target_key` in `app.py`). Previously the router re-evaluated per tick, which caused the arm to flip-flop between "go home" and "go target" when it landed just outside tolerance.
 7. **Stall behaviour** — the bridge no longer wipes servo goals on stall (`server.js`) and the PLC backend treats `stall` within tolerance as success (`app.py`). With the prototype's weak J2 and the EEPROM motor-protection lift (`raise-motor-limits.js`: UnloadCondition 47 → 7, OverloadTime 80 → 254), the joint crawls to the goal instead of being declared dead.
-8. **Servo bus terminology corrected.** The ST3215 + SC-B1 path is a **single-wire TTL half-duplex bus** at 500 kbps (V+ / GND / SIGNAL, 5 V logic, idles HIGH), not RS-485. CLAUDE.md, `pwa-dobot-plc/robotarmv3-pi-service/README.md`, and `docs/J5_WRIST_PITCH_BUS_CORRUPTION.md` were corrected. Termination concepts that apply to RS-485 (120 Ω, A/B biasing, shield grounding) were replaced with the TTL-relevant checks (idle-line voltage, scope rise/fall edges, stub length, common-ground bounce, IR drop on V+).
+8. **Servo bus terminology corrected.** The ST3215 + SC-B1 path is a **single-wire TTL half-duplex bus** at 500 kbps (V+ / GND / SIGNAL, 5 V logic, idles HIGH), not RS-485. CLAUDE.md, `app/robotarmv3-pi-service/README.md`, and `docs/J5_WRIST_PITCH_BUS_CORRUPTION.md` were corrected. Termination concepts that apply to RS-485 (120 Ω, A/B biasing, shield grounding) were replaced with the TTL-relevant checks (idle-line voltage, scope rise/fall edges, stub length, common-ground bounce, IR drop on V+).
 
-### New diagnostic helpers (in `pwa-dobot-plc/robotarmv3-pi-service/`)
+### New diagnostic helpers (in `app/robotarmv3-pi-service/`)
 
 - `change-baud.js` — one-shot broadcast utility to walk the chain and lower the servo baud (used to drop from 1 Mbps → 500 kbps when J5 was marginal at 1 Mbps).
 - `raise-motor-limits.js` — clears the OVERLOAD + MOTOR auto-unload bits and maxes `OverloadTime`. Keeps voltage / sensor / overtemp protection on.
@@ -447,7 +447,7 @@ Tagged as `v5.1.0`. The arm now responds to a PLC HMI target change in well unde
 
 ### Live observability
 
-`pwa-dobot-plc/backend/app.py` runs a background CSV logger that writes PLC target vs arm-current XYZ every 0.5 s to `/home/pi/sf2/logs/plc_vs_arm_positions.csv`. Arm XYZ is queried directly from the bridge so it stays fresh regardless of frontend polling. Columns: `iso_timestamp, tx, ty, tz, speed, ax, ay, az, dx, dy, dz, dist, plc_connected, bridge_connected, move_in_flight`.
+`app/backend/app.py` runs a background CSV logger that writes PLC target vs arm-current XYZ every 0.5 s to `/home/pi/sf2/logs/plc_vs_arm_positions.csv`. Arm XYZ is queried directly from the bridge so it stays fresh regardless of frontend polling. Columns: `iso_timestamp, tx, ty, tz, speed, ax, ay, az, dx, dy, dz, dist, plc_connected, bridge_connected, move_in_flight`.
 
 ---
 
@@ -512,7 +512,7 @@ M5Stack PoE CAM-W at `192.168.7.6`, firmware v1.1.0 (ETH.h driver, SVGA 800×600
 ### Robot Arm
 
 - **[J5 wrist-pitch bus corruption investigation](docs/J5_WRIST_PITCH_BUS_CORRUPTION.md)** — diagnosis + fix for the ST3215 bus issue that drove the 1 Mbps → 500 kbps baud drop.
-- **[robotarmv3-pi-service README](pwa-dobot-plc/robotarmv3-pi-service/README.md)** — bridge queue, watchdog, USB-disconnect auto-recovery.
+- **[robotarmv3-pi-service README](app/robotarmv3-pi-service/README.md)** — bridge queue, watchdog, USB-disconnect auto-recovery.
 
 ### Archive
 
@@ -678,7 +678,7 @@ If you prefer PM2 over systemd for the Flask backend:
 
 ```bash
 npm install -g pm2
-cd ~/sf2/pwa-dobot-plc
+cd ~/sf2/app
 pm2 start deploy/ecosystem.config.js
 pm2 save
 pm2 startup  # Follow instructions to enable auto-start on boot
@@ -690,7 +690,7 @@ Earlier Dobot-era deployment scripts (`FINAL_DEPLOYMENT.sh`, `setup.sh`, `deploy
 
 ```bash
 # Navigate to project
-cd ~/sf2/pwa-dobot-plc
+cd ~/sf2/app
 
 # Start with PM2
 pm2 start deploy/ecosystem.config.js
@@ -832,7 +832,7 @@ chmod +x scripts/check_wifi_ap.sh scripts/fix_wifi_ap.sh
 | `%Q0.5`, `%Q0.6`, `%Q0.7` | Gate, Reject, Reset Linear Actuator |
 | `%Q1.0`, `%Q1.1` | Conveyor 1, Conveyor 2 |
 
-Full tag map for the DBs lives in `pwa-dobot-plc/DB123_MEMORY_MAP.md` and `pwa-dobot-plc/PLC_PLC_READ_WRITE_MAP.md`.
+Full tag map for the DBs lives in `app/DB123_MEMORY_MAP.md` and `app/PLC_PLC_READ_WRITE_MAP.md`.
 
 ---
 
@@ -856,7 +856,7 @@ The main issue (Dobot not moving) was solved by adding **automatic alarm clearin
 
 - **[Deployment Guide](docs/guides/DEPLOY_TO_PI.md)** - Setup instructions
 - **[J5 wrist-pitch bus corruption](docs/J5_WRIST_PITCH_BUS_CORRUPTION.md)** - ST3215 bus diagnosis
-- **[robotarmv3-pi-service README](pwa-dobot-plc/robotarmv3-pi-service/README.md)** - Arm bridge internals
+- **[robotarmv3-pi-service README](app/robotarmv3-pi-service/README.md)** - Arm bridge internals
 - **[archive/](archive/)** - Historic notes (Dobot fix, frontend cleanup plans, etc.)
 
 ### Common Questions

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Quick diagnostic script to test PLC connection"""
 import sys
-sys.path.insert(0, '/home/pi/rpi-dobot/pwa-dobot-plc/backend')
+sys.path.insert(0, '/home/pi/rpi-dobot/app/backend')
 
 from plc_client import PLCClient
 import json

@@ -16,7 +16,7 @@ The vision service has been split into a separate microservice to isolate YOLO c
 On the Raspberry Pi:
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 source venv/bin/activate
 pip install requests
 ```
@@ -33,7 +33,7 @@ git pull
 The PM2 ecosystem config has been updated to include both services. Restart PM2:
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/deploy
+cd ~/rpi-dobot/app/deploy
 pm2 delete all
 pm2 start ecosystem.config.js
 pm2 save
@@ -48,7 +48,7 @@ pm2 list
 ```
 
 You should see:
-- `pwa-dobot-plc` (main app)
+- `app` (main app)
 - `vision-service` (YOLO service)
 
 ### 5. Test Vision Service
@@ -142,7 +142,7 @@ pm2 status
 
 3. Test manually:
    ```bash
-   cd ~/rpi-dobot/pwa-dobot-plc/backend
+   cd ~/rpi-dobot/app/backend
    source venv/bin/activate
    python vision_service.py
    ```

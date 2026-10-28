@@ -44,7 +44,7 @@ kill <PID>
 ### Step 3: Test Import (Check for Syntax Errors)
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 
 # Test plc_client.py syntax
 python3 -m py_compile plc_client.py && echo "✓ plc_client.py: No syntax errors"
@@ -56,7 +56,7 @@ python3 -m py_compile app.py && echo "✓ app.py: No syntax errors"
 ### Step 4: Start Backend with Debug Output
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 
 # Start backend with full logging
 python3 app.py 2>&1 | tee backend.log
@@ -110,7 +110,7 @@ ps aux | grep app.py
 netstat -tlnp | grep 5000
 
 # Check backend logs
-cat ~/rpi-dobot/pwa-dobot-plc/backend/backend.log
+cat ~/rpi-dobot/app/backend/backend.log
 ```
 
 ### Issue 2: "Failed to fetch" Errors
@@ -142,7 +142,7 @@ grep "500" backend.log
 pip3 install python-snap7 flask flask-socketio flask-cors opencv-python
 
 # Or install all requirements
-pip3 install -r ~/rpi-dobot/pwa-dobot-plc/backend/requirements.txt
+pip3 install -r ~/rpi-dobot/app/backend/requirements.txt
 ```
 
 ### Issue 4: PLC Connection Errors (These are OK!)
@@ -204,7 +204,7 @@ tail -50 backend.log
 ### 2. Test Each Component
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 
 # Test plc_client import
 python3 -c "from plc_client import PLCClient; print('plc_client OK')"
@@ -220,7 +220,7 @@ python3 -c "import sys; sys.argv=['app.py']; from app import app; print('app.py 
 pkill -f app.py
 
 # Run in foreground to see all output
-cd ~/rpi-dobot/pwa-dobot-plc/backend
+cd ~/rpi-dobot/app/backend
 python3 app.py
 ```
 
@@ -234,7 +234,7 @@ If backend still doesn't work, please provide:
 
 1. **Output of startup command**:
    ```bash
-   cd ~/rpi-dobot/pwa-dobot-plc/backend
+   cd ~/rpi-dobot/app/backend
    python3 app.py 2>&1 | head -100
    ```
 
@@ -261,7 +261,7 @@ If backend still doesn't work, please provide:
 Run this one-liner to check everything:
 
 ```bash
-cd ~/rpi-dobot/pwa-dobot-plc/backend && \
+cd ~/rpi-dobot/app/backend && \
 echo "=== Syntax Check ===" && \
 python3 -m py_compile plc_client.py app.py && \
 echo "✓ No syntax errors" && \

@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add backend directory to path
-backend_dir = os.path.join(os.path.dirname(__file__), 'pwa-dobot-plc', 'backend')
+backend_dir = os.path.join(os.path.dirname(__file__), 'app', 'backend')
 sys.path.insert(0, backend_dir)
 
 print("Testing backend imports...")

@@ -10,13 +10,13 @@
 
 J5 intermittently drops off the servo bus with `Communication error: -7` (checksum / framing corruption). The other five joints on the same daisy chain are stable. Symptom escalates in software to "joint offline" — moves either fall back to 5-joint IK or fail outright. Pattern looks like a regular ~30 s cadence at idle plus extra noise during motion.
 
-The bridge runs at `pwa-dobot-plc/robotarmv3-pi-service/server.js`; J5 corresponds to slot index 4 in `SERVO_IDS = [1, 2, 3, 4, 5, 6]`.
+The bridge runs at `app/robotarmv3-pi-service/server.js`; J5 corresponds to slot index 4 in `SERVO_IDS = [1, 2, 3, 4, 5, 6]`.
 
 ---
 
 ## What the user observes
 
-- The joint card on [robot-arm.html](../pwa-dobot-plc/frontend/robot-arm.html) flickers between **Online**, **Degraded** (amber) and **Offline** (red) every few seconds.
+- The joint card on [robot-arm.html](../app/frontend/robot-arm.html) flickers between **Online**, **Degraded** (amber) and **Offline** (red) every few seconds.
 - The comms log shows repeating sequences like:
   - `JOINT DEGRADED J5 reason=comm-corrupt polls=1/6`
   - `JOINT DEGRADED J5 reason=comm-corrupt polls=2/6`
@@ -67,7 +67,7 @@ Here J5 didn't actually receive the goal-position write because the bus reply fo
 
 ### What `-7` means
 
-Defined in [`robotArmST3215.js:39`](../pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js):
+Defined in [`robotArmST3215.js:39`](../app/robotarmv3-pi-service/robotArmST3215.js):
 
 ```js
 const COMM_RX_TIMEOUT = -6;
@@ -91,7 +91,7 @@ This is **half-duplex TTL bus signal-integrity** at the J5 branch of the daisy c
 
 ## What was happening BEFORE the 2026-05-18 patches
 
-The pre-patch bridge code in [`server.js`](../pwa-dobot-plc/robotarmv3-pi-service/server.js) treated **any** single status-read failure as fatal to the slot:
+The pre-patch bridge code in [`server.js`](../app/robotarmv3-pi-service/server.js) treated **any** single status-read failure as fatal to the slot:
 
 ```js
 try { status = await servo.readQuickStatus(); }
@@ -121,7 +121,7 @@ Committed in [`f32a033`](https://github.com/hadefuwa/smart-factory-robot-arm/com
 
 ### 1. In-poll read retry — 1 attempt → up to 3 with 25 ms gaps
 
-[`server.js`](../pwa-dobot-plc/robotarmv3-pi-service/server.js) `getAllServoStatus`:
+[`server.js`](../app/robotarmv3-pi-service/server.js) `getAllServoStatus`:
 
 ```js
 const READ_RETRY_COUNT = 2;     // 1 initial + 2 retries = 3 attempts per poll
@@ -148,7 +148,7 @@ Evolution: this started at a single threshold of 3 for all failure types, was ra
 
 ### 3. Servo "status byte" / fault byte handling
 
-[`robotArmST3215.js`](../pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js):
+[`robotArmST3215.js`](../app/robotarmv3-pi-service/robotArmST3215.js):
 
 ```js
 // Old behaviour: reject on any non-zero error byte → slot nulled forever.
@@ -270,11 +270,11 @@ The right answer is to fix the bus signal integrity. The threshold is a band-aid
 
 ## File pointers
 
-- Bridge: [`pwa-dobot-plc/robotarmv3-pi-service/server.js`](../pwa-dobot-plc/robotarmv3-pi-service/server.js) — `getAllServoStatus`, `markServoOffline`, `tryReviveServoSlot`, `OFFLINE_FAIL_THRESHOLD`, `READ_RETRY_COUNT`.
-- Servo protocol: [`pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js`](../pwa-dobot-plc/robotarmv3-pi-service/robotArmST3215.js) — `readData` response handler, `ping`, `describeServoFaultByte`.
-- IK: [`pwa-dobot-plc/robotarmv3-pi-service/kinematics.js`](../pwa-dobot-plc/robotarmv3-pi-service/kinematics.js) — `inverseKinematics`, the `_allowUnlocked` fallback retry.
-- UI: [`pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js`](../pwa-dobot-plc/frontend/assets/js/robot-arm-v3-page.js) — `detectJointTransitions`, `commsEntrySummary`, joint card rendering.
-- Service: `robotarmv3-pi.service` on `pi@192.168.7.5`, working dir `/home/pi/sf2/pwa-dobot-plc/robotarmv3-pi-service/`, `Restart=always`.
+- Bridge: [`app/robotarmv3-pi-service/server.js`](../app/robotarmv3-pi-service/server.js) — `getAllServoStatus`, `markServoOffline`, `tryReviveServoSlot`, `OFFLINE_FAIL_THRESHOLD`, `READ_RETRY_COUNT`.
+- Servo protocol: [`app/robotarmv3-pi-service/robotArmST3215.js`](../app/robotarmv3-pi-service/robotArmST3215.js) — `readData` response handler, `ping`, `describeServoFaultByte`.
+- IK: [`app/robotarmv3-pi-service/kinematics.js`](../app/robotarmv3-pi-service/kinematics.js) — `inverseKinematics`, the `_allowUnlocked` fallback retry.
+- UI: [`app/frontend/assets/js/robot-arm-v3-page.js`](../app/frontend/assets/js/robot-arm-v3-page.js) — `detectJointTransitions`, `commsEntrySummary`, joint card rendering.
+- Service: `robotarmv3-pi.service` on `pi@192.168.7.5`, working dir `/home/pi/sf2/app/robotarmv3-pi-service/`, `Restart=always`.
 
 ---
 

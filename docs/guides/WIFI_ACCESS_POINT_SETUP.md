@@ -228,7 +228,7 @@ Password: `1`
 
 1. Make sure your Flask app is running:
    ```bash
-   cd ~/rpi-dobot/pwa-dobot-plc/backend
+   cd ~/rpi-dobot/app/backend
    source venv/bin/activate
    python app.py
    ```

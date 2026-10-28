@@ -34,7 +34,7 @@ sudo npm install -g pm2
 # 4. Clone repository
 cd ~
 git clone https://github.com/hadefuwa/rpi-dobot.git
-cd rpi-dobot/pwa-dobot-plc/backend
+cd rpi-dobot/app/backend
 
 # 5. Create virtual environment
 python3 -m venv venv
@@ -50,7 +50,7 @@ mkdir -p ~/logs
 mkdir -p ~/counter_images
 
 # 8. Start with PM2
-cd ~/rpi-dobot/pwa-dobot-plc/deploy
+cd ~/rpi-dobot/app/deploy
 pm2 start ecosystem.config.js
 pm2 save
 pm2 startup
