@@ -127,3 +127,32 @@ Stop `robotarmv3-pi.service`; swap `robotarmv3-pi-service` back with the `.pre-u
 2. Which "additional features" besides mm/s do you want to keep? (Section 2 lists my proposals.)
 3. Do you want Phase 6 features, or only the core update?
 4. When can the cell be down for Phase 4/5, and is anyone on site with the E-stop?
+
+## 7. Progress log and the URDF finding (2026-10-28)
+
+Done: Phase 0 (tag `pre-ben-oct21-update`, upstream import commit `836ec3a`, Pi backup in
+`~/robotarmv3-pi-service.pre-update-20261028`, baseline) and Phase 1/2 in the working tree
+(`app/robotarmv3-pi-service` = Ben's 013a1a9 + the two env edits, `LOCAL_PATCHES.md`, serialport 13
+`node_modules` built on Windows with the linux-arm64 prebuild). **Nothing deployed to the Pi yet.**
+
+Baseline before the update (arm limp, torque off): XYZ (-134.5, -89.1, 193.2), joints
+J1 12.39, J2 8.70, J3 -180.00, J4 80.77, J5 83.32, J6 -89.74. J3 reading exactly -180.00 is outside its
++-90 limit and suspicious; check it on the bench.
+
+**Old vs new kinematics (same joint angles, run offline with both versions):**
+- J1 and J4 are mirrored: J1 +30 gives Y = +80.7 (old) vs -80.7 (new); X and Z barely change.
+- Link offsets and TCP lengths also changed (Z differs 4.7 mm at all-zeros with no tool, 9 mm with the
+  vacuum tool, 14.5 mm with the servo gripper).
+- Over 400 random in-limit poses, doing nothing changes the tool position by a median of 173 mm
+  (no tool) to 275 mm (tool fitted), max about 830 mm. Mirroring Y alone still leaves a median error of
+  36 mm (no tool) / 125 mm (tool): not a safe conversion, because J4 is flipped too.
+- Poses with J4 = 0 mirror to within about 5 mm, so points taught with the wrist roll at zero convert
+  closely; points that use J4 do not.
+
+**Consequence:** every stored XYZ is invalid after the update and must be re-taught physically:
+`PLC_AUTO_HOME_WAYPOINT` in app.py, and the PLC's `pickup_location_*`, `pallet_home_*`,
+`quarantine_location_*` (DB125). Any Y offsets the PLC adds (pallet grid steps) flip sign.
+
+Option A (recommended): take the new URDF, re-teach the points by hand-guiding the arm (torque off) and
+reading the new `currentXYZ`. Option B: new code + the old URDF, keeps coordinates but keeps the
+geometry Ben corrected; not recommended, and Ben's calibration/electron tools assume the new URDF.

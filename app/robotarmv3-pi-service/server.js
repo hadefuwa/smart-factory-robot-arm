@@ -14,6 +14,7 @@ const WebSocket   = require('ws');
 const os          = require('os');
 const fs          = require('fs');
 const path        = require('path');
+const crypto      = require('crypto');
 const { exec, execFile, fork } = require('child_process');
 const { promisify } = require('util');
 const { robotKinematics } = require('./kinematicsService');
@@ -35,6 +36,7 @@ const INSTANT_SERVER_COMMANDS = {
     releaseControl: true,
     lockControl: true,
     unlockControl: true,
+    verifyPassword: true,
     getPiNetworkInfo: true,
     getPiEthernetSettings: true,
     setPiEthernetSettings: true,
@@ -46,6 +48,7 @@ const INSTANT_SERVER_COMMANDS = {
     kinematicsForwardKinematicsBatch: true,
     kinematicsInverseKinematics: true,
     kinematicsRefineOrientationWithAccuracy: true,
+    kinematicsApplyToolSpin: true,
     kinematicsGetInfo: true,
     executeLinearMove: true,
     abortLinearPath: true
@@ -55,12 +58,24 @@ const INSTANT_SERVER_COMMANDS = {
 const BUS_WRITE_COMMANDS = {
     moveJoint: true, stopJoint: true, stopAll: true, stopAllJoints: true,
     setServo: true, setServoAngle: true, setSpeed: true, setSpeedAll: true,
-    setTorqueAll: true, setAcceleration: true, setJointCenter: true, rescanServos: true,
+    setTorqueAll: true, setAcceleration: true, rescanServos: true,
+    readServoEeprom: true, readServoEepromRaw: true, writeServoEeprom: true, writeServoEepromRaw: true,
+    // Calibration page's raw register access to the ESP32 end tool (ID 64)
+    readEndToolRegisters: true, writeEndToolRegister: true,
+    // Trainee zero trims: control session only, deliberately no password -
+    // software-only and always undoable (see servoWorker.js)
+    setJointZeroTrim: true, resetJointZeroTrim: true,
     toolPing: true, toolSetPwm: true, toolSetServoEnabled: true,
     toolSetServoPosition: true, toolSetServoAngle: true,
-    toolSetServoEnabledAndAngle: true,
+    toolSetServoEnabledAndAngle: true, toolSetServoSlewRate: true, toolSetServoCurrentLimit: true,
+    toolGetServoSlewStatus: true,
     toolSetWatchdog: true, toolClearFaults: true, toolReset: true
 };
+
+// Bus commands that write servo EEPROM: these also need the control password.
+// writeEndToolRegister sits behind the same gate: the Calibration page's one
+// "Enable Editing" password covers the end tool's registers too.
+const EEPROM_WRITE_COMMANDS = { writeServoEeprom: true, writeServoEepromRaw: true, writeEndToolRegister: true };
 
 // Moves/stops bypass the write queue and run on the bus immediately.
 const IMMEDIATE_BUS_COMMANDS = {
@@ -72,12 +87,40 @@ const CONTROL_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
 
 // "Lock control" — holds the control session exclusively (no other client can
 // take/force-take it, and the idle timeout is suspended) until released or
-// the lock duration expires. Requires a password to set, matching the
-// lightweight/hardcoded auth style already used elsewhere on this trusted
-// local network (see CLAUDE.md's Pi SSH credentials).
-const CONTROL_LOCK_PASSWORD    = 'MatrixRA123';
+// the lock duration expires. Requires the control password to set.
+//
+// The control password also gates servo EEPROM writes (Calibration tab). It is
+// kept in a file on the Pi, never in the repo, so students who can read the
+// source cannot find it. Set or change it with set-control-password.sh. Read
+// on every check, so a change takes effect without restarting the server.
+// If the file is missing, every password check fails (locked out, not open).
+const CONTROL_PASSWORD_FILE    = process.env.ROBOT_ARM_CONTROL_PASSWORD_FILE || '/etc/robot-arm-st3215/control-password';
 const CONTROL_LOCK_DEFAULT_MS  = 15 * 60 * 1000;
 const CONTROL_LOCK_MAX_MS      = 60 * 60 * 1000;
+
+let controlPasswordMissingLogged = false;
+
+// True if `supplied` matches the control password file. False if it doesn't,
+// or if no password has been set up on this Pi.
+function controlPasswordMatches(supplied) {
+    if (typeof supplied !== 'string' || supplied === '') return false;
+    let expected;
+    try {
+        expected = fs.readFileSync(CONTROL_PASSWORD_FILE, 'utf8').replace(/[\r\n]+$/, '');
+        controlPasswordMissingLogged = false;
+    } catch (e) {
+        if (!controlPasswordMissingLogged) {
+            debugLog('Control password file ' + CONTROL_PASSWORD_FILE + ' cannot be read (' + e.code + ') - '
+                + 'password-protected features are disabled. Run: sudo bash set-control-password.sh');
+            controlPasswordMissingLogged = true;
+        }
+        return false;
+    }
+    if (expected === '') return false;
+    const a = Buffer.from(supplied, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 // Linear path execution state — only one path runs at a time.
 let linearPathRunning = false;
@@ -147,6 +190,14 @@ process.on('exit', (code) => { debugLog('Process exit, code=' + code); });
 // is fitted. Register 3 is the only source of truth: nothing here guesses.
 const END_TOOL_PROBE_CLIENT_ID = '__server_end_tool__';
 const END_TOOL_PROBE_INTERVAL_MS = 15000;
+// A single bus read timeout used to drop a fitted tool straight to "bare
+// mount" until the next probe 15 s later. In that window the TCP is the mount
+// face, ~120 mm above the real tip, so a move could drive the tool into the
+// table. Before believing a tool has gone, re-check it a few times quickly;
+// only an unbroken run of failures counts as removed.
+const END_TOOL_LOST_RETRIES = 3;
+const END_TOOL_RETRY_DELAY_MS = 250;
+let endToolLostRetryCount = 0;
 
 let endToolState = {
     present: false,          // did the tool answer the last probe?
@@ -452,8 +503,18 @@ function handleWorkerMessage(msg) {
     if (msg.type === 'commandResponse' && msg.clientId === END_TOOL_PROBE_CLIENT_ID) {
         const payload = msg.payload || {};
         if (payload.type === 'toolIdentity' && Number.isFinite(payload.toolTypeId)) {
+            endToolLostRetryCount = 0;
             applyEndToolTypeId(payload.toolTypeId, null);
+        } else if (endToolState.present && endToolLostRetryCount < END_TOOL_LOST_RETRIES) {
+            // Sanity check: a tool was there a moment ago. Re-probe before
+            // dropping it, so one lost frame cannot shorten the kinematics.
+            endToolLostRetryCount++;
+            debugLog('End tool: probe failed (' + (payload.message || 'no response') + ') — ' +
+                     're-checking ' + endToolLostRetryCount + '/' + END_TOOL_LOST_RETRIES +
+                     ' before declaring it removed');
+            setTimeout(probeEndTool, END_TOOL_RETRY_DELAY_MS);
         } else {
+            endToolLostRetryCount = 0;
             applyEndToolTypeId(null, payload.message || 'end tool did not respond');
         }
         return;
@@ -498,7 +559,15 @@ let workerLastStartedAt  = 0;
 
 function startServoWorker() {
     workerLastStartedAt = Date.now();
-    servoWorker = fork(path.join(__dirname, 'servoWorker.js'));
+    // TEMPORARY: --heapsnapshot-signal lets `kill -USR2 <servoWorker pid>`
+    // write a .heapsnapshot on demand, to chase a confirmed ~15-17MB/hour
+    // leak that two targeted Buffer-copy fixes didn't resolve. Written to
+    // /tmp (world-writable) rather than this process's default cwd —
+    // this service runs as root but with a CapabilityBoundingSet stripped
+    // down to just CAP_SYS_RAWIO, which drops root's usual CAP_DAC_OVERRIDE
+    // file-permission bypass, so it can't write into the (mxadmin-owned)
+    // app directory. Remove once the leak is found and fixed.
+    servoWorker = fork(path.join(__dirname, 'servoWorker.js'), [], { execArgv: ['--heapsnapshot-signal=SIGUSR2'], cwd: '/tmp' });
     servoWorker.on('message', handleWorkerMessage);
     servoWorker.on('error', (err) => {
         debugLog('Servo worker error: ' + (err.message || err), true);
@@ -655,7 +724,7 @@ async function handleCommand(ws, data) {
 
             if (typeof data.hostname === 'string' && data.hostname.trim()) ws.clientHostname = data.hostname.trim();
 
-            if (heldByOther && locked && suppliedPassword !== CONTROL_LOCK_PASSWORD) {
+            if (heldByOther && locked && !controlPasswordMatches(suppliedPassword)) {
                 const until = controlSession.lockedUntil ? new Date(controlSession.lockedUntil).toLocaleTimeString() : null;
                 sendResponse(getControlStatusPayload(ws, {
                     message: 'Arm control is locked by ' + (previousHolder || 'another client') + (until ? (' until ' + until) : '') + '.'
@@ -683,7 +752,7 @@ async function handleCommand(ws, data) {
 
         case 'lockControl': {
             const suppliedPassword = typeof data.password === 'string' ? data.password : null;
-            if (suppliedPassword !== CONTROL_LOCK_PASSWORD) {
+            if (!controlPasswordMatches(suppliedPassword)) {
                 sendResponse({ type: 'lockControlResult', ok: false, message: 'Incorrect lock password' });
                 return;
             }
@@ -710,7 +779,7 @@ async function handleCommand(ws, data) {
         case 'unlockControl': {
             const suppliedPassword = typeof data.password === 'string' ? data.password : null;
             const isHolder = controlSession.ws === ws;
-            if (!isHolder && suppliedPassword !== CONTROL_LOCK_PASSWORD) {
+            if (!isHolder && !controlPasswordMatches(suppliedPassword)) {
                 sendResponse({ type: 'unlockControlResult', ok: false, message: 'Incorrect password' });
                 return;
             }
@@ -723,6 +792,18 @@ async function handleCommand(ws, data) {
 
         case 'getControlStatus': {
             sendResponse(getControlStatusPayload(ws));
+            break;
+        }
+
+        case 'verifyPassword': {
+            // Side-effect-free check of the control-lock password, so a UI can
+            // gate its edit controls on the real password rather than on the
+            // field merely being non-empty. Does not take or lock control.
+            const ok = controlPasswordMatches(data.password);
+            const message = ok ? 'Password accepted'
+                : (fs.existsSync(CONTROL_PASSWORD_FILE) ? 'Incorrect password'
+                    : 'No control password has been set up on the Pi yet - run set-control-password.sh on the Pi');
+            sendResponse({ type: 'verifyPasswordResult', ok: ok, message: message });
             break;
         }
 
@@ -841,6 +922,18 @@ async function handleCommand(ws, data) {
                 sendResponse({ type: 'kinematicsRefineOrientationResult', result: robotKinematics.refineOrientationWithAccuracy(data.targetPose, data.baseAngles, data.desiredOrientation, data.referenceAngles) });
             } catch (error) {
                 sendResponse({ type: 'error', message: `Refine orientation failed: ${error.message}` });
+            }
+            break;
+        }
+
+        case 'kinematicsApplyToolSpin': {
+            // Sets joint 6 on the given angles so the tool X axis matches
+            // orientation.rotation, leaving joints 1-5 untouched. Lets a client
+            // spin the tool in place without a lossy XYZ round trip.
+            try {
+                sendResponse({ type: 'kinematicsApplyToolSpinResult', result: robotKinematics.applyToolSpin(data.angles, data.orientation) });
+            } catch (error) {
+                sendResponse({ type: 'error', message: `Apply tool spin failed: ${error.message}` });
             }
             break;
         }
@@ -1004,6 +1097,18 @@ function startServer() {
                     if (data.command === 'moveJoint' || data.command === 'setServo' || data.command === 'setServoAngle' || data.command === 'setAcceleration') {
                         touchControlMoveActivity(ws);
                     }
+                }
+
+                // Servo EEPROM writes additionally require the control password, on
+                // top of holding the control session — they change the servo itself
+                // (PID, limits, zero point) for every future user of the arm, so they
+                // get their own explicit gate. Students calibrate with the
+                // password-free trainee zero trim instead (setJointZeroTrim).
+                if (EEPROM_WRITE_COMMANDS[data.command] && !controlPasswordMatches(data.password)) {
+                    const errPayload = { type: 'error', message: 'Incorrect password' };
+                    if (data.requestId !== undefined) errPayload.requestId = data.requestId;
+                    ws.send(JSON.stringify(errPayload));
+                    return;
                 }
 
                 if (!servoWorker) {

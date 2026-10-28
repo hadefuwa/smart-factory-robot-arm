@@ -65,6 +65,12 @@ const STS_P_COEF            = 0x15;  // Position proportional gain  (byte, defau
 const STS_D_COEF            = 0x16;  // Position derivative gain    (byte, default 32)
 const STS_I_COEF            = 0x17;  // Position integral gain      (byte, default  0)
 const STS_MIN_STARTUP_FORCE = 0x18;  // Minimum startup force       (byte, default 16)
+const STS_PROT_TORQUE       = 0x22;  // Torque applied after an overload trip (%, byte, default 20)
+const STS_PROT_TIME         = 0x23;  // Time overload must persist before tripping (ms, byte, default 200)
+const STS_OVERLOAD_TORQUE   = 0x24;  // Load% threshold that counts as a stall/overload (byte, default 80)
+const STS_MIN_ANGLE_LIMIT   = 0x09;  // Min position limit, raw steps (word, default 0)
+const STS_MAX_ANGLE_LIMIT   = 0x0B;  // Max position limit, raw steps (word, default 4095)
+const STS_MAX_TORQUE_LIMIT  = 0x10;  // Max torque output, 0-1000 = 0-100% (word, default 1000)
 
 // Position limits
 const MIN_POSITION = 0;
@@ -96,7 +102,14 @@ const BUS_WRITE_RETRY_DELAY_END_TOOL_MS = 150;
 const BUS_READ_TIMEOUT_MS = 50;
 const BUS_READ_TIMEOUT_END_TOOL_MS = 150;
 const BUS_WRITE_RETRY_DELAY_MS = 30;
-const BUS_WRITE_MAX_ATTEMPTS = 2;
+// Four attempts (worst case ~410 ms) so a lost ACK on an arm servo does not
+// fail the move and abort a running program. Move/speed writes are
+// idempotent, so re-sending after a missed ACK is safe. Keep the total well
+// under the ~1 s servo torque watchdog: an immediate command sends one
+// heartbeat then holds the bus for its whole duration (servoWorker.js).
+// Longer outages are covered by the client-side retry in
+// robotArmClient.moveJoint(), which pauses with the bus released.
+const BUS_WRITE_MAX_ATTEMPTS = 4;
 
 // serialport's write() callback normally fires in well under 1 ms at 1 Mbps
 // for our packet sizes. If the underlying driver ever stalls and that
@@ -280,6 +293,14 @@ const ADC1_MV_L = 23;
 const SERVO_ENABLE = 0x30;
 const SERVO_POSITION_8BIT = 0x31;
 const SERVO_ANGLE_DEG = 0x32;
+// Slew rate for the hobby servo output: 8-bit position steps per ~10 ms
+// firmware tick, 0 = jump straight to the target. Firmware minor >= 3.
+const SERVO_SLEW_RATE = 0x39;
+// Servo current limit in mA (16-bit LE, 0 = none): a slewed move stops and
+// holds as soon as the servo supply current reaches it. Firmware minor >= 3.
+const SERVO_CURRENT_LIMIT_L = 0x3A;
+// Slew status: 0 = at target/idle, 1 = slewing, 2 = stopped by current limit.
+const SERVO_SLEW_STATUS = 0x3C;
 const SERVO_CURRENT_POSITION_8BIT = 0x37;
 const SERVO_CURRENT_ANGLE = 0x38;
 
@@ -334,22 +355,21 @@ class ServoController {
         this.responseTimeout = null;
         this.currentSpeed = 1500; // Default speed, will be updated when setSpeed is called
         this.rxDrainUntilMs = 0;   // discard all RX bytes until this timestamp (post-timeout drain)
-        // Raw step position that this instance treats as 0°. Defaults to the
-        // servo's factory center (2048); recenter() moves it so a physically
-        // reinstalled/replaced servo can be re-zeroed without touching EEPROM.
-        this.centerPosition = CENTER_POSITION;
+        // Trainee zero trim (raw steps): a software-only shift of this joint's
+        // 0°, set from the Calibration page's student zero-calibration panel.
+        // Never written to the servo, so resetting it to 0 always restores the
+        // real (EEPROM) calibration. See servoWorker.js "Trainee zero trims".
+        this.zeroTrimSteps = 0;
     }
 
     /**
-     * Redefines this servo's logical 0° to be wherever it currently physically
-     * is, without moving it or touching servo EEPROM. Used after a servo swap
-     * or mechanical reseat to re-zero a joint. Purely a software offset applied
-     * in angleToSteps()/stepsToAngle() — the servo's own raw position readback
-     * is unaffected.
-     * @param {number} currentRawPosition - The servo's current raw step position (0-4095)
+     * Sets the trainee zero trim - the raw step offset this joint treats as 0°,
+     * relative to the factory centre (2048). Applied in angleToSteps() and
+     * stepsToAngle() only; servo EEPROM is untouched.
+     * @param {number} trimSteps - Offset in raw steps (0 = no trim)
      */
-    setCenterPosition(currentRawPosition) {
-        this.centerPosition = currentRawPosition;
+    setZeroTrimSteps(trimSteps) {
+        this.zeroTrimSteps = Math.round(trimSteps) || 0;
     }
 
     /**
@@ -449,6 +469,27 @@ class ServoController {
     }
 
     /**
+     * Advances pendingResponse past a just-parsed packet, copying the
+     * leftover tail into a fresh small Buffer rather than slicing it.
+     *
+     * Buffer.concat() below allocates its result from Node's shared 8KB
+     * buffer pool whenever the combined size is small (every packet here
+     * is, well under MAX_BUFFER_SIZE) — Buffer.prototype.slice() does NOT
+     * copy, it returns a view into that SAME pool slab. With 6 joints
+     * polling at high frequency, holding onto even a few leftover bytes
+     * via slice() after every parsed packet pins the entire 8KB slab per
+     * reference, which measurably leaked tens of MB/hour in practice.
+     * Buffer.from(buffer) copies, dropping the pool reference immediately.
+     * @private
+     */
+    consumeParsedPacket(packetLen) {
+        const remaining = this.pendingResponse.length - packetLen;
+        this.pendingResponse = remaining > 0
+            ? Buffer.from(this.pendingResponse.subarray(packetLen))
+            : null;
+    }
+
+    /**
      * Handle incoming serial data
      * @private
      */
@@ -509,17 +550,17 @@ class ServoController {
                     }
 
                     const deliver = this.responseResolve;
-                    this.pendingResponse = this.pendingResponse.slice(packetLen);
+                    this.consumeParsedPacket(packetLen);
                     deliver(result);
                 } else if (DEBUG) {
                     console.log(`[DEBUG Servo ${this.servoId}] Late reply ignored (no pending command)`);
-                    this.pendingResponse = this.pendingResponse.slice(packetLen);
+                    this.consumeParsedPacket(packetLen);
                 }
                 return;
             }
 
             // Another device on the bus — remove its packet and keep waiting for ours
-            this.pendingResponse = this.pendingResponse.slice(packetLen);
+            this.consumeParsedPacket(packetLen);
         }
     }
 
@@ -597,7 +638,13 @@ class ServoController {
             // We have data bytes to extract
             const endIndex = PKT_PARAMETER0 + parameterLength;
             if (endIndex <= buffer.length) {
-                parameters = buffer.slice(PKT_PARAMETER0, endIndex);
+                // Buffer.from() copies rather than viewing buffer's backing
+                // store — this result is returned all the way up through
+                // every servo read (readQuickStatus() runs on every poll,
+                // for every joint) and ends up held in jointStatusCache, so
+                // a pool-pinning slice() here was a much bigger contributor
+                // to the Buffer pool leak than the pendingResponse slices.
+                parameters = Buffer.from(buffer.subarray(PKT_PARAMETER0, endIndex));
             } else {
                 // Not enough data in buffer - this shouldn't happen if packet is complete
                 if (DEBUG) console.log(`[DEBUG Servo ${this.servoId}] Buffer too short: need ${endIndex} bytes but have ${buffer.length}, length=${length}, parameterLength=${parameterLength}`);
@@ -1101,8 +1148,8 @@ class ServoController {
         if (angleDegrees < MIN_ANGLE) angleDegrees = MIN_ANGLE;
         if (angleDegrees > MAX_ANGLE) angleDegrees = MAX_ANGLE;
         
-        // Convert: steps = center + (angle * steps_per_degree)
-        const steps = Math.round(this.centerPosition + (angleDegrees * STEPS_PER_DEGREE));
+        // Convert: steps = center + trim + (angle * steps_per_degree)
+        const steps = Math.round(CENTER_POSITION + this.zeroTrimSteps + (angleDegrees * STEPS_PER_DEGREE));
         
         // Clamp to valid step range (should be 1024-3072, but add safety check)
         if (steps < MIN_POSITION) return MIN_POSITION;
@@ -1127,8 +1174,8 @@ class ServoController {
         if (steps < MIN_POSITION) steps = MIN_POSITION;
         if (steps > MAX_POSITION) steps = MAX_POSITION;
         
-        // Convert: angle = (steps - center) / steps_per_degree
-        const angle = (steps - this.centerPosition) / STEPS_PER_DEGREE;
+        // Convert: angle = (steps - center - trim) / steps_per_degree
+        const angle = (steps - CENTER_POSITION - this.zeroTrimSteps) / STEPS_PER_DEGREE;
         
         // Clamp to valid angle range
         if (angle < MIN_ANGLE) return MIN_ANGLE;
@@ -1449,6 +1496,107 @@ class ServoController {
         await this.writeData(STS_P_COEF, [p, d, i, minStartupForce]); // write 4 bytes in one packet
         await new Promise(r => setTimeout(r, 40));
     }
+
+    /**
+     * Read the overload-protection registers from EEPROM.
+     * @returns {{ protTorque, protTimeMs, overloadTorque }} — all 0-100(%) except protTimeMs
+     */
+    async readOverloadProtection() {
+        const data = await this.readData(STS_PROT_TORQUE, 3);
+        return {
+            protTorque:     data[0],
+            protTimeMs:     data[1],
+            overloadTorque: data[2],
+        };
+    }
+
+    /**
+     * Write the overload-protection thresholds to EEPROM.
+     * Unlocks EEPROM first; takes effect immediately without power-cycle.
+     * @param {number} overloadTorque - Load% that counts as a stall and starts the trip countdown (0-100, default 80)
+     * @param {number} protTorque     - Torque% the servo falls back to once tripped (0-100, default 20)
+     * @param {number} protTimeMs     - How long the overload must persist before tripping (ms, default 200)
+     */
+    async writeOverloadProtection(overloadTorque, protTorque = 20, protTimeMs = 200) {
+        await this.writeData(STS_EEPROM_LOCK, [0]);                                        // unlock EEPROM
+        await new Promise(r => setTimeout(r, 25));
+        await this.writeData(STS_PROT_TORQUE, [protTorque, protTimeMs, overloadTorque]);   // write 3 bytes in one packet
+        await new Promise(r => setTimeout(r, 40));
+    }
+
+    /**
+     * Read the servo's hard travel limits from EEPROM, in degrees from the factory
+     * centre. Deliberately ignores any trainee zero trim: the limits live in the
+     * servo's EEPROM, so they must not shift (or be re-written shifted) when a
+     * student's temporary trim is active.
+     * @returns {{ minAngleDeg, maxAngleDeg }}
+     */
+    async readAngleLimits() {
+        const data = await this.readData(STS_MIN_ANGLE_LIMIT, 4);
+        const minSteps = this.makeWord(data[0], data[1]);
+        const maxSteps = this.makeWord(data[2], data[3]);
+        return {
+            minAngleDeg: (minSteps - CENTER_POSITION) / STEPS_PER_DEGREE,
+            maxAngleDeg: (maxSteps - CENTER_POSITION) / STEPS_PER_DEGREE,
+        };
+    }
+
+    /**
+     * Write the servo's hard travel limits to EEPROM. The servo refuses to move
+     * (or clamps) outside this raw step range regardless of what any client requests.
+     * Unlocks EEPROM first; takes effect immediately without power-cycle.
+     * @param {number} minAngleDeg
+     * @param {number} maxAngleDeg
+     */
+    async writeAngleLimits(minAngleDeg, maxAngleDeg) {
+        // Factory-centre conversion, not angleToSteps(): a trainee zero trim must
+        // never end up baked into the servo's EEPROM limits (see readAngleLimits)
+        const minSteps = Math.max(MIN_POSITION, Math.min(MAX_POSITION, Math.round(CENTER_POSITION + minAngleDeg * STEPS_PER_DEGREE)));
+        const maxSteps = Math.max(MIN_POSITION, Math.min(MAX_POSITION, Math.round(CENTER_POSITION + maxAngleDeg * STEPS_PER_DEGREE)));
+        await this.writeData(STS_EEPROM_LOCK, [0]); // unlock EEPROM
+        await new Promise(r => setTimeout(r, 25));
+        await this.writeData(STS_MIN_ANGLE_LIMIT, [
+            this.stsLobyte(minSteps), this.stsHibyte(minSteps),
+            this.stsLobyte(maxSteps), this.stsHibyte(maxSteps),
+        ]); // write 4 bytes in one packet
+        await new Promise(r => setTimeout(r, 40));
+    }
+
+    /**
+     * Read the servo's overall torque output ceiling from EEPROM.
+     * @returns {number} 0-100 (%)
+     */
+    async readMaxTorque() {
+        const data = await this.readData(STS_MAX_TORQUE_LIMIT, 2);
+        return this.makeWord(data[0], data[1]) / 10;
+    }
+
+    /**
+     * Write the servo's overall torque output ceiling to EEPROM.
+     * Unlocks EEPROM first; takes effect immediately without power-cycle.
+     * @param {number} maxTorquePct - 0-100 (%)
+     */
+    async writeMaxTorque(maxTorquePct) {
+        const raw = Math.max(0, Math.min(1000, Math.round(maxTorquePct * 10)));
+        await this.writeData(STS_EEPROM_LOCK, [0]); // unlock EEPROM
+        await new Promise(r => setTimeout(r, 25));
+        await this.writeData(STS_MAX_TORQUE_LIMIT, [this.stsLobyte(raw), this.stsHibyte(raw)]);
+        await new Promise(r => setTimeout(r, 40));
+    }
+
+    /**
+     * Read the full commissioning-relevant EEPROM profile for this servo in one call:
+     * PID gains, overload protection, angle limits, and max torque.
+     */
+    async readEepromProfile() {
+        const [pid, overload, angleLimits, maxTorque] = await Promise.all([
+            this.readPIDValues(),
+            this.readOverloadProtection(),
+            this.readAngleLimits(),
+            this.readMaxTorque(),
+        ]);
+        return { ...pid, ...overload, ...angleLimits, maxTorque };
+    }
 }
 
 /**
@@ -1639,6 +1787,55 @@ class EndToolController extends ServoController {
         if (degrees < 0) degrees = 0;
         if (degrees > 180) degrees = 180;
         await this.writeData(SERVO_ANGLE_DEG, [degrees & 0xFF]);
+    }
+
+    /**
+     * Set how fast the hobby servo output moves to a new position/angle.
+     * @param {number} rate - 8-bit position steps per ~10 ms tick (0-255).
+     *   0 = jump immediately (default). 1 = full travel in ~2.5 s, 25 = ~0.1 s.
+     *   A move made while the output is disabled always jumps.
+     */
+    async setHobbyServoSlewRate(rate) {
+        let value = rate;
+        if (value < 0) value = 0;
+        if (value > 255) value = 255;
+        await this.writeData(SERVO_SLEW_RATE, [value & 0xFF]);
+    }
+
+    /**
+     * Set the servo current limit that stops a slewed move early (grip
+     * strength control). Only acts while a slew is in progress - with slew
+     * rate 0 moves jump and are never monitored.
+     * @param {number} limitMa - 0-2000 mA, 0 = no limit
+     */
+    async setHobbyServoCurrentLimit(limitMa) {
+        let value = limitMa;
+        if (value < 0) value = 0;
+        if (value > 2000) value = 2000;
+        await this.writeData(SERVO_CURRENT_LIMIT_L, [this.stsLobyte(value), this.stsHibyte(value)]);
+    }
+
+    /**
+     * Read where a slewed move has got to: the position/angle actually
+     * applied so far, and whether it is still moving, done, or was stopped
+     * by the current limit.
+     * @returns {Object} { currentPosition8bit, currentAngle, slewRate, currentLimitMa, slewStatus, stoppedByCurrentLimit, slewing }
+     */
+    async getHobbyServoSlewStatus() {
+        const data = await this.readData(0x37, 6); // 55..60
+        if (!data || data.length < 6) {
+            throw new Error('Invalid hobby servo slew status data');
+        }
+        const slewStatus = data[5];
+        return {
+            currentPosition8bit: data[0],
+            currentAngle: data[1],
+            slewRate: data[2],
+            currentLimitMa: this.makeWord(data[3], data[4]),
+            slewStatus,
+            slewing: slewStatus === 1,
+            stoppedByCurrentLimit: slewStatus === 2
+        };
     }
 
     /**
