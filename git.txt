@@ -1,17 +1,48 @@
-you can ssh onto the pi using pi@rpi but do not make changes to the pi, make changes here on my windows machine and then push to github and pull on the pi like this..
+Deploying to the Pi
+===================
 
-cd C:\Users\HamedA\Documents\sf2
-git status
-git add .
-git commit -m "bridge issues"
-git push origin main
-ssh pi@rpi "cd ~/sf2 && git pull"
-ssh pi@rpi "cd ~/sf2 && git pull && sudo systemctl restart smart-factory.service robotarmv3-pi.service"
+Make changes on the Windows machine, never edit files directly on the Pi.
+The Pi has NO internet (eth0 = PLC network, wlan0 = hotspot), so `git pull` on
+the Pi does not work. Files go over SCP. Use the IP; the hostname `rpi` does not
+always resolve.
 
-git tag -a v5.0.2 -m "Release v5.0.2"; git push origin v5.0.2
+1. Commit and push from Windows (this repo lives in the DP0056 OneDrive folder):
 
-live status:
-ssh pi@rpi "sudo systemctl is-active smart-factory.service robotarmv3-pi.service"
-ssh pi@rpi "curl -sk https://localhost:8080/api/robot-arm/status | python3 -m json.tool"
-ssh pi@rpi "sudo journalctl -u smart-factory.service -u robotarmv3-pi.service -f"
+    cd "C:\Users\HamedA\OneDrive - MATRIX TECHNOLOGY SOLUTIONS\Smart Factory 2 DP0056\Software\RaspberryPi Software"
+    git status
+    git add .
+    git commit -m "message"
+    git push origin main
 
+2. Copy the changed file(s) to the Pi (usual method):
+
+    scp app/backend/config.json pi@192.168.7.5:/home/pi/sf2/app/backend/
+    scp app/frontend/robot-arm.html pi@192.168.7.5:/home/pi/sf2/app/frontend/
+    scp -r app/robotarmv3-pi-service/ pi@192.168.7.5:/home/pi/sf2/app/robotarmv3-pi-service/
+
+3. Restart what changed:
+
+    ssh pi@192.168.7.5 "sudo systemctl restart smart-factory.service"                          (Flask backend + web UI)
+    ssh pi@192.168.7.5 "sudo systemctl restart robotarmv3-pi.service"                          (Node arm bridge)
+    ssh pi@192.168.7.5 "sudo systemctl restart smart-factory.service robotarmv3-pi.service"    (both)
+
+   Frontend-only changes (html/js/css) need no restart, just refresh the browser.
+   Restarting the arm bridge turns arm torque off via the safety interlock; re-enable
+   it from the PLC/HMI (DB123.DBX40.0) afterwards.
+
+Keeping the Pi's git history in sync (optional, when the Pi checkout is clean)
+------------------------------------------------------------------------------
+    PIHEAD=$(ssh pi@192.168.7.5 'cd ~/sf2 && git rev-parse HEAD')
+    git bundle create $TEMP/sf2-update.bundle $PIHEAD..main
+    scp $TEMP/sf2-update.bundle pi@192.168.7.5:~/sf2-update.bundle
+    ssh pi@192.168.7.5 'cd ~/sf2 && git fetch ~/sf2-update.bundle main:refs/remotes/origin/main && git merge --ff-only origin/main'
+
+Releases
+--------
+    git tag -a v5.0.2 -m "Release v5.0.2"; git push origin v5.0.2
+
+Live status
+-----------
+    ssh pi@192.168.7.5 "sudo systemctl is-active smart-factory.service robotarmv3-pi.service vision.service"
+    ssh pi@192.168.7.5 "curl -sk https://localhost:8080/api/robot-arm/status | python3 -m json.tool"
+    ssh pi@192.168.7.5 "sudo journalctl -u smart-factory.service -u robotarmv3-pi.service -f"

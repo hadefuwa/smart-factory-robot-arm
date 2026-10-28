@@ -112,7 +112,7 @@ Important blocks:
 
 1. Edit files on Windows
 2. Commit to git
-3. `git pull` on Pi — OR — `scp` individual files when a git pull isn't practical
+3. `scp` the changed files to the Pi and restart the affected service. **`git pull` does not work on the Pi** (no internet: `eth0` is the PLC network, `wlan0` is the hotspot). To keep the Pi's git history in sync, send a bundle instead (see "Syncing the Pi's git" below)
 
 The Pi has no internet access. File transfers use SCP over the local network. The Pi's hostname is `rpi` in most setups; the static IP `192.168.7.5` is the canonical fallback (use it when DNS / mDNS resolution is flaky).
 
@@ -133,6 +133,23 @@ scp cube-training/runs/detect/cube_train/weights/cube_detector.pt \
     pi@192.168.7.5:/home/pi/cube_detector.pt
 ssh pi@192.168.7.5 'sudo systemctl restart smart-factory'
 ```
+
+### Syncing the Pi's git (no internet)
+
+The Pi's `~/sf2` is a git checkout of `hadefuwa/smart-factory-robot-arm`, but it can't fetch from GitHub. Send the new commits as a bundle from Windows. Only do this when the Pi has no uncommitted changes (`git status` clean), otherwise use `scp` for single files.
+
+```bash
+# 1. On Windows, after pushing: bundle everything the Pi doesn't have yet
+PIHEAD=$(ssh pi@192.168.7.5 'cd ~/sf2 && git rev-parse HEAD')
+git bundle create $TEMP/sf2-update.bundle $PIHEAD..main
+scp $TEMP/sf2-update.bundle pi@192.168.7.5:~/sf2-update.bundle
+
+# 2. On the Pi: fast-forward only, then restart what changed
+ssh pi@192.168.7.5 'cd ~/sf2 && git fetch ~/sf2-update.bundle main:refs/remotes/origin/main && git merge --ff-only origin/main'
+ssh pi@192.168.7.5 'sudo systemctl restart smart-factory.service robotarmv3-pi.service'
+```
+
+If a commit moves or renames folders, the systemd units in `/etc/systemd/system/` (they live outside the repo and hardcode `/home/pi/sf2/app/...`) and the untracked `backend/venv` / `robotarmv3-pi-service/node_modules` must be moved or edited on the Pi too. The folder was renamed from `pwa-dobot-plc` to `app` on 2026-10-28 and the Pi was updated that way.
 
 ## Pi services
 

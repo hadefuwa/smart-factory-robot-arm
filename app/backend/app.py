@@ -7679,7 +7679,7 @@ if __name__ == '__main__':
     dobot_connected = dobot_client.connect()
     if dobot_connected:
         logger.info("âœ… Dobot connected successfully")
-    else:
+    elif dobot_client.use_usb:
         logger.error(f"âŒ Dobot connection failed: {dobot_client.last_error}")
         logger.error("ðŸ’¡ Check the debug logs above for detailed troubleshooting steps")
 

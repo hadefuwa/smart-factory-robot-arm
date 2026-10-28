@@ -7,7 +7,7 @@
       "z": 150,
       "r": 0
     },
-    "use_usb": true
+    "use_usb": false
   },
   "camera": {
     "index": 0,
